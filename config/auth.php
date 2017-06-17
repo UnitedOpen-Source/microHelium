@@ -67,7 +67,8 @@ return [
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
-            'model' => App\User::class,
+            'model' => Helium\User::class,
+            'table' => 'users',
         ],
 
         // 'users' => [

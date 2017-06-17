@@ -12,7 +12,7 @@ return [
     | any other location as required by the application or its packages.
     */
 
-    'name' => env('APP_NAME', 'Helium'),
+    'name' => env('APP_NAME', 'helium'),
 
     /*
     |--------------------------------------------------------------------------
@@ -77,7 +77,7 @@ return [
     |
     */
 
-    'locale' => 'pt',
+    'locale' => 'en',
 
     /*
     |--------------------------------------------------------------------------
@@ -171,15 +171,16 @@ return [
         /*
          * Application Service Providers...
          */
-        TCG\Voyager\VoyagerServiceProvider::class,
-        App\Providers\AppServiceProvider::class,
-        App\Providers\AuthServiceProvider::class,
-        // App\Providers\BroadcastServiceProvider::class,
-        App\Providers\EventServiceProvider::class,
-        App\Providers\RouteServiceProvider::class,
+        Helium\Providers\AppServiceProvider::class,
+        Helium\Providers\AuthServiceProvider::class,
+        // Helium\Providers\BroadcastServiceProvider::class,
+        Helium\Providers\EventServiceProvider::class,
+        Helium\Providers\RouteServiceProvider::class,
 
-        //Swagger - https://github.com/DarkaOnLine/L5-Swagger
-        \L5Swagger\L5SwaggerServiceProvider::class
+        /*
+         * Third-Party Service Providers...
+         */
+        Zizaco\Entrust\EntrustServiceProvider::class,
     ],
 
     /*
@@ -228,7 +229,7 @@ return [
         'URL' => Illuminate\Support\Facades\URL::class,
         'Validator' => Illuminate\Support\Facades\Validator::class,
         'View' => Illuminate\Support\Facades\View::class,
-
+        'Entrust'   => Zizaco\Entrust\EntrustFacade::class,
     ],
 
 ];

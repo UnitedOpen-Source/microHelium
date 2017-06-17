@@ -15,10 +15,6 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/doc', function () {
-    return redirect('/api/documentation');
-});
+Auth::routes();
 
-Route::group(['prefix' => 'admin'], function () {
-    Voyager::routes();
-});
+Route::get('/home', 'HomeController@index')->name('home');
