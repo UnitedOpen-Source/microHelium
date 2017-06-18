@@ -10,7 +10,7 @@ class ExerciseController extends Controller
   public function index()
   {
       $exercises = Exercise::orderBy('created_at', 'desc')->paginate(10);
-      return view('exercise',['exercises' => $exercises]);
+      return view('exercises.index',['exercises' => $exercises]);
   }
   public function create()
   {
@@ -28,7 +28,8 @@ class ExerciseController extends Controller
   }
   public function show(Exercise $exercise)
   {
-      //
+    $exercise = Exercise::findOrFail($id);
+    return view('exercise',compact('exercise'));
   }
   public function edit(Exercise $exercise)
   {

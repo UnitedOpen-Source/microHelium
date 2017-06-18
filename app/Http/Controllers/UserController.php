@@ -15,7 +15,7 @@ class UserController extends Controller
     public function index()
     {
         $users = User::orderBy('created_at', 'desc')->paginate(10);
-        return view('backend.users',['users' => $users]);
+        return view('users.index',['users' => $users]);
     }
 
     /**
@@ -62,10 +62,10 @@ class UserController extends Controller
      * @param  \Helium\User  $user
      * @return \Illuminate\Http\Response
      */
-    public function edit(User $user)
+    public function edit($id)
     {
-      $User = User::findOrFail($id);
-      return view('my-account',compact('user'));
+      $user = User::findOrFail($id);
+      return view('users.edit',compact('user'));
     }
 
     /**
@@ -79,7 +79,7 @@ class UserController extends Controller
     {
       $user = User::findOrFail($id);
       $user->name      = $request->name;
-      $user->userName  = $request->userName;
+      $user->username  = $request->username;
       $user->team      = $request->team;
       $user->email     = $request->email;
       $user->save();

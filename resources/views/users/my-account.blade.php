@@ -30,16 +30,10 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-5">
+                        <div class="col-md-9">
                             <div class="form-group">
-                                <label>Primeiro Nome</label>
+                                <label>Nome Completo</label>
                                 <input type="text" class="form-control" placeholder="Nome" value="Matheus">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Sobrenome</label>
-                                <input type="text" class="form-control" placeholder="Sobrenome" value="Rocha Vieira">
                             </div>
                         </div>
                         <div class="col-md-3">

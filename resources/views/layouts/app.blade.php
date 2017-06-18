@@ -70,9 +70,10 @@
                   <ul class="dropdown-menu">
                     <li><a href="dashboard.html">Nome da Maratona</a></li>
                     <li class="divider"></li>
-                    <li><a href="backend/exercicios.html">Exercícios</a></li>
-                    <li><a href="backend/usuarios.html">Usuários</a></li>
-                    <li><a href="backend/configuracoes.html">Configurações</a></li>
+                    <li><a href="backend/exercises">Exercícios</a></li>
+                    <li><a href="backend/users">Usuários</a></li>
+                    <li><a href="backend/teams">Times</a></li>
+                    <li><a href="backend/configurations">Configurações</a></li>
                     <li class="divider"></li>
                     <li><a href="#"><b class="pe-7s-play"></b> Cronometro: Começar</a></li>
                     <li><a href="#"><b class="pe-7s-stopwatch"></b> Cronometro: Pausar</a></li>
@@ -83,15 +84,11 @@
             </div>
             <div class="collapse navbar-collapse">
               <ul class="nav navbar-nav navbar-right">
-                @if (Auth::check()))
+                @if (Auth::check())
                 <li>
-                  <a href="time.html"><p>Meu Time</p></a>
+                  <a href="./my-team"><p>Meu Time</p></a>
                 </li>
                 <li>
-                  <a href="#"><p>{{ Auth::user()->name }}</p></a>
-                </li>
-                <li>
-                  <a href="conta.html"><p>Minha Conta</p></a>
                 </li>
                 <li>
                   <a href="{{ route('logout') }}" onclick="event.preventDefault();
