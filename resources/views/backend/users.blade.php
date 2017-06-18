@@ -5,8 +5,8 @@
   <div class="col-md-6">
     <div class="card">
       <div class="header">
-        <h4 class="title">Lista de Exercicios</h4>
-        <p class="category">Qualquer dúvida estamos a disposição</p>
+        <h4 class="title">Usuários</h4>
+        <p class="category">Descrição</p>
       </div>
       <div class="content table-responsive table-full-width">
         <table class="table table-hover table-striped">
@@ -18,13 +18,13 @@
             <th>#</th>
           </thead>
           <tbody>
-            @foreach ($exercises as $exercise)
+            @foreach ($users as $users)
             <tr>
-              <td>{{ $exercise->id }}</td>
-              <td>{{ $exercise->exerciseName }}</td>
-              <td>{{ $exercise->category }}</td>
-              <td>{{ $exercise->score }} pts</td>
-              <td><a href="./exercise/{{ $exercise->id }}">Ir para exercicio</a></td>
+              <td>{{ $user->id }}</td>
+              <td>{{ $user->name }}</td>
+              <td>{{ $user->userName }}</td>
+              <td>{{ $user->email }}</td>
+              <td><a href="./backend/user/edit/{{ $user->id }}">Editar</a> | <a href="./backend/user/delete/{{ $user->id }}">Deletar</a></td>
             </tr>
             @endforeach
           </tbody>

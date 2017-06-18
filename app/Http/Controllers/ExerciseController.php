@@ -19,10 +19,10 @@ class ExerciseController extends Controller
   public function store(ExerciseRequest $request)
   {
       $exercise = new Exercise;
-      $exercise->name      = $request->name;
+      $exercise->name          = $request->name;
       $exercise->exerciseName  = $request->exerciseName;
-      $exercise->team      = $request->team;
-      $exercise->email     = $request->email;
+      $exercise->team          = $request->team;
+      $exercise->email         = $request->email;
       $exercise->save();
       return redirect()->route('exercises.index')->with('message', 'Exercise created successfully!');
   }

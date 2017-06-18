@@ -15,7 +15,7 @@ class UserController extends Controller
     public function index()
     {
         $users = User::orderBy('created_at', 'desc')->paginate(10);
-        return view('my-account',['users' => $users]);
+        return view('backend.users',['users' => $users]);
     }
 
     /**
@@ -34,15 +34,15 @@ class UserController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(UserRequest $request)
+    public function store(Request $request)
     {
         $user = new User;
         $user->name      = $request->name;
-        $user->userName  = $request->userName;
+        $user->username  = $request->username;
         $user->team      = $request->team;
         $user->email     = $request->email;
         $user->save();
-        return redirect()->route('users.index')->with('message', 'User created successfully!');
+        return redirect()->route('backend.users')->with('message', 'User created successfully!');
     }
 
     /**
@@ -65,7 +65,7 @@ class UserController extends Controller
     public function edit(User $user)
     {
       $User = User::findOrFail($id);
-      return view('users.edit',compact('user'));
+      return view('my-account',compact('user'));
     }
 
     /**
@@ -75,7 +75,7 @@ class UserController extends Controller
      * @param  \Helium\User  $user
      * @return \Illuminate\Http\Response
      */
-    public function update(UserRequest $request, User $user)
+    public function update(Request $request, User $user)
     {
       $user = User::findOrFail($id);
       $user->name      = $request->name;

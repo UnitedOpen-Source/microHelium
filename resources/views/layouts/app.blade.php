@@ -23,10 +23,12 @@
             </a>
           </div>
           <ul class="nav">
-            <li class="active">
+            <li class="no-active">
               <a href="#"><i class="pe-7s-wristwatch"></i><p>Cronometro: 00:00</p>
               </a>
             </li>
+          </ul>
+          <ul class="nav">
             <li class="{{ Request::is('home') ? 'active' : '' }}">
               <a href="/home">
                 <i class="pe-7s-graph"></i><p>Dashboard</p>
@@ -81,8 +83,7 @@
             </div>
             <div class="collapse navbar-collapse">
               <ul class="nav navbar-nav navbar-right">
-                @if (Auth::guest())
-                @else
+                @if (Auth::check()))
                 <li>
                   <a href="time.html"><p>Meu Time</p></a>
                 </li>
@@ -92,7 +93,6 @@
                 <li>
                   <a href="conta.html"><p>Minha Conta</p></a>
                 </li>
-                @endif
                 <li>
                   <a href="{{ route('logout') }}" onclick="event.preventDefault();
                   document.getElementById('logout-form').submit();"><p>Logout</p></a>
@@ -100,6 +100,7 @@
                     {{ csrf_field() }}
                   </form>
                 </li>
+                @endif
                 <li class="separator hidden-lg hidden-md"></li>
               </ul>
             </div>
