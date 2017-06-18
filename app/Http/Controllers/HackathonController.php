@@ -5,16 +5,15 @@ namespace Helium\Http\Controllers;
 use Helium\Hackathon;
 use Illuminate\Http\Request;
 
-class Hackathon extends Controller
+class HackathonController extends Controller
 {
   public function index()
   {
-      $hackathons = Hackathon::orderBy('created_at', 'desc')->paginate(10);
-      return view('hackathons.index',['hackathons' => $hackathons]);
+      return view('wizard');
   }
   public function create()
   {
-      return view('hackathons.create');
+      return view('wizard');
   }
   public function store(HackathonRequest $request)
   {

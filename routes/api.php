@@ -16,3 +16,7 @@ use Illuminate\Http\Request;
 Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
+Route::resource('hackathon', 'HackathonController');
+Route::resource('team', 'TeamController');
+Route::resource('user', 'UserController');
+Route::resource('exercise', 'ExerciseController');

@@ -17,4 +17,19 @@ Route::get('/', function () {
 
 Auth::routes();
 
-Route::get('/home', 'HomeController@index')->name('home');
+Route::get('/exercises', 'ExerciseController@index')->name('exercises');
+
+Route::get('/wizard', 'HackathonController@index');
+
+Route::get('/scoreboard', 'TeamController@index');
+
+Route::get('/my-team', 'TeamController@index');
+
+Route::get('/my-account', 'UserController@index');
+
+/*
+Route::resource('hackathons', 'HackathonController')->middleware('auth');
+Route::resource('teams', 'TeamController')->middleware('auth');
+Route::resource('users', 'UserController')->middleware('auth');
+Route::resource('exercises', 'ExerciseController')->middleware('auth');
+*/

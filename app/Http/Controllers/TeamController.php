@@ -5,12 +5,12 @@ namespace Helium\Http\Controllers;
 use Helium\UserTeam;
 use Illuminate\Http\Request;
 
-class UserTeam extends Controller
+class TeamController extends Controller
 {
   public function index()
   {
       $userTeams = UserTeam::orderBy('created_at', 'desc')->paginate(10);
-      return view('userTeams.index',['userTeams' => $userTeams]);
+      return view('scoreboard',['userTeams' => $userTeams]);
   }
   public function create()
   {

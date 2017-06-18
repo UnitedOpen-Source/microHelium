@@ -5,12 +5,12 @@ namespace Helium\Http\Controllers;
 use Helium\Exercise;
 use Illuminate\Http\Request;
 
-class Exercise extends Controller
+class ExerciseController extends Controller
 {
   public function index()
   {
       $exercises = Exercise::orderBy('created_at', 'desc')->paginate(10);
-      return view('exercises.index',['exercises' => $exercises]);
+      return view('exercise',['exercises' => $exercises]);
   }
   public function create()
   {

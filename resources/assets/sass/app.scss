@@ -2,8 +2,44 @@
 // Fonts
 @import url(http://fonts.googleapis.com/css?family=Roboto:400,700,300);
 
-// Variables
-@import "variables";
+/*!
 
+ =========================================================
+ * Light Bootstrap Dashboard - v1.3.1.0
+ =========================================================
+
+ * Product Page: http://www.creative-tim.com/product/light-bootstrap-dashboard
+ * Copyright 2017 Creative Tim (http://www.creative-tim.com)
+ * Licensed under MIT (https://github.com/creativetimofficial/light-bootstrap-dashboard/blob/master/LICENSE.md)
+
+ =========================================================
+
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+@import "resources/assets/sass/lbd/variables";
+@import "resources/assets/sass/lbd/mixins";
+
+@import "resources/assets/sass/lbd/typography";
+
+// Core CSS
+@import "resources/assets/sass/lbd/misc";
+@import "resources/assets/sass/lbd/sidebar-and-main-panel";
+@import "resources/assets/sass/lbd/buttons";
+@import "resources/assets/sass/lbd/inputs";
+
+@import "resources/assets/sass/lbd/alerts";
+@import "resources/assets/sass/lbd/tables";
+
+@import "resources/assets/sass/lbd/checkbox-radio-switch";
+@import "resources/assets/sass/lbd/navbars";
+@import "resources/assets/sass/lbd/footers";
+
+// Fancy Stuff
+
+@import "resources/assets/sass/lbd/dropdown";
+@import "resources/assets/sass/lbd/cards";
+@import "resources/assets/sass/lbd/chartist";
+@import "resources/assets/sass/lbd/responsive";
+*/
 // Bootstrap
 @import "node_modules/bootstrap-sass/assets/stylesheets/bootstrap";

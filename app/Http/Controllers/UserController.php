@@ -5,7 +5,7 @@ namespace Helium\Http\Controllers;
 use Helium\User;
 use Illuminate\Http\Request;
 
-class User extends Controller
+class UserController extends Controller
 {
     /**
      * Display a listing of the resource.
@@ -15,7 +15,7 @@ class User extends Controller
     public function index()
     {
         $users = User::orderBy('created_at', 'desc')->paginate(10);
-        return view('users.index',['users' => $users]);
+        return view('my-account',['users' => $users]);
     }
 
     /**
