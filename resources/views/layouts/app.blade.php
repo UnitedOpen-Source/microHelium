@@ -89,6 +89,7 @@
                   <a href="./my-team"><p>Meu Time</p></a>
                 </li>
                 <li>
+                  <a href="./my-account/{{Auth::user()->id}}"><p>Minha Conta</p></a>
                 </li>
                 <li>
                   <a href="{{ route('logout') }}" onclick="event.preventDefault();

@@ -19,7 +19,7 @@ class CreateExercisesTable extends Migration
             $table->string('exerciseName')->unique();
             $table->string('description')->nullable();
             $table->string('difficulty');
-            $table->tinyInteger('score');
+            $table->smallInteger('score');
             $table->string('expectedOutcome');
             $table->timestamps();
             $table->SoftDeletes();
