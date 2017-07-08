@@ -14,7 +14,7 @@ class CreateExercisesTable extends Migration
     public function up()
     {
         Schema::create('exercises', function (Blueprint $table) {
-            $table->increments('id');
+            $table->increments('exercise_id');
             $table->string('category')->default('default');
             $table->string('exerciseName')->unique();
             $table->string('description')->nullable();
@@ -23,6 +23,21 @@ class CreateExercisesTable extends Migration
             $table->string('expectedOutcome');
             $table->timestamps();
             $table->SoftDeletes();
+        });
+
+        Schema::create('exercises_solved', function (Blueprint $table) {
+          $table->integer('exercise_id')->unsigned();
+          $table->integer('user_id')->unsigned();
+          $table->integer('team_id')->unsigned();
+
+          $table->foreign('exercise_id')->references('exercise_id')->on('exercises')
+              ->onUpdate('cascade')->onDelete('cascade');
+          $table->foreign('user_id')->references('user_id')->on('users')
+              ->onUpdate('cascade')->onDelete('cascade');
+          $table->foreign('team_id')->references('team_id')->on('teams')
+              ->onUpdate('cascade')->onDelete('cascade');
+
+          $table->primary(['exercise_id', 'user_id', 'team_id']);
         });
     }
 

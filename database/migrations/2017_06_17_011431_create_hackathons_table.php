@@ -14,7 +14,7 @@ class CreateHackathonsTable extends Migration
     public function up()
     {
         Schema::create('hackathons', function (Blueprint $table) {
-            $table->increments('id');
+            $table->increments('hackathon_id');
             $table->string('eventName')->unique();
             $table->string('description')->nullable();
             $table->datetime('starts_at');
