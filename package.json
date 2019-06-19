@@ -13,7 +13,7 @@
     "axios": "^0.18.1",
     "bootstrap-sass": "^3.3.7",
     "cross-env": "^3.2.3",
-    "jquery": "^3.1.1",
+    "jquery": "^3.4.0",
     "laravel-mix": "0.*",
     "lodash": "^4.17.4",
     "vue": "^2.1.10"
@@ -26,7 +26,7 @@
     "chartist": "^0.11.0",
     "font-awesome": "^4.7.0",
     "fullcalendar": "^3.4.0",
-    "jquery": "^3.2.1",
+    "jquery": "^3.4.0",
     "jquery-ui": "^1.12.1",
     "moment": "^2.19.3",
     "sweetalert2": "^6.6.5"
