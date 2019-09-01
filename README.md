@@ -13,10 +13,10 @@ Soon..
 
 ## Instaling
 
-- [] Install composer & npm and run ``composer install``
-- [] Configure your .env with your database, do not forget to create table.
-- [] Run ``php artisan serve``
-- [] To see all views run ``php artisan route:list`` and go to url
+- [ ] Install composer & npm and run ``composer install``
+- [ ] Configure your .env with your database, do not forget to create table.
+- [ ] Run ``php artisan serve``
+- [ ] To see all views run ``php artisan route:list`` and go to url
 
 ## License
 
