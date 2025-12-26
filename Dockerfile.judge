@@ -1,0 +1,162 @@
+# MicroHelium Auto-Judge Dockerfile
+# Specialized container for code compilation and execution
+
+FROM php:8.3-cli-alpine
+
+LABEL maintainer="MicroHelium Team"
+LABEL description="MicroHelium Auto-Judge Worker"
+
+WORKDIR /var/www/html
+
+# Install system dependencies for compilation
+RUN apk add --no-cache \
+    git \
+    curl \
+    wget \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    icu-dev \
+    oniguruma-dev \
+    libxml2-dev \
+    postgresql-dev \
+    linux-headers \
+    $PHPIZE_DEPS \
+    # C/C++ compilers
+    gcc \
+    g++ \
+    make \
+    musl-dev \
+    libc-dev \
+    libstdc++ \
+    # Java (for Java, Kotlin)
+    openjdk17-jdk \
+    # Python 3
+    python3 \
+    py3-pip \
+    # Go
+    go \
+    # Rust
+    rust \
+    cargo \
+    # Ruby
+    ruby \
+    # Process management
+    procps \
+    # Time limiting
+    coreutils \
+    # Memory limiting
+    util-linux \
+    # Bash for scripts and nvm
+    bash \
+    # Required for nvm
+    shadow
+
+# Install nvm (Node Version Manager) and multiple Node.js versions
+ENV NVM_DIR=/opt/nvm
+ENV NODE_VERSION_DEFAULT=20
+ENV NODE_VERSIONS="18 20 22"
+
+RUN mkdir -p $NVM_DIR && \
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
+    . $NVM_DIR/nvm.sh && \
+    # Install multiple Node.js versions
+    for version in $NODE_VERSIONS; do \
+        nvm install $version; \
+    done && \
+    # Set default version
+    nvm alias default $NODE_VERSION_DEFAULT && \
+    nvm use default && \
+    # Install TypeScript globally for default version
+    npm install -g typescript && \
+    # Create wrapper scripts for node and npm
+    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/node /usr/local/bin/node && \
+    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/npm /usr/local/bin/npm && \
+    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/npx /usr/local/bin/npx && \
+    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/tsc /usr/local/bin/tsc
+
+# Create nvm helper script for runtime version switching
+RUN echo '#!/bin/bash\n\
+source $NVM_DIR/nvm.sh\n\
+nvm use $1 > /dev/null 2>&1\n\
+shift\n\
+exec node "$@"' > /usr/local/bin/node-version && \
+    chmod +x /usr/local/bin/node-version
+
+# nvm environment setup
+ENV PATH=$NVM_DIR/versions/node/v20/bin:$PATH
+
+# Install Kotlin compiler
+ENV KOTLIN_VERSION=1.9.22
+RUN cd /tmp && \
+    wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" && \
+    unzip -q kotlin-compiler-${KOTLIN_VERSION}.zip -d /opt && \
+    rm kotlin-compiler-${KOTLIN_VERSION}.zip && \
+    ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin && \
+    ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc
+
+# Set Go environment
+ENV GOPATH=/go
+ENV PATH=$PATH:/go/bin
+
+# Configure and install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        mysqli \
+        mbstring \
+        pcntl \
+        bcmath \
+        zip \
+        intl \
+        sockets
+
+# Install Redis extension
+RUN pecl install redis && docker-php-ext-enable redis
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Create judge user with limited privileges
+RUN addgroup -g 1000 -S judge && \
+    adduser -u 1000 -S judge -G judge && \
+    adduser -u 65534 -S nobody -G nogroup 2>/dev/null || true
+
+# Create directories for judging
+RUN mkdir -p /var/www/html/storage/app/judge \
+    && mkdir -p /var/www/html/storage/app/problems \
+    && mkdir -p /var/www/html/storage/app/runs \
+    && mkdir -p /bocajail \
+    && chown -R judge:judge /var/www/html \
+    && chown -R judge:judge /bocajail
+
+# Copy safeexec source and compile
+COPY tools/safeexec.c /tmp/safeexec.c
+RUN gcc -O2 -o /usr/local/bin/safeexec /tmp/safeexec.c 2>/dev/null || echo "safeexec not found, skipping" \
+    && rm -f /tmp/safeexec.c \
+    && chmod 4555 /usr/local/bin/safeexec 2>/dev/null || true
+
+# Copy application files
+COPY --chown=judge:judge . /var/www/html
+
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+# Set proper permissions
+RUN chmod -R 755 /var/www/html/storage \
+    && chmod -R 755 /var/www/html/bootstrap/cache
+
+# Environment variables for judge
+ENV AUTOJUDGE_ENABLED=true
+ENV AUTOJUDGE_TIME_LIMIT=10
+ENV AUTOJUDGE_MEMORY_LIMIT=512
+
+# Switch to judge user
+USER judge
+
+CMD ["php", "artisan", "autojudge:start", "--sleep=5"]

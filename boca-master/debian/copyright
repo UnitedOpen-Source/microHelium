@@ -1,0 +1,39 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: boca
+Upstream-Contact: BOCA Development Team <bocasystem@gmail.com>
+Source: <https://github.com/cassiopc/boca>
+
+Files: *
+Copyright: 2012-2025 BOCA Development Team <bocasystem@gmail.com>
+License: GPL-2.0+
+
+Files: debian/*
+Copyright: 2015 Alejandro Santos <alejolp@gmail.com>
+           2019 Arthur Diniz <arthurbdiniz@gmail.com>
+           2016-2022 Bruno Ribas <brunoribas@utfpr.edu.br>
+           2017 Carlos Joa <cjoa@yahoo.com>
+           2012-2018 Cassio de Campos <cassiopc@gmail.com>
+           2023-2025 Davi Antônio da Silva Santos <antoniossdavi@gmail.com>
+           2023-2024 Daniel Saad Nogueira Nunes <danielsaad@users.noreply.github.com>
+           2024 Gatuno <gatuno@users.noreply.github.com>
+           2020-2021 Emilio Wuerges <wuerges@gmail.com>
+           2023 Rodrigo Laiola Guimarães <rlaiola@users.noreply.github.com>
+           2018 Ronistone Junior <ronistonejunior@gmail.com>
+License: GPL-2.0+
+
+License: GPL-2.0+
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <https://www.gnu.org/licenses/>
+ .
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".

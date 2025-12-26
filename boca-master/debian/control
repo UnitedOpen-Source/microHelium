@@ -1,0 +1,71 @@
+Source: boca
+Section: misc
+Priority: optional
+Maintainer: BOCA Development Team <bocasystem@gmail.com>
+Uploaders: Cassio Polpo de Campos <cassiopc@gmail.com>, Bruno Cesar Ribas <bruno.ribas@unb.br>
+Build-Depends: debhelper-compat (= 13)
+Rules-Requires-Root: no
+Standards-Version: 4.7.2.0
+
+Package: boca
+Architecture: all
+Depends: ${misc:Depends}, ${shlibs:Depends}, boca-common, boca-web, boca-db, boca-autojudge
+Provides: maratona-boca
+Description: manage a contest with the ACM ICPC rules
+ BOCA is a software created to control a contest with the ACM International
+ Collegiate Programming Contest rules. It has been developed in PHP and the
+ interaction between judges and the system is done through a web browser.
+ .
+ This metapackage install all boca related packages to run everything in a
+ single machine.
+
+Package: boca-db
+Architecture: all
+Pre-depends: postgresql
+Depends: ${misc:Depends}, ${shlibs:Depends}, boca-common
+Description: BOCA - database
+ BOCA is a software created to control a contest with the ACM International
+ Collegiate Programming Contest rules. It has been developed in PHP and the
+ interaction between judges and the system is done through a web browser.
+ .
+ This package provides a full database to run a contest on.
+
+Package: boca-web
+Architecture: all
+Depends: ${misc:Depends}, ${shlibs:Depends}, boca-common, apache2, php8.3-fpm, php8.3, python3-matplotlib
+Conflicts: libapache2-mod-php
+Description: BOCA - WEB files
+ BOCA is a software created to control a contest with the ACM International
+ Collegiate Programming Contest rules. It has been developed in PHP and the
+ interaction between judges and the system is done through a web browser.
+ .
+ This package provides only web contents.
+
+Package: boca-common
+Architecture: all
+Pre-Depends: debconf, makepasswd, sharutils
+Depends: ${misc:Depends}, ${shlibs:Depends}, php8.3-zip, wget, php8.3-cli, php8.3-pgsql, php8.3-gd, postgresql-client, php8.3-xml, openssl, libany-uri-escape-perl
+Description: BOCA - Common files
+ BOCA is a software created to control a contest with the ACM International
+ Collegiate Programming Contest rules. It has been developed in PHP and the
+ interaction between judges and the system is done through a web browser.
+ .
+ This package contains shared files with all BOCA packages.
+
+Package: boca-autojudge
+Architecture: amd64
+Depends: ${misc:Depends}, ${shlibs:Depends}, boca-common, debootstrap, schroot, quotatool, makepasswd
+Description: automatic judge system for BOCA
+ BOCA is a software created to control a contest with the ACM International
+ Collegiate Programming Contest rules. It has been developed in PHP and the
+ interaction between judges and the system is done through a web browser.
+ .
+ This package contains files to generate and run the autojudge system for
+ BOCA.
+
+Package: boca-submission-tools
+Architecture: amd64
+Depends: ${misc:Depends}, ${shlibs:Depends}, sharutils, wget, libany-uri-escape-perl, openssl, openssh-server
+Description: BOCA tools for headless code submission
+ This package provides tools to submit codes to a running boca server
+ without using the web interface.

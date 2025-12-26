@@ -1,0 +1,73 @@
+# MicroHelium Development Dockerfile
+# PHP 8.3 with required extensions for Laravel 12
+
+FROM php:8.3-fpm-alpine
+
+LABEL maintainer="MicroHelium Team"
+LABEL description="MicroHelium Development Container"
+
+WORKDIR /var/www/html
+
+# Install system dependencies
+RUN apk add --no-cache \
+    git \
+    curl \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    icu-dev \
+    oniguruma-dev \
+    libxml2-dev \
+    postgresql-dev \
+    linux-headers \
+    $PHPIZE_DEPS \
+    # Compilers for autojudge
+    gcc \
+    g++ \
+    make \
+    python3
+
+# Configure and install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        pgsql \
+        mysqli \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        intl \
+        opcache \
+        xml \
+        sockets
+
+# Install Redis extension
+RUN pecl install redis && docker-php-ext-enable redis
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Create system user
+RUN addgroup -g 1000 -S www && \
+    adduser -u 1000 -S www -G www
+
+# Create log directory
+RUN mkdir -p /var/log/php && chown www:www /var/log/php
+
+# Set permissions for storage
+RUN mkdir -p /var/www/html/storage/framework/{cache,sessions,views} \
+    && mkdir -p /var/www/html/storage/logs \
+    && mkdir -p /var/www/html/bootstrap/cache \
+    && chown -R www:www /var/www/html
+
+EXPOSE 9000
+
+CMD ["php-fpm"]
