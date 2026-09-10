@@ -51,6 +51,12 @@ class JudgeController extends Controller
 
     public function judge(Request $request, Run $run): RedirectResponse
     {
+        $this->authorizeRunAccess($run);
+
+        if ($run->status === 'judged') {
+            return back()->withErrors(['answer_id' => "Run #{$run->run_number} ja foi julgada. Use a API de rejudge para reabrir antes de julgar de novo."]);
+        }
+
         $validated = $request->validate([
             'answer_id' => 'required|exists:answers,id',
         ]);
@@ -87,5 +93,26 @@ class JudgeController extends Controller
         }
 
         return Contest::where('is_active', true)->first();
+    }
+
+    /**
+     * A judge must only be able to judge runs in their own contest -- the
+     * `role:judge,admin` middleware only checks the user's type, not which
+     * contest the run being acted on belongs to, so without this a judge
+     * from contest A could judge (and thus score) a run in contest B just
+     * by guessing/incrementing the run id. Admins are trusted across
+     * contests, matching the rest of the admin surface.
+     */
+    private function authorizeRunAccess(Run $run): void
+    {
+        $user = auth()->user();
+
+        if ($user->isAdmin()) {
+            return;
+        }
+
+        if ($user->contest_id !== $run->contest_id) {
+            abort(403, 'Voce nao pode julgar submissoes de outro contest.');
+        }
     }
 }

@@ -35,6 +35,8 @@ class StaffController extends Controller
 
     public function complete(Task $task): RedirectResponse
     {
+        $this->authorizeTaskAccess($task);
+
         $task->update([
             'status' => 'done',
             'completed_time' => $task->contest->getContestTime(),
@@ -54,5 +56,26 @@ class StaffController extends Controller
         }
 
         return Contest::where('is_active', true)->first();
+    }
+
+    /**
+     * A staff member must only be able to complete tasks in their own
+     * contest -- the `role:staff,admin` middleware only checks the user's
+     * type, not which contest the task belongs to, so without this a staff
+     * member from contest A could mark a task in contest B done just by
+     * guessing/incrementing the task id. Admins are trusted across
+     * contests, matching the rest of the admin surface.
+     */
+    private function authorizeTaskAccess(Task $task): void
+    {
+        $user = auth()->user();
+
+        if ($user->isAdmin()) {
+            return;
+        }
+
+        if ($user->contest_id !== $task->contest_id) {
+            abort(403, 'Voce nao pode concluir tarefas de outro contest.');
+        }
     }
 }
