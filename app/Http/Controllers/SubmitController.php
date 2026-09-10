@@ -78,16 +78,22 @@ class SubmitController extends Controller
             $file = $request->file('source_file');
             // The compile/run commands are chosen by the selected language,
             // not by sniffing the file -- so the extension must always match
-            // $language->extension regardless of what the user named their
-            // file (e.g. picking "C" but uploading "solution.txt" would
-            // otherwise make gcc fail on a filename it doesn't recognize).
-            // The basename is preserved since some languages (Java) require
-            // it to match the program's class/entry-point name.
+            // what compiles for this language, regardless of what the user
+            // named their file (e.g. picking "C" but uploading "solution.txt"
+            // would otherwise make gcc fail on a filename it doesn't
+            // recognize). Language::getFileExtension() resolves the *real*
+            // file extension (e.g. "c") -- $language->extension alone is
+            // sometimes a compiler-variant id (e.g. "c_gcc13", seeded by the
+            // contest wizard from Language::getDefaultLanguages()), not a
+            // usable file extension, and passing that straight to gcc/javac
+            // makes every wizard-created contest's submissions fail to
+            // compile. The basename is preserved since some languages (Java)
+            // require it to match the program's class/entry-point name.
             $basename = pathinfo($this->sanitizeFilename($file->getClientOriginalName()), PATHINFO_FILENAME);
-            $originalName = ($basename !== '' ? $basename : 'main') . '.' . $this->sanitizeFilename($language->extension);
+            $originalName = ($basename !== '' ? $basename : 'main') . '.' . $this->sanitizeFilename($language->getFileExtension());
             $sourceContent = file_get_contents($file->path());
         } else {
-            $originalName = 'main.' . $this->sanitizeFilename($language->extension);
+            $originalName = 'main.' . $this->sanitizeFilename($language->getFileExtension());
             $sourceContent = $request->input('code_text');
         }
 
