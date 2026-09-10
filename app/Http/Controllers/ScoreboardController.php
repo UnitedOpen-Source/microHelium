@@ -94,8 +94,34 @@ class ScoreboardController extends Controller
             $entry['user_id'] = $entry['user']->user_id ?? null;
             $entry['problems'] = collect($entry['problems'])->keyBy('problem_id');
         }
+        unset($entry);
 
-        return $entries;
+        return $this->applySiteVisibility($entries);
+    }
+
+    /**
+     * A team logged in at a site configured with score_visibility =
+     * 'own_site' only sees their own site's rows -- admins/judges/staff/
+     * spectators always get the unrestricted view, matching BOCA's
+     * admin/score bypass on sitescorelevel.
+     */
+    private function applySiteVisibility(array $entries): array
+    {
+        $viewer = auth()->user();
+
+        if (!$viewer || $viewer->isAdmin() || $viewer->isJudge() || $viewer->isStaff() || $viewer->isSpectator()) {
+            return $entries;
+        }
+
+        $site = $viewer->site;
+        if (!$site || $site->score_visibility !== 'own_site') {
+            return $entries;
+        }
+
+        return array_values(array_filter(
+            $entries,
+            fn ($entry) => ($entry['user']->site_id ?? null) === $viewer->site_id
+        ));
     }
 
     private function resolveContest(): ?Contest

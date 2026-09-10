@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Backend;
 
+use App\Models\Contest;
+use App\Models\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -43,6 +45,67 @@ class UserControllerTest extends TestCase
         $response->assertRedirect(route('backend.users'));
         $response->assertSessionHas('success');
         $this->assertDatabaseHas('users', ['username' => 'newuser']);
+    }
+
+    /**
+     * The site_id/contest_id columns and the User->site() relation existed
+     * but store() never populated them -- there was no way to assign any
+     * created user to a site at all (issue #18 prerequisite fix).
+     */
+    public function test_admin_can_assign_a_site_when_creating_a_user()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+        $site = Site::factory()->create(['contest_id' => $contest->id]);
+
+        $response = $this->actingAs($admin)->post(route('backend.users'), [
+            'fullname' => 'Site Coordinator',
+            'username' => 'sitecoord',
+            'email' => 'sitecoord@example.com',
+            'password' => 'password123',
+            'user_type' => 'site',
+            'site_id' => $site->id,
+        ]);
+
+        $response->assertRedirect(route('backend.users'));
+        $this->assertDatabaseHas('users', [
+            'username' => 'sitecoord',
+            'user_type' => 'site',
+            'site_id' => $site->id,
+            'contest_id' => $contest->id,
+        ]);
+    }
+
+    public function test_site_user_type_requires_a_site_id()
+    {
+        $admin = $this->createAdminUser();
+
+        $response = $this->actingAs($admin)->post(route('backend.users'), [
+            'fullname' => 'Site Coordinator',
+            'username' => 'sitecoord2',
+            'email' => 'sitecoord2@example.com',
+            'password' => 'password123',
+            'user_type' => 'site',
+        ]);
+
+        $response->assertSessionHasErrors('site_id');
+        $this->assertDatabaseMissing('users', ['username' => 'sitecoord2']);
+    }
+
+    public function test_invalid_user_type_is_rejected()
+    {
+        $admin = $this->createAdminUser();
+
+        $response = $this->actingAs($admin)->post(route('backend.users'), [
+            'fullname' => 'Bad Type',
+            'username' => 'badtype',
+            'email' => 'badtype@example.com',
+            'password' => 'password123',
+            'user_type' => 'superuser',
+        ]);
+
+        $response->assertSessionHasErrors('user_type');
+        $this->assertDatabaseMissing('users', ['username' => 'badtype']);
     }
 
     /**

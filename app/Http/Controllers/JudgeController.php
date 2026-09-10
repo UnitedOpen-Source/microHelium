@@ -28,17 +28,32 @@ class JudgeController extends Controller
     public function index(): View
     {
         $contest = $this->resolveContest();
+        $user = auth()->user();
 
         $pendingRuns = collect();
         $judgedRuns = collect();
 
         if ($contest) {
-            $runs = Run::where('contest_id', $contest->id)
-                ->with(['problem:id,short_name,name', 'language:id,name', 'user:user_id,fullname,username', 'answer:id,name,short_name,is_accepted'])
-                ->orderByDesc('created_at')
-                ->get();
+            $query = Run::where('contest_id', $contest->id)
+                ->with(['problem:id,short_name,name', 'language:id,name', 'user:user_id,fullname,username', 'answer:id,name,short_name,is_accepted', 'site:id,name,max_judge_wait_time'])
+                ->orderByDesc('created_at');
 
-            $pendingRuns = $runs->whereIn('status', ['pending', 'judging']);
+            // A judge stationed at a site only judges their own site's runs
+            // plus whatever other sites were explicitly routed to them
+            // (Backend\SiteController's "judging routes"). No site set on
+            // the judge, or an admin, keeps the original contest-wide view.
+            if (!$user->isAdmin() && $user->site_id) {
+                $query->whereIn('site_id', $user->site->routedJudgingSiteIds());
+            }
+
+            $runs = $query->get();
+
+            $pendingRuns = $runs->whereIn('status', ['pending', 'judging'])->map(function (Run $run) {
+                $waitLimit = $run->site->max_judge_wait_time ?? 900;
+                $run->is_overdue = $run->created_at->diffInSeconds(now()) > $waitLimit;
+
+                return $run;
+            });
             $judgedRuns = $runs->where('status', 'judged')->take(50);
         }
 

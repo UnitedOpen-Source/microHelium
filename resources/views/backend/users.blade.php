@@ -49,6 +49,10 @@
                                 <span class="px-2 py-1 text-xs font-medium bg-info-soft text-info rounded">Admin</span>
                             @elseif(($user->user_type ?? 'team') == 'judge')
                                 <span class="px-2 py-1 text-xs font-medium bg-muted text-foreground rounded">Juiz</span>
+                            @elseif(($user->user_type ?? 'team') == 'staff')
+                                <span class="px-2 py-1 text-xs font-medium bg-muted text-foreground rounded">Staff</span>
+                            @elseif(($user->user_type ?? 'team') == 'site')
+                                <span class="px-2 py-1 text-xs font-medium bg-warning-soft text-warning rounded">Coord. de site</span>
                             @else
                                 <span class="px-2 py-1 text-xs font-medium bg-info-soft text-info rounded">Competidor</span>
                             @endif
@@ -130,8 +134,20 @@
                         <select id="user_type" name="user_type" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                             <option value="team" @selected(old('user_type', 'team') === 'team')>Competidor</option>
                             <option value="judge" @selected(old('user_type', 'team') === 'judge')>Juiz</option>
+                            <option value="staff" @selected(old('user_type', 'team') === 'staff')>Staff</option>
+                            <option value="site" @selected(old('user_type', 'team') === 'site')>Coordenador de site</option>
                             <option value="admin" @selected(old('user_type', 'team') === 'admin')>Administrador</option>
                         </select>
+                    </div>
+                    <div>
+                        <label for="site_id" class="block text-sm font-medium text-foreground mb-1">Site</label>
+                        <select id="site_id" name="site_id" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="">Nenhum (nao vinculado a um site)</option>
+                            @foreach($sites as $site)
+                                <option value="{{ $site->id }}" @selected((string) old('site_id') === (string) $site->id)>{{ $site->name }}</option>
+                            @endforeach
+                        </select>
+                        <p class="text-sm text-muted-foreground mt-1">Obrigatorio para o perfil "Coordenador de site".</p>
                     </div>
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">

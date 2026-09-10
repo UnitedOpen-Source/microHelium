@@ -23,6 +23,8 @@ class Site extends Model
         'freeze_time',
         'max_runtime',
         'chief_judge_name',
+        'score_visibility',
+        'max_judge_wait_time',
     ];
 
     protected $casts = [
@@ -54,6 +56,25 @@ class Site extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    /**
+     * Routes where this site's judges also handle another site's runs.
+     */
+    public function judgingRoutes(): HasMany
+    {
+        return $this->hasMany(SiteJudgingRoute::class, 'host_site_id');
+    }
+
+    /**
+     * This site's own id plus every source_site_id explicitly routed to it.
+     * Used to scope which runs a judge stationed at this site can see --
+     * an empty routing table means "own site only", matching BOCA's
+     * sitejudging default.
+     */
+    public function routedJudgingSiteIds(): array
+    {
+        return array_merge([$this->id], $this->judgingRoutes()->pluck('source_site_id')->all());
     }
 
     public function getEffectiveDuration(): int
