@@ -6,6 +6,7 @@ use Tests\TestCase;
 use Helium\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * End-to-End tests for User Registration Flow
@@ -19,9 +20,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that user can visit the registration page
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function user_can_visit_registration_page()
     {
         $response = $this->get('/register');
@@ -39,9 +40,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that user can fill registration form and submit successfully
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function user_can_fill_registration_form_and_submit()
     {
         $userData = [
@@ -80,9 +81,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that user is redirected after successful registration
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function user_is_redirected_after_successful_registration()
     {
         $userData = [
@@ -103,9 +104,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that user is automatically logged in after registration
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function user_is_logged_in_after_registration()
     {
         $userData = [
@@ -134,9 +135,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test validation errors are shown for invalid input - missing fields
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function validation_errors_shown_for_missing_fields()
     {
         $response = $this->post('/register', [
@@ -154,9 +155,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test validation errors are shown for invalid email format
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function validation_errors_shown_for_invalid_email_format()
     {
         $response = $this->post('/register', [
@@ -174,9 +175,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test validation errors are shown for password too short
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function validation_errors_shown_for_short_password()
     {
         $response = $this->post('/register', [
@@ -194,9 +195,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test validation errors are shown for mismatched passwords
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function validation_errors_shown_for_password_mismatch()
     {
         $response = $this->post('/register', [
@@ -214,9 +215,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that duplicate email is rejected
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function duplicate_email_is_rejected()
     {
         // Create an existing user
@@ -254,9 +255,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that duplicate username is rejected
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function duplicate_username_is_rejected()
     {
         // Create an existing user
@@ -294,9 +295,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test complete registration flow with followRedirects
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function complete_registration_flow_with_follow_redirects()
     {
         $userData = [
@@ -329,9 +330,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that registered user can access protected routes
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function registered_user_can_access_protected_routes()
     {
         $userData = [
@@ -362,9 +363,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test registration form handles invalid email format
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function registration_form_preserves_old_input_on_validation_error()
     {
         $response = $this->post('/register', [
@@ -389,9 +390,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that user type is set to 'team' by default
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function new_user_defaults_to_team_type()
     {
         $userData = [
@@ -415,9 +416,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that special characters in fullname are accepted
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function registration_accepts_special_characters_in_fullname()
     {
         $userData = [
@@ -440,9 +441,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test that very long passwords are accepted (up to reasonable limit)
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function registration_accepts_long_passwords()
     {
         $longPassword = str_repeat('abcdefgh', 10); // 80 characters
@@ -471,9 +472,9 @@ class UserRegistrationTest extends TestCase
     /**
      * Test edge case: maximum length for fields
      *
-     * @test
      * @return void
      */
+    #[Test]
     public function registration_enforces_maximum_field_lengths()
     {
         $tooLongString = str_repeat('a', 256); // Exceeds max of 255
