@@ -2,17 +2,19 @@
 
 @section('title', 'Tarefas')
 
+@section('description', 'Organize as entregas, impressões e solicitações dos participantes.')
+
 @section('content')
 <div class="space-y-6">
-    {{-- layouts/app.blade.php already renders session('success')/session('error') globally --}}
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
             <h2 class="text-xl font-semibold text-foreground">Tarefas</h2>
             <p class="text-sm text-muted-foreground">{{ $contest?->name ?? 'Nenhum contest ativo' }} &mdash; entrega de balões, impressão e outras tarefas de staff</p>
         </div>
+        @include('partials.table-filter', ['tableId' => 'staff-tasks-table', 'searchLabel' => 'registros'])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="staff-tasks-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
@@ -27,15 +29,15 @@
                     @forelse ($tasks as $task)
                     <tr class="hover:bg-muted/50 transition-colors">
                         <td class="px-4 py-3 font-mono text-sm">
-                            <span @if($task->color_hex) style="color: {{ $task->color_hex }}" @endif>#{{ $task->task_number }}</span>
+                            <span class="font-mono font-semibold text-foreground">#{{ $task->task_number }}</span>
                         </td>
                         <td class="px-4 py-3 text-sm">{{ $task->description }}</td>
                         <td class="px-4 py-3 text-sm">{{ $task->user->fullname ?? $task->user->username }}</td>
                         <td class="px-4 py-3">
                             @if($task->isDone())
-                                <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">Concluida</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-success-soft text-success rounded">Concluida</span>
                             @elseif($task->status === 'processing')
-                                <span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">Em andamento</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-warning-soft text-warning rounded">Em andamento</span>
                             @else
                                 <span class="px-2 py-1 text-xs font-medium bg-muted text-muted-foreground rounded">Pendente</span>
                             @endif
@@ -45,7 +47,7 @@
                             @unless($task->isDone())
                             <form action="{{ route('staff.tasks.complete', $task) }}" method="POST">
                                 @csrf
-                                <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors">
+                                <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary-hover transition-colors">
                                     Marcar concluida
                                 </button>
                             </form>
@@ -59,7 +61,7 @@
                         <td colspan="6" class="px-4 py-12 text-center text-muted-foreground">Nenhuma tarefa cadastrada</td>
                     </tr>
                     @endforelse
-                </tbody>
+                <tr id="staff-tasks-table-empty" hidden><td colspan="6" class="text-center text-muted-foreground">Nenhum resultado para estes filtros.</td></tr></tbody>
             </table>
         </div>
     </div>

@@ -1,38 +1,38 @@
 <template>
-    <div class="card">
-        <div class="p-4 border-b border-gray-200">
+    <div class="surface">
+        <div class="p-4 border-b border-border">
             <h2 class="text-lg font-semibold">Submissions</h2>
         </div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
-                <thead class="bg-gray-50">
+                <thead class="bg-muted">
                     <tr>
-                        <th class="text-left p-3 font-medium text-gray-600">#</th>
-                        <th class="text-left p-3 font-medium text-gray-600">Time</th>
-                        <th class="text-left p-3 font-medium text-gray-600">Problem</th>
-                        <th class="text-left p-3 font-medium text-gray-600">Language</th>
-                        <th class="text-center p-3 font-medium text-gray-600">Verdict</th>
+                        <th class="text-left p-3 font-medium text-muted-foreground">#</th>
+                        <th class="text-left p-3 font-medium text-muted-foreground">Time</th>
+                        <th class="text-left p-3 font-medium text-muted-foreground">Problem</th>
+                        <th class="text-left p-3 font-medium text-muted-foreground">Language</th>
+                        <th class="text-center p-3 font-medium text-muted-foreground">Verdict</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr
                         v-for="run in runs"
                         :key="run.id"
-                        class="border-b border-gray-100 hover:bg-gray-50"
+                        class="border-b border-border hover:bg-muted"
                     >
                         <td class="p-3 font-mono">{{ run.run_number }}</td>
-                        <td class="p-3 text-gray-600">{{ formatTime(run.contest_time) }}</td>
+                        <td class="p-3 text-muted-foreground">{{ formatTime(run.contest_time) }}</td>
                         <td class="p-3">
                             <span
                                 class="inline-flex items-center px-2 py-1 rounded text-xs font-medium"
-                                :style="{ backgroundColor: run.problem?.color_hex || '#e5e7eb' }"
+
                             >
                                 {{ run.problem?.short_name }}
                             </span>
-                            <span class="ml-2 text-gray-700">{{ run.problem?.name }}</span>
+                            <span class="ml-2 text-foreground">{{ run.problem?.name }}</span>
                         </td>
-                        <td class="p-3 text-gray-600">{{ run.language?.name }}</td>
+                        <td class="p-3 text-muted-foreground">{{ run.language?.name }}</td>
                         <td class="p-3 text-center">
                             <span :class="getVerdictClass(run.answer)">
                                 {{ run.answer?.short_name || 'Pending' }}
@@ -40,7 +40,7 @@
                         </td>
                     </tr>
                     <tr v-if="runs.length === 0">
-                        <td colspan="5" class="p-8 text-center text-gray-500">
+                        <td colspan="5" class="p-8 text-center text-muted-foreground">
                             No submissions yet
                         </td>
                     </tr>
@@ -48,8 +48,8 @@
             </table>
         </div>
 
-        <div v-if="hasMore" class="p-4 text-center border-t border-gray-200">
-            <button @click="loadMore" class="btn-secondary" :disabled="loading">
+        <div v-if="hasMore" class="p-4 text-center border-t border-border">
+            <button @click="loadMore" class="button-secondary" :disabled="loading">
                 {{ loading ? 'Loading...' : 'Load More' }}
             </button>
         </div>
@@ -125,19 +125,19 @@ export default {
         },
 
         getVerdictClass(answer) {
-            if (!answer) return 'verdict-pending';
+            if (!answer) return 'verdict-badge bg-muted text-muted-foreground';
 
             const classMap = {
-                AC: 'verdict-ac',
-                WA: 'verdict-wa',
-                TLE: 'verdict-tle',
-                RE: 'verdict-re',
-                CE: 'verdict-ce',
-                MLE: 'verdict-re',
-                PE: 'verdict-wa',
+                AC: 'verdict-badge bg-success-soft text-success',
+                WA: 'verdict-badge bg-destructive-soft text-destructive',
+                TLE: 'verdict-badge bg-warning-soft text-warning',
+                RE: 'verdict-badge bg-destructive-soft text-destructive',
+                CE: 'verdict-badge bg-destructive-soft text-destructive',
+                MLE: 'verdict-badge bg-destructive-soft text-destructive',
+                PE: 'verdict-badge bg-destructive-soft text-destructive',
             };
 
-            return classMap[answer.short_name] || 'verdict-pending';
+            return classMap[answer.short_name] || 'verdict-badge bg-muted text-muted-foreground';
         },
 
         startAutoRefresh() {

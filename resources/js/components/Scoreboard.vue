@@ -1,14 +1,14 @@
 <template>
-    <div class="card p-4">
+    <div class="surface p-4">
         <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-bold">Scoreboard</h2>
-            <div v-if="frozen" class="text-sm text-yellow-600 font-medium">
-                <span class="animate-pulse">Frozen</span>
+            <div v-if="frozen" class="text-sm text-warning font-medium">
+                <span>Placar congelado</span>
             </div>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="scoreboard-table">
+            <table class="w-full text-sm">
                 <thead>
                     <tr class="scoreboard-header">
                         <th class="scoreboard-rank p-2">#</th>
@@ -19,7 +19,7 @@
                             v-for="problem in problems"
                             :key="problem.id"
                             class="scoreboard-problem p-2"
-                            :style="{ backgroundColor: problem.color_hex || '#f3f4f6' }"
+
                         >
                             {{ problem.short_name }}
                         </th>
@@ -48,7 +48,7 @@
             </table>
         </div>
 
-        <div class="text-xs text-gray-500 mt-4">
+        <div class="text-xs text-muted-foreground mt-4">
             Last updated: {{ updatedAt }}
         </div>
     </div>
@@ -112,9 +112,9 @@ export default {
             const problem = this.getProblemData(entry, problemId);
             if (!problem) return '';
 
-            if (problem.is_first_solver) return 'problem-first-solver';
-            if (problem.is_solved) return 'problem-solved';
-            if (problem.attempts > 0) return 'problem-attempted';
+            if (problem.is_first_solver) return 'bg-success-soft text-success';
+            if (problem.is_solved) return 'bg-success-soft text-success';
+            if (problem.attempts > 0) return 'bg-destructive-soft text-destructive';
             return '';
         },
 

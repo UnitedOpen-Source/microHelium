@@ -1,12 +1,12 @@
 <template>
-    <div class="card p-6">
+    <div class="surface p-6">
         <h2 class="text-lg font-semibold mb-4">Submit Solution</h2>
 
         <form @submit.prevent="submit">
             <div class="space-y-4">
                 <div>
-                    <label class="label">Problem</label>
-                    <select v-model="form.problem_id" class="input" required>
+                    <label class="block text-sm font-medium mb-2">Problem</label>
+                    <select v-model="form.problem_id" class="w-full rounded-lg border border-input bg-background text-foreground px-3 py-2" required>
                         <option value="">Select a problem</option>
                         <option
                             v-for="problem in problems"
@@ -19,8 +19,8 @@
                 </div>
 
                 <div>
-                    <label class="label">Language</label>
-                    <select v-model="form.language_id" class="input" required>
+                    <label class="block text-sm font-medium mb-2">Language</label>
+                    <select v-model="form.language_id" class="w-full rounded-lg border border-input bg-background text-foreground px-3 py-2" required>
                         <option value="">Select a language</option>
                         <option
                             v-for="language in languages"
@@ -33,30 +33,30 @@
                 </div>
 
                 <div>
-                    <label class="label">Source File</label>
+                    <label class="block text-sm font-medium mb-2">Source File</label>
                     <input
                         type="file"
                         @change="handleFileChange"
-                        class="input"
+                        class="w-full rounded-lg border border-input bg-background text-foreground px-3 py-2"
                         accept=".c,.cpp,.cc,.java,.py,.kt"
                         required
                     />
-                    <p class="text-xs text-gray-500 mt-1">
+                    <p class="text-xs text-muted-foreground mt-1">
                         Maximum file size: {{ maxFileSize }}KB
                     </p>
                 </div>
 
-                <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                <div v-if="error" class="p-3 bg-destructive-soft border border-destructive/25 rounded-lg text-destructive text-sm">
                     {{ error }}
                 </div>
 
-                <div v-if="success" class="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+                <div v-if="success" class="p-3 bg-success-soft border border-success/25 rounded-lg text-success text-sm">
                     {{ success }}
                 </div>
 
                 <button
                     type="submit"
-                    class="btn-primary w-full"
+                    class="button-primary w-full"
                     :disabled="submitting"
                 >
                     {{ submitting ? 'Submitting...' : 'Submit' }}

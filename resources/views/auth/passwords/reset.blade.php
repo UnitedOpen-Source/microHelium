@@ -20,13 +20,10 @@
             name="email"
             value="{{ $email ?? old('email') }}"
             required
-            autofocus
             placeholder="seu@email.com"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('email') border-destructive focus-visible:ring-destructive @enderror"
+            autocomplete="email" autocapitalize="none" spellcheck="false"
         >
-        @error('email')
-            <p class="text-sm text-destructive">{{ $message }}</p>
-        @enderror
     </div>
 
     <div class="space-y-2">
@@ -40,10 +37,8 @@
             required
             placeholder="Mínimo 8 caracteres"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('password') border-destructive focus-visible:ring-destructive @enderror"
+            autocomplete="new-password" minlength="8"
         >
-        @error('password')
-            <p class="text-sm text-destructive">{{ $message }}</p>
-        @enderror
     </div>
 
     <div class="space-y-2">
@@ -57,12 +52,13 @@
             required
             placeholder="Repita a nova senha"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            autocomplete="new-password" minlength="8"
         >
     </div>
 
     <button
         type="submit"
-        class="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
+        class="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
     >
         Redefinir Senha
     </button>
