@@ -8,11 +8,16 @@ LABEL description="MicroHelium Auto-Judge Worker"
 
 WORKDIR /var/www/html
 
-# Install system dependencies for compilation
+# Install system dependencies for compilation -- this list must cover every
+# language Language::getDefaultLanguages() marks is_active (see
+# Dockerfile/Dockerfile.dev, which install the identical set for the
+# queue-worker judging path; this image is the standalone autojudge:start
+# worker's, and must not silently drift out of sync with it).
 RUN apk add --no-cache \
     git \
     curl \
     wget \
+    ca-certificates \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
@@ -33,15 +38,20 @@ RUN apk add --no-cache \
     libc-dev \
     libstdc++ \
     # Java (for Java, Kotlin)
-    openjdk17-jdk \
+    openjdk21-jdk \
     # Python 3
     python3 \
     py3-pip \
+    # Node.js / TypeScript -- a single real runtime, not nvm: see
+    # Dockerfile.dev's comment on why multiple Node majors aren't installed
+    nodejs \
+    npm \
+    # .NET / C#
+    dotnet8-sdk \
     # Go
     go \
     # Rust
     rust \
-    cargo \
     # Ruby
     ruby \
     # Process management
@@ -50,53 +60,48 @@ RUN apk add --no-cache \
     coreutils \
     # Memory limiting
     util-linux \
-    # Bash for scripts and nvm
-    bash \
-    # Required for nvm
-    shadow
+    # Bash for scripts
+    bash
 
-# Install nvm (Node Version Manager) and multiple Node.js versions
-ENV NVM_DIR=/opt/nvm
-ENV NODE_VERSION_DEFAULT=20
-ENV NODE_VERSIONS="18 20 22"
+RUN npm install -g typescript
 
-RUN mkdir -p $NVM_DIR && \
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
-    . $NVM_DIR/nvm.sh && \
-    # Install multiple Node.js versions
-    for version in $NODE_VERSIONS; do \
-        nvm install $version; \
-    done && \
-    # Set default version
-    nvm alias default $NODE_VERSION_DEFAULT && \
-    nvm use default && \
-    # Install TypeScript globally for default version
-    npm install -g typescript && \
-    # Create wrapper scripts for node and npm
-    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/node /usr/local/bin/node && \
-    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/npm /usr/local/bin/npm && \
-    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/npx /usr/local/bin/npx && \
-    ln -sf $NVM_DIR/versions/node/v$(nvm version default | tr -d 'v')/bin/tsc /usr/local/bin/tsc
+# Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
+# zip (pure JVM + a launcher script, arch-independent given the JDK above).
+ARG KOTLIN_VERSION=2.4.20
+RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -O /tmp/kotlin.zip \
+    && unzip -q /tmp/kotlin.zip -d /opt \
+    && rm /tmp/kotlin.zip \
+    && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc \
+    && ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin
 
-# Create nvm helper script for runtime version switching
-RUN echo '#!/bin/bash\n\
-source $NVM_DIR/nvm.sh\n\
-nvm use $1 > /dev/null 2>&1\n\
-shift\n\
-exec node "$@"' > /usr/local/bin/node-version && \
-    chmod +x /usr/local/bin/node-version
-
-# nvm environment setup
-ENV PATH=$NVM_DIR/versions/node/v20/bin:$PATH
-
-# Install Kotlin compiler
-ENV KOTLIN_VERSION=1.9.22
-RUN cd /tmp && \
-    wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" && \
-    unzip -q kotlin-compiler-${KOTLIN_VERSION}.zip -d /opt && \
-    rm kotlin-compiler-${KOTLIN_VERSION}.zip && \
-    ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin && \
-    ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc
+# Free Pascal has no Alpine package either; installed from the official
+# per-architecture SourceForge binary tarball. See Dockerfile.dev for the
+# detailed rationale (retry loop: the SourceForge download occasionally
+# serves a truncated file under automated tools).
+ARG FPC_VERSION=3.2.2
+RUN set -eu; \
+    arch="$(apk --print-arch)"; \
+    case "$arch" in \
+        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64 ;; \
+        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64 ;; \
+        *) echo "Unsupported arch for FPC: $arch" >&2; exit 1 ;; \
+    esac; \
+    url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
+    tries=0; \
+    until wget -q -c "$url" -O /tmp/fpc.tar && tar -tf /tmp/fpc.tar >/dev/null 2>&1; do \
+        tries=$((tries + 1)); \
+        [ "$tries" -ge 6 ] && { echo "Failed to download a valid FPC tarball after $tries attempts" >&2; exit 1; }; \
+        rm -f /tmp/fpc.tar; \
+    done; \
+    mkdir -p /tmp/fpcx && tar -xf /tmp/fpc.tar -C /tmp/fpcx; \
+    cd "/tmp/fpcx/fpc-${FPC_VERSION}.${fpc_arch}"; \
+    tar -xf "binary.${fpc_arch}.tar" "base.${fpc_arch}.tar.gz"; \
+    mkdir -p "/opt/fpc/${FPC_VERSION}"; \
+    tar -xzf "base.${fpc_arch}.tar.gz" -C "/opt/fpc/${FPC_VERSION}"; \
+    install -m 755 "/opt/fpc/${FPC_VERSION}/lib/fpc/${FPC_VERSION}/${fpc_bin}" /usr/local/bin/fpc; \
+    printf -- '-Fu/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n-Fl/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n' \
+        "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" > /etc/fpc.cfg; \
+    rm -rf /tmp/fpc.tar /tmp/fpcx
 
 # Set Go environment
 ENV GOPATH=/go

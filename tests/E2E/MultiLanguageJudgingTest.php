@@ -62,6 +62,23 @@ class MultiLanguageJudgingTest extends TestCase
         return $cases;
     }
 
+    /**
+     * activeLanguages() silently skips any is_active language missing from
+     * its $solutions map (a data provider can't fail loudly per-case), so
+     * this is the actual regression net: if someone flips another language
+     * to is_active without adding a solution, this fails instead of the
+     * suite quietly going green while that language ships untested.
+     */
+    public function test_every_active_language_has_a_solution_fixture_covering_it()
+    {
+        $active = collect(Language::getDefaultLanguages())->where('is_active', true)->pluck('extension');
+        $covered = array_keys(self::activeLanguages());
+
+        $missing = $active->diff($covered)->values()->all();
+
+        $this->assertEmpty($missing, 'is_active languages with no MultiLanguageJudgingTest fixture: ' . implode(', ', $missing));
+    }
+
     #[DataProvider('activeLanguages')]
     public function test_active_language_compiles_and_judges_a_correct_solution_as_accepted(string $extension, string $filename, string $source)
     {

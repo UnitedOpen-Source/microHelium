@@ -43,13 +43,12 @@ RUN apk add --no-cache \
     dotnet8-sdk \
     go \
     rust \
-    cargo \
     ruby \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
     bash
 
-# TypeScript (npx tsc, used by the "TypeScript (Node 22)" language)
+# TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
 RUN npm install -g typescript
 
 # Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
@@ -72,8 +71,8 @@ ARG FPC_VERSION=3.2.2
 RUN set -eu; \
     arch="$(apk --print-arch)"; \
     case "$arch" in \
-        x86_64) fpc_arch=x86_64-linux ;; \
-        aarch64) fpc_arch=aarch64-linux ;; \
+        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64 ;; \
+        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64 ;; \
         *) echo "Unsupported arch for FPC: $arch" >&2; exit 1 ;; \
     esac; \
     url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
@@ -88,8 +87,7 @@ RUN set -eu; \
     tar -xf "binary.${fpc_arch}.tar" "base.${fpc_arch}.tar.gz"; \
     mkdir -p "/opt/fpc/${FPC_VERSION}"; \
     tar -xzf "base.${fpc_arch}.tar.gz" -C "/opt/fpc/${FPC_VERSION}"; \
-    compiler_bin="$(find "/opt/fpc/${FPC_VERSION}/lib/fpc/${FPC_VERSION}" -maxdepth 1 -type f -name 'ppc*')"; \
-    install -m 755 "$compiler_bin" /usr/local/bin/fpc; \
+    install -m 755 "/opt/fpc/${FPC_VERSION}/lib/fpc/${FPC_VERSION}/${fpc_bin}" /usr/local/bin/fpc; \
     printf -- '-Fu/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n-Fl/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n' \
         "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" > /etc/fpc.cfg; \
     rm -rf /tmp/fpc.tar /tmp/fpcx
