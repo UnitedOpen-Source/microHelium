@@ -50,7 +50,7 @@ class FrontendPresentationTest extends TestCase
     public function test_public_and_management_pages_have_one_primary_heading(): void
     {
         $this->actingAs($this->createAdminUser());
-        foreach (['/', '/exercises', '/scoreboard', '/submissions', '/clarifications', '/ajuda', '/wizard', '/backend/users', '/backend/teams', '/backend/exercises', '/backend/configurations', '/backend/problem-bank', '/backend/import-boca', '/backend/contest-wizard', '/backend/submissions', '/backend/clarifications', '/judge/runs', '/staff/tasks', '/register', '/password/reset'] as $path) {
+        foreach (['/', '/exercises', '/scoreboard', '/submissions', '/clarifications', '/ajuda', '/wizard', '/backend/users', '/backend/teams', '/backend/exercises', '/backend/configurations', '/backend/problem-bank', '/backend/import-boca', '/backend/contest-wizard', '/backend/submissions', '/backend/clarifications', '/judge/runs', '/staff/tasks', '/profile', '/register', '/password/reset'] as $path) {
             $response = $this->get($path)->assertOk();
             $this->assertSame(1, preg_match_all('/<h1(?:\s|>)/', $response->getContent()), $path.' should have one page heading');
         }

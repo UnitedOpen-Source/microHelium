@@ -196,6 +196,12 @@
                                 </button>
                                 <div id="user-menu" class="hidden absolute right-0 mt-2 w-48 rounded-lg border border-border bg-popover p-1 shadow-lg">
                                     <p class="px-3 py-2 text-sm font-medium break-words">{{ Auth::user()->fullname ?? Auth::user()->username }}</p>
+                                    <a href="{{ route('profile.edit') }}" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-popover-foreground hover:bg-accent">
+                                        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                        Perfil
+                                    </a>
                                     <div class="my-1 h-px bg-border"></div>
                                     <button type="submit" form="logout-form" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive-soft">Sair da conta</button>
                                 </div>

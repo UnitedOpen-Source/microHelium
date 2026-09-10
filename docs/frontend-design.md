@@ -21,24 +21,24 @@ The application uses a shared Blade shell and small Vue islands. Blade retains o
 | Clarifications | Shared layout and feedback, retained question text, guest sign-in guidance |
 | Help / first steps | Task-oriented guide, expandable FAQ, verdict reference, working navigation |
 | Login / register / password views | Shared split auth layout, clear fields, theme support and responsive form |
-| Admin problems / users / teams | Search, responsive tables, accessible create dialogs, removed actionless edit/view buttons |
+| Admin problems / users / teams | Search, responsive tables, accessible create dialogs, contest-scoped real problem management and working submission detail links |
 | Contest configuration / create / edit | Shared shell, labelled controls, responsive actions and step focus |
 | Problem bank / import | Composable search + difficulty filter, result feedback and consistent surfaces |
 | Judge / staff | Shared visual system, searchable queues and labelled verdict controls; backend permissions/actions preserved |
 | 403 / 404 / 419 / 500 | New recovery views with status codes and navigation |
 
-Unrouted historical `products`, `users`, `my-team` and `welcome` templates remain archival. No routes or backend contracts were added for them. No controllers, migrations or API endpoints are changed by this PR.
+Unrouted historical `products`, `users` and `welcome` templates remain archival; the backend removed the dead `my-team` template. No routes or backend contracts were added for them. No controllers, migrations or API endpoints are changed by this PR.
 
 ## Validation
 
 - `npm run test:frontend` (14 behavior and contrast tests)
 - `npm run build`
-- `vendor/bin/phpunit --no-coverage` (429 tests / 2,842 assertions on the integrated base)
+- `vendor/bin/phpunit --no-coverage` (489 tests / 2,964 assertions in the isolated Linux container on the integrated base)
 - `git diff --check`
 - Browser review: desktop light/dark dashboard, login, administrative table, search result counts, modal opening/Escape, 390px mobile table/drawer, correct focus and no document overflow.
 - New feature tests cover public/admin/participant navigation, management page rendering, help/onboarding and the custom 404 status.
 
-The base includes backend PRs #24–#29 and #31. Submission detail uses the integrated backend route with improved code-region accessibility. Server-rendered lists update on navigation/reload; search filters the loaded rows. Timers refresh contest metadata every minute.
+The base includes backend PRs #24–#29, #31 and #36–#38. Submission detail uses the integrated backend route with improved code-region accessibility. Server-rendered lists update on navigation/reload; search filters the loaded rows. Timers refresh contest metadata every minute.
 
 The subsequent [accessibility and Nielsen review](frontend-accessibility.md) documents form recovery, dialog isolation, keyboard selections, URL filters, test evidence and remaining manual verification limits.
 

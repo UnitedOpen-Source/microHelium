@@ -59,7 +59,8 @@ Localizações referem-se aos arquivos após a correção.
 | Ajuda e primeiros passos | Consistência com a paleta e navegação compartilhada |
 | Login e cadastro | Cor da ação, contraste de campos, tema e tipografia |
 | Recuperação de acesso | Comunicação fiel à funcionalidade disponível |
-| Usuários, times e problemas administrativos | Cores de status, identidade, exclusão, títulos e ações |
+| Usuários, times e problemas administrativos | Cores de status, identidade, exclusão, títulos e ações; seleção explícita da competição e adição de problemas ao evento existente |
+| Perfil | Link no menu da conta, dados preservados, autocomplete, instruções de senha associadas aos campos e feedback compartilhado |
 | Configurações, criação e edição | Controles reais, estados das etapas, preservação de entradas e contraste |
 | Banco de problemas e importação | Busca, seleção, modal, arquivo, hierarquia e estados de atenção |
 | Julgamento e tarefas | Resultados, contraste e identificação sem depender de cores personalizadas |
@@ -74,12 +75,18 @@ A organização dos botões segue hierarquia de tarefas: uma ação principal po
 
 ## Evidências e limites
 
-- Build de produção concluído. CSS passou de 71,90 kB para 63,94 kB nesta rodada, com a redução de variantes avulsas e marcação obsoleta. Não foram adicionadas dependências.
+- Build de produção concluído. CSS passou de 71,90 kB para 63,84 kB nesta rodada, com a redução de variantes avulsas e marcação obsoleta. Não foram adicionadas dependências.
 - **14 testes frontend**, incluindo filtros, recuperação, teclado e contraste dos dois temas.
-- **429 testes PHP / 2.842 assertions**, incluindo páginas com um título principal, links de submissões reais, apresentação de fila/erro de execução e recuperação de acesso sem falsa promessa.
+- **489 testes PHP / 2.964 assertions no Linux**, incluindo páginas com um título principal, links de submissões reais, apresentação de fila/erro de execução e recuperação de acesso sem falsa promessa.
 - Navegador: inspeção visual desktop do início e da lista de problemas; autenticação local e inspeção do formulário de login. A lista revelou quebra indevida das palavras dos botões, corrigida em CSS.
 - A execução em 375px foi interrompida pela janela de outra extensão do Chrome antes de percorrer as páginas. A conferência visual final mobile e escura permanece pendente; os contrastes de ambos os temas foram verificados numericamente. Não houve teste com leitor de tela real nesta rodada.
 - O contraste testado cobre as combinações do sistema, não certifica todos os pixels/conteúdos possíveis. A revisão não afirma conformidade integral WCAG.
+
+## Integração final
+
+A master avançou durante a revisão. Foram integrados os PRs #36–#38, mantendo a nova página de perfil e a gestão de problemas reais por competição. O template legado de exercícios foi removido conforme a mudança do backend. Os conflitos de layout e mensagens foram resolvidos e a suíte completa foi executada em um contêiner temporário Linux, sem rede, montando somente esta worktree.
+
+No macOS, 487 testes passam; os dois testes que compilam C falham porque o comando Linux de link estático encontra o Clang do macOS (`crt0.o` ausente). No ambiente Linux, **todos os 489 testes passam**. Não foi alterado o compilador nem o backend para mascarar essa diferença de ambiente.
 
 ## Dependências do backend
 

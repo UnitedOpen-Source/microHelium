@@ -9,7 +9,7 @@ class FrontendNavigationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_public_navigation_and_help_do_not_advertise_admin_or_dead_profile_links(): void
+    public function test_public_navigation_and_help_do_not_advertise_admin_or_private_profile_links(): void
     {
         $this->get('/')->assertOk()
             ->assertSee('Pular para o conteúdo')
@@ -26,7 +26,7 @@ class FrontendNavigationTest extends TestCase
         foreach (['exercises', 'users', 'teams', 'configurations', 'problem-bank', 'submissions', 'clarifications', 'import-boca', 'contest-wizard'] as $page) {
             $this->get('/backend/'.$page)->assertOk()->assertSee('id="main-content"', false);
         }
-        $this->get('/home')->assertSee('href="/backend/users"', false)->assertDontSee('href="/profile"', false);
+        $this->get('/home')->assertSee('href="/backend/users"', false)->assertSee('href="'.route('profile.edit').'"', false);
     }
 
     public function test_participant_has_no_admin_navigation_and_can_see_submission_history(): void

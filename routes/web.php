@@ -16,6 +16,10 @@ Route::get('/', [\App\Http\Controllers\HomeController::class, 'index']);
 
 Route::get('/home', [\App\Http\Controllers\HomeController::class, 'index'])->middleware('auth')->name('home');
 
+// Profile (own account, any authenticated role)
+Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'edit'])->middleware('auth')->name('profile.edit');
+Route::put('/profile', [\App\Http\Controllers\ProfileController::class, 'update'])->middleware('auth')->name('profile.update');
+
 // Problems (real BOCA-schema Problem model, scoped to the user's contest)
 Route::get('/exercises', [\App\Http\Controllers\ProblemController::class, 'index'])->name('exercises');
 
@@ -148,29 +152,11 @@ Route::post('/staff/tasks/{task}/complete', [\App\Http\Controllers\StaffControll
 
 Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 
-    // Exercises Management
-    Route::get('/exercises', function () {
-        $exercises = DB::table('exercises')->orderBy('exercise_id', 'desc')->get();
-        return view('backend.exercises', compact('exercises'));
-    })->name('backend.exercises');
-
-    Route::post('/exercises', function () {
-        DB::table('exercises')->insert([
-            'exerciseName' => request('exerciseName'),
-            'category' => request('category'),
-            'difficulty' => request('difficulty'),
-            'score' => request('score', 100),
-            'expectedOutcome' => request('expectedOutcome'),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-        return redirect()->route('backend.exercises')->with('success', 'Exercicio criado com sucesso!');
-    });
-
-    Route::delete('/exercises/{id}', function ($id) {
-        DB::table('exercises')->where('exercise_id', $id)->delete();
-        return redirect()->route('backend.exercises')->with('success', 'Exercicio excluido com sucesso!');
-    });
+    // Problem Management (real Problem/TestCase rows -- see issue #34;
+    // replaces the old "Exercises Management" that targeted the legacy,
+    // disconnected `exercises` table)
+    Route::get('/exercises', [\App\Http\Controllers\Backend\ProblemManagementController::class, 'index'])->name('backend.exercises');
+    Route::post('/exercises', [\App\Http\Controllers\Backend\ProblemManagementController::class, 'store']);
 
     // Users Management
     Route::get('/users', [\App\Http\Controllers\Backend\UserController::class, 'index'])->name('backend.users');

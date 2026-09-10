@@ -217,7 +217,7 @@
 html { scroll-padding-top: 6rem; }
 :where(h1,h2,h3,h4,input,select,textarea,button,a,[tabindex]) { scroll-margin-top: 6rem; }
 :where(button,summary,a) { touch-action: manipulation; }
-#user-menu button { min-height: 44px; }
+#user-menu :is(button, a) { min-height: 44px; }
 [id$="Modal"] .bg-card { overscroll-behavior: contain; }
 :where(.page-content,.auth-form) :where(input[type=checkbox],input[type=radio]) + label { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
 @media (max-width: 767px) {

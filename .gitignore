@@ -12,3 +12,4 @@ npm-debug.log
 
 # BOCA reference source, kept locally for comparison only - not part of this project
 /boca-master
+/.phpunit.cache
