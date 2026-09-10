@@ -135,6 +135,9 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
 <script>
 function openModal(id) {
     document.getElementById(id).classList.remove('hidden');

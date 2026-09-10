@@ -10,28 +10,28 @@
         "preview": "vite preview"
     },
     "devDependencies": {
-        "@vitejs/plugin-vue": "^5.2.3",
-        "autoprefixer": "^10.4.21",
-        "axios": "^1.9.0",
-        "laravel-vite-plugin": "^1.2.0",
-        "postcss": "^8.5.3",
-        "tailwindcss": "^4.1.7",
-        "vite": "^6.3.5",
-        "vue": "^3.5.13"
+        "@vitejs/plugin-vue": "^6.0.8",
+        "autoprefixer": "^10.5.5",
+        "axios": "^1.20.0",
+        "laravel-vite-plugin": "^3.2.0",
+        "postcss": "^8.5.28",
+        "tailwindcss": "^4.3.3",
+        "vite": "^8.2.2",
+        "vue": "^3.5.42"
     },
     "dependencies": {
-        "@fortawesome/fontawesome-free": "^6.7.2",
-        "@tailwindcss/postcss": "^4.1.17",
-        "@vueuse/core": "^14.0.0",
-        "chart.js": "^4.5.0",
+        "@fortawesome/fontawesome-free": "^7.3.1",
+        "@lucide/vue": "^1.43.0",
+        "@tailwindcss/postcss": "^4.3.3",
+        "@vueuse/core": "^14.4.0",
+        "chart.js": "^4.5.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
-        "dayjs": "^1.11.13",
-        "lodash-es": "^4.17.21",
-        "lucide-vue-next": "^0.554.0",
+        "dayjs": "^1.11.23",
+        "lodash-es": "^4.18.1",
         "radix-vue": "^1.9.17",
-        "sweetalert2": "^11.21.0",
-        "tailwind-merge": "^3.4.0",
+        "sweetalert2": "^11.26.25",
+        "tailwind-merge": "^3.6.0",
         "tailwindcss-animate": "^1.0.7"
     }
 }

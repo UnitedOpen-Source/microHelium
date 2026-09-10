@@ -311,6 +311,9 @@
 }
 </style>
 
+@endsection
+
+@section('scripts')
 <script>
 let currentStep = 1;
 const totalSteps = 5;
