@@ -55,6 +55,7 @@ class User extends Authenticatable
     const TYPE_STAFF = 'staff';
     const TYPE_SCORE = 'score';
     const TYPE_SYSTEM = 'system';
+    const TYPE_SITE = 'site';
 
     public function site(): BelongsTo
     {
@@ -86,6 +87,11 @@ class User extends Authenticatable
         return $this->user_type === self::TYPE_STAFF;
     }
 
+    public function isSite(): bool
+    {
+        return $this->user_type === self::TYPE_SITE;
+    }
+
     public function hasRole(string $roleName): bool
     {
         // Map role names to user types
@@ -95,6 +101,7 @@ class User extends Authenticatable
             'spectator' => [self::TYPE_SCORE],
             'judge' => [self::TYPE_JUDGE],
             'staff' => [self::TYPE_STAFF],
+            'site' => [self::TYPE_SITE],
         ];
 
         if (isset($roleMap[$roleName])) {

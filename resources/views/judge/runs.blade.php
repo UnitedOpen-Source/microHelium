@@ -19,6 +19,7 @@
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Run</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Site</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Problema</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Linguagem</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Julgar</th>
@@ -26,9 +27,15 @@
                 </thead>
                 <tbody class="divide-y divide-border">
                     @forelse ($pendingRuns as $run)
-                    <tr class="hover:bg-muted/50 transition-colors">
-                        <td class="px-4 py-3 font-mono text-sm">#{{ $run->run_number }}</td>
+                    <tr class="hover:bg-muted/50 transition-colors {{ $run->is_overdue ? 'bg-destructive-soft/40' : '' }}">
+                        <td class="px-4 py-3 font-mono text-sm">
+                            #{{ $run->run_number }}
+                            @if($run->is_overdue)
+                                <span class="ml-1 px-1.5 py-0.5 text-xs font-medium bg-destructive-soft text-destructive rounded" title="Aguardando julgamento ha mais tempo que o limite do site">Atrasado</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-3 text-sm">{{ $run->user->fullname ?? $run->user->username }}</td>
+                        <td class="px-4 py-3 text-sm text-muted-foreground">{{ $run->site->name ?? '-' }}</td>
                         <td class="px-4 py-3 text-sm">{{ $run->problem->short_name }} - {{ $run->problem->name }}</td>
                         <td class="px-4 py-3 text-sm">{{ $run->language->name }}</td>
                         <td class="px-4 py-3">
@@ -48,10 +55,10 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="5" class="px-4 py-12 text-center text-muted-foreground">Nenhuma submissao pendente</td>
+                        <td colspan="6" class="px-4 py-12 text-center text-muted-foreground">Nenhuma submissao pendente</td>
                     </tr>
                     @endforelse
-                <tr id="judge-runs-table-empty" hidden><td colspan="5" class="text-center text-muted-foreground">Nenhum resultado para estes filtros.</td></tr></tbody>
+                <tr id="judge-runs-table-empty" hidden><td colspan="6" class="text-center text-muted-foreground">Nenhum resultado para estes filtros.</td></tr></tbody>
             </table>
         </div>
     </div>

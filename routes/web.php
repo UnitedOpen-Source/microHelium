@@ -168,6 +168,12 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::post('/teams', [\App\Http\Controllers\Backend\TeamController::class, 'store']);
     Route::delete('/teams/{id}', [\App\Http\Controllers\Backend\TeamController::class, 'destroy'])->name('backend.teams.destroy');
 
+    // Site Management (multi-site coordination -- see issue #18)
+    Route::get('/sites', [\App\Http\Controllers\Backend\SiteController::class, 'index'])->name('backend.sites');
+    Route::post('/sites', [\App\Http\Controllers\Backend\SiteController::class, 'store'])->name('backend.sites.store');
+    Route::put('/sites/{site}', [\App\Http\Controllers\Backend\SiteController::class, 'update'])->name('backend.sites.update');
+    Route::delete('/sites/{site}', [\App\Http\Controllers\Backend\SiteController::class, 'destroy'])->name('backend.sites.destroy');
+
     // Configurations/Hackathons Management
     Route::get('/configurations', [\App\Http\Controllers\Backend\ConfigurationController::class, 'index'])->name('backend.configurations');
     Route::post('/configurations', [\App\Http\Controllers\Backend\ConfigurationController::class, 'store']);
