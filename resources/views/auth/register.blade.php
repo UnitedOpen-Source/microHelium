@@ -18,13 +18,10 @@
             name="fullname"
             value="{{ old('fullname') }}"
             required
-            autofocus
             placeholder="Seu nome completo"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('fullname') border-destructive focus-visible:ring-destructive @enderror"
+            autocomplete="name"
         >
-        @error('fullname')
-            <p class="text-sm text-destructive">{{ $message }}</p>
-        @enderror
     </div>
 
     <div class="space-y-2">
@@ -39,10 +36,8 @@
             required
             placeholder="Escolha um nome de usuário"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('username') border-destructive focus-visible:ring-destructive @enderror"
+            autocomplete="username" autocapitalize="none" spellcheck="false"
         >
-        @error('username')
-            <p class="text-sm text-destructive">{{ $message }}</p>
-        @enderror
     </div>
 
     <div class="space-y-2">
@@ -57,10 +52,8 @@
             required
             placeholder="seu@email.com"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('email') border-destructive focus-visible:ring-destructive @enderror"
+            autocomplete="email" autocapitalize="none" spellcheck="false"
         >
-        @error('email')
-            <p class="text-sm text-destructive">{{ $message }}</p>
-        @enderror
     </div>
 
     <div class="space-y-2">
@@ -72,13 +65,13 @@
             type="password"
             name="password"
             required
-            placeholder="Mínimo 8 caracteres"
+            aria-describedby="password-hint" placeholder="Crie uma senha"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('password') border-destructive focus-visible:ring-destructive @enderror"
+            autocomplete="new-password" minlength="8"
         >
-        @error('password')
-            <p class="text-sm text-destructive">{{ $message }}</p>
-        @enderror
     </div>
+
+    <p id="password-hint" class="text-sm text-muted-foreground">Use pelo menos 8 caracteres. Você pode colar uma senha do seu gerenciador.</p>
 
     <div class="space-y-2">
         <label for="password_confirmation" class="block text-sm font-medium text-foreground">
@@ -91,6 +84,7 @@
             required
             placeholder="Repita a senha"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            autocomplete="new-password" minlength="8"
         >
     </div>
 
@@ -102,7 +96,7 @@
     </button>
 
     <div class="text-center">
-        <a href="/home" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <a href="/" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Voltar ao início
         </a>
     </div>

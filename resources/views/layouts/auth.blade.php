@@ -29,6 +29,7 @@
             @foreach(['error' => 'destructive', 'success' => 'success', 'status' => 'success'] as $key => $tone)
                 @if(session($key))<div role="status" class="mb-4 rounded-lg border p-4 text-sm">{{ session($key) }}</div>@endif
             @endforeach
+            @include('partials.error-summary')
             @yield('content')
             @hasSection('footer')<div class="auth-footer">@yield('footer')</div>@endif
         </div>

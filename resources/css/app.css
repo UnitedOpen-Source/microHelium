@@ -176,4 +176,39 @@
 
 [id$="Modal"] > .fixed.flex { overflow-y: auto; align-items: safe center; }
 [id$="Modal"] .bg-card { max-height: calc(100dvh - 2rem); overflow-y: auto; }
-.filter-btn[aria-pressed="true"] { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+
+/* Accessible feedback, larger hit areas, and focus that clears the sticky header. */
+@layer components {
+    .error-summary { margin-bottom: 1.5rem; padding: 1rem 1.25rem; border: 1px solid var(--color-destructive); border-left-width: 4px; border-radius: .7rem; background: color-mix(in srgb, var(--color-destructive) 7%, var(--color-card)); color: var(--color-foreground); }
+    .error-summary a { text-decoration: underline; text-underline-offset: 3px; }
+    .field-error { margin-top: .5rem; font-size: .875rem; line-height: 1.5; color: var(--color-destructive); }
+    .form-progress { padding: .75rem; margin-top: 1rem; border-radius: .5rem; background: var(--color-accent); color: var(--color-accent-foreground); font-size: .875rem; }
+    [aria-disabled="true"] { opacity: .7; cursor: wait; }
+    .language-card:focus-within, .problem-card:focus-within { outline: 3px solid var(--color-ring); outline-offset: 3px; }
+    .page-heading h1, .header-breadcrumb { overflow-wrap: anywhere; }
+}
+[aria-invalid="true"] { border-color: var(--color-destructive); }
+html { scroll-padding-top: 6rem; }
+:where(h1,h2,h3,h4,input,select,textarea,button,a,[tabindex]) { scroll-margin-top: 6rem; }
+:where(button,summary,a) { touch-action: manipulation; }
+#user-menu button { min-height: 44px; }
+[id$="Modal"] .bg-card { overscroll-behavior: contain; }
+:where(.page-content,.auth-form) :where(input[type=checkbox],input[type=radio]) + label { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
+@media (max-width: 767px) {
+    .page-content { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
+    .auth-main { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
+}
+@media (forced-colors: active) {
+    .button-primary, .button-secondary, .icon-button, .rank-number { border: 1px solid ButtonText; }
+    [aria-current=page], [aria-pressed=true] { outline: 2px solid Highlight; }
+    :focus-visible { outline-color: Highlight; }
+}
+
+.language-card, .problem-card { border-color: var(--color-border); }
+.language-card:has(:checked), .problem-card:has(:checked) { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, var(--color-card)); }
+.language-card .check-icon, .problem-card .check-icon { display: none; }
+.language-card:has(:checked) .check-icon, .problem-card:has(:checked) .check-icon { display: block; }
+.filter-btn[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (forced-colors: active) {
+    .language-card:has(:checked), .problem-card:has(:checked) { border-color: Highlight; }
+}

@@ -29,8 +29,8 @@
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome Completo</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Username</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome de usuário</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">E-mail</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tipo</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Criado em</th>
@@ -66,7 +66,7 @@
                                 <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este usuario?')">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" title="Excluir">
+                                    <button type="submit" class="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" title="Excluir {{ $user->fullname }}">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
@@ -110,26 +110,27 @@
                 <div class="p-6 space-y-4">
                     <div>
                         <label for="fullname" class="block text-sm font-medium text-foreground mb-1">Nome Completo</label>
-                        <input id="fullname" type="text" name="fullname" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Nome completo" required>
+                        <input id="fullname" type="text" name="fullname" value="{{ old('fullname') }}" maxlength="255" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Nome completo" required>
                     </div>
                     <div>
-                        <label for="username" class="block text-sm font-medium text-foreground mb-1">Username</label>
-                        <input id="username" type="text" name="username" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="nome.usuario" required>
+                        <label for="username" class="block text-sm font-medium text-foreground mb-1">Nome de usuário</label>
+                        <input id="username" type="text" name="username" value="{{ old('username') }}" maxlength="255" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="nome.usuario" required>
                     </div>
                     <div>
-                        <label for="email" class="block text-sm font-medium text-foreground mb-1">Email</label>
-                        <input id="email" type="email" name="email" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="email@exemplo.com">
+                        <label for="email" class="block text-sm font-medium text-foreground mb-1">E-mail</label>
+                        <input id="email" type="email" name="email" required autocomplete="off" value="{{ old('email') }}" maxlength="255" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="email@exemplo.com">
                     </div>
                     <div>
                         <label for="password" class="block text-sm font-medium text-foreground mb-1">Senha</label>
-                        <input id="password" type="password" name="password" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Senha" required>
+                        <input id="password" type="password" name="password" minlength="8" autocomplete="new-password" aria-describedby="admin-password-hint" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Senha" required>
                     </div>
                     <div>
-                        <label for="user_type" class="block text-sm font-medium text-foreground mb-1">Tipo de Usuario</label>
+                        <p id="admin-password-hint" class="text-sm text-muted-foreground mb-3">A senha deve ter pelo menos 8 caracteres.</p>
+                        <label for="user_type" class="block text-sm font-medium text-foreground mb-1">Perfil de acesso</label>
                         <select id="user_type" name="user_type" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
-                            <option value="team">Competidor</option>
-                            <option value="judge">Juiz</option>
-                            <option value="admin">Administrador</option>
+                            <option value="team" @selected(old('user_type', 'team') === 'team')>Competidor</option>
+                            <option value="judge" @selected(old('user_type', 'team') === 'judge')>Juiz</option>
+                            <option value="admin" @selected(old('user_type', 'team') === 'admin')>Administrador</option>
                         </select>
                     </div>
                 </div>

@@ -31,10 +31,13 @@ Unrouted historical `products`, `users`, `my-team` and `welcome` templates remai
 
 ## Validation
 
+- `npm run test:frontend` (9 DOM behavior tests)
 - `npm run build`
-- `vendor/bin/phpunit --no-coverage` (420 tests / 2,766 assertions on the integrated base)
+- `vendor/bin/phpunit --no-coverage` (425 tests / 2,786 assertions on the integrated base)
 - `git diff --check`
 - Browser review: desktop light/dark dashboard, login, administrative table, search result counts, modal opening/Escape, 390px mobile table/drawer, correct focus and no document overflow.
 - New feature tests cover public/admin/participant navigation, management page rendering, help/onboarding and the custom 404 status.
 
-The base includes backend PRs #24–#29. The existing submission detail link is owned by backend PR #31; that route is not added by this design change. Server-rendered lists update on navigation/reload; search filters the loaded rows. Timers refresh contest metadata every minute.
+The base includes backend PRs #24–#29 and #31. Submission detail uses the integrated backend route with improved code-region accessibility. Server-rendered lists update on navigation/reload; search filters the loaded rows. Timers refresh contest metadata every minute.
+
+The subsequent [accessibility and Nielsen review](frontend-accessibility.md) documents form recovery, dialog isolation, keyboard selections, URL filters, test evidence and remaining manual verification limits.

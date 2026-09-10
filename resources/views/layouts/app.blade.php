@@ -173,7 +173,7 @@
                     </button>
 
                     <!-- Page title -->
-                    <div class="header-breadcrumb"><span class="hidden sm:inline">Workspace <span aria-hidden="true">/</span></span> @yield('title', 'Visão geral')</div>
+                    <div class="header-breadcrumb"><span class="hidden sm:inline">Área de trabalho <span aria-hidden="true">/</span></span> @yield('title', 'Visão geral')</div>
 
                     <div class="flex-1"></div>
 
@@ -197,16 +197,7 @@
                                 <div id="user-menu" class="hidden absolute right-0 mt-2 w-48 rounded-lg border border-border bg-popover p-1 shadow-lg">
                                     <p class="px-3 py-2 text-sm font-medium break-words">{{ Auth::user()->fullname ?? Auth::user()->username }}</p>
                                     <div class="my-1 h-px bg-border"></div>
-                                    <a
-                                        href="{{ route('logout') }}"
-                                        onclick="event.preventDefault(); document.getElementById('logout-form').submit();"
-                                        class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                        </svg>
-                                        Sair
-                                    </a>
+                                    <button type="submit" form="logout-form" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10">Sair da conta</button>
                                 </div>
                             </div>
                         @else
@@ -225,12 +216,7 @@
                         @hasSection('description')<p class="page-description">@yield('description')</p>@endif</div>
                         @hasSection('page-actions')<div class="page-actions">@yield('page-actions')</div>@endif
                     </div>
-                    @if($errors->any())
-                        <div role="alert" class="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-                            <p class="font-semibold mb-2">Revise os campos e tente novamente.</p>
-                            <ul class="list-disc pl-5">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
-                        </div>
-                    @endif
+                    @include('partials.error-summary')
                     <!-- Flash messages -->
                     @if(session('success'))
                         <div role="status" class="mb-4 rounded-lg border border-success/50 bg-success/10 p-4 text-success">

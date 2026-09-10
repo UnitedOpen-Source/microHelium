@@ -1,3 +1,7 @@
+import { initializeDialogs } from './ui/dialogs.js';
+import { initializeForms } from './ui/forms.js';
+import { initializeWizard } from './ui/wizard.js';
+
 // Blade owns the document; Vue owns only its component islands.
 export function initializeUI() {
     const sidebar = document.getElementById('sidebar');
@@ -40,53 +44,20 @@ export function initializeUI() {
         menuToggle?.setAttribute('aria-expanded', String(open));
         if (open) focusable(menu)[0]?.focus();
     });
+    document.addEventListener('focusin', event => {
+        if (!menu?.contains(event.target) && !menuToggle?.contains(event.target)) closeMenu();
+    });
     document.addEventListener('click', event => {
         if (!menu?.contains(event.target) && !menuToggle?.contains(event.target)) closeMenu();
     });
 
-    // Existing admin dialogs retain their actions and gain keyboard focus management.
-    const dialogs = [...document.querySelectorAll('[id$="Modal"]')];
-    document.querySelectorAll('[onclick]').forEach(trigger => {
-        const match = trigger.getAttribute('onclick').match(/^(openModal|closeModal)\('([\w-]+)'\)$/);
-        if (!match) return;
-        const dialog = document.getElementById(match[2]);
-        if (!dialog) return;
-        trigger.removeAttribute('onclick');
-        trigger.addEventListener('click', () => { dialog.classList.toggle('hidden', match[1] === 'closeModal'); });
-    });
-    let activeDialog = null;
-    let returnFocus = null;
-    dialogs.forEach(dialog => {
-        dialog.setAttribute('role', 'dialog');
-        dialog.setAttribute('aria-modal', 'true');
-        dialog.tabIndex = -1;
-        const title = dialog.querySelector('h2, h3');
-        if (title) {
-            title.id ||= `${dialog.id}-title`;
-            dialog.setAttribute('aria-labelledby', title.id);
-        }
-        dialog.querySelectorAll('button').forEach(button => {
-            if (!button.textContent.trim() && !button.getAttribute('aria-label')) button.setAttribute('aria-label', 'Fechar janela');
-        });
-        new MutationObserver(() => {
-            const open = !dialog.classList.contains('hidden');
-            if (open && activeDialog !== dialog) {
-                returnFocus = document.activeElement;
-                activeDialog = dialog;
-                document.body.style.overflow = 'hidden';
-                (focusable(dialog)[0] || dialog).focus();
-            } else if (!open && activeDialog === dialog) {
-                activeDialog = null;
-                document.body.style.overflow = '';
-                returnFocus?.focus();
-            }
-        }).observe(dialog, { attributes: true, attributeFilter: ['class'] });
-    });
+    initializeWizard();
+    const dialogs = initializeDialogs();
+    initializeForms(dialogs);
     document.addEventListener('keydown', event => {
-        const root = activeDialog || (sidebar?.classList.contains('is-open') ? sidebar : null);
+        const root = sidebar?.classList.contains('is-open') ? sidebar : null;
         if (event.key === 'Escape') {
-            if (activeDialog) { activeDialog.classList.add('hidden'); activeDialog.classList.remove('flex'); }
-            else if (root === sidebar) setSidebar(false);
+            if (root && root === sidebar) setSidebar(false);
             else if (menu && !menu.classList.contains('hidden')) { closeMenu(); menuToggle?.focus(); }
         }
         if (event.key === 'Tab' && root) {
@@ -106,7 +77,21 @@ export function initializeUI() {
         const status = toolbar.querySelector('[role=status]');
         const empty = document.getElementById(`${table.id}-empty`);
         const normalize = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        const apply = () => {
+        const key = `ui-${table.id}`;
+        const readURL = () => {
+            const params = new URL(location.href).searchParams;
+            if (search) search.value = params.get(key) || '';
+            if (select) select.value = params.get(`${key}-level`) || '';
+        };
+        readURL();
+        const apply = (save = false) => {
+            if (save) {
+                const url = new URL(location.href);
+                for (const [name, value] of [[key, search?.value || ''], [`${key}-level`, select?.value || '']]) {
+                    if (value) url.searchParams.set(name, value); else url.searchParams.delete(name);
+                }
+                history.replaceState(history.state, '', url);
+            }
             const query = normalize(search?.value || '');
             let count = 0;
             rows.forEach(row => {
@@ -117,9 +102,11 @@ export function initializeUI() {
             if (status) status.textContent = `${count} de ${rows.length} registros`;
             if (empty) empty.hidden = count > 0 || rows.length === 0;
         };
-        search?.addEventListener('input', apply);
-        select?.addEventListener('change', apply);
-        toolbar.querySelector('[data-filter-clear]')?.addEventListener('click', () => { if (search) search.value = ''; if (select) select.value = ''; apply(); search?.focus(); });
+        search?.addEventListener('input', () => apply(true));
+        select?.addEventListener('change', () => apply(true));
+        toolbar.querySelector('[data-filter-clear]')?.addEventListener('click', () => { if (search) search.value = ''; if (select) select.value = ''; apply(true); search?.focus(); });
+        window.addEventListener('popstate', () => { readURL(); apply(); });
+        window.addEventListener('pageshow', () => { readURL(); apply(); });
         apply();
     });
     // Supply accessible names for existing icon actions and table overflow regions.
