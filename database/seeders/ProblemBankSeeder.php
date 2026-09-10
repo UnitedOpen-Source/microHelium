@@ -313,11 +313,15 @@ class ProblemBankSeeder extends Seeder
         ];
 
         foreach ($problems as $problem) {
-            DB::table('problem_bank')->insert(array_merge($problem, [
-                'is_active' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]));
+            $exists = DB::table('problem_bank')->where('code', $problem['code'])->exists();
+
+            if (!$exists) {
+                DB::table('problem_bank')->insert(array_merge($problem, [
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]));
+            }
         }
     }
 }

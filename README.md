@@ -1,6 +1,6 @@
 # MicroHelium
 
-A comprehensive **Hackathon and Programming Contest Management Platform** built with Laravel 12, inspired by the BOCA Online Contest Administrator. MicroHelium provides a modern, feature-rich environment for organizing competitive programming events, hackathons, and CTF competitions.
+A comprehensive **Hackathon and Programming Contest Management Platform** built with Laravel 13, inspired by the BOCA Online Contest Administrator. MicroHelium provides a modern, feature-rich environment for organizing competitive programming events, hackathons, and CTF competitions.
 
 ## Features
 
@@ -48,7 +48,7 @@ A comprehensive **Hackathon and Programming Contest Management Platform** built 
 
 ## Requirements
 
-- **PHP**: >= 8.2
+- **PHP**: >= 8.3
 - **Laravel**: 12.x
 - **Database**: MySQL 8.0+ / PostgreSQL 14+ / SQLite
 - **Node.js**: >= 20.x
@@ -267,8 +267,8 @@ descfile=problem.pdf
 ## Tech Stack
 
 ### Backend
-- **Framework**: Laravel 12
-- **Language**: PHP 8.2+
+- **Framework**: Laravel 13
+- **Language**: PHP 8.3+
 - **Database**: MySQL/PostgreSQL/SQLite
 - **Queue**: Laravel Horizon / Redis
 - **Authentication**: Laravel Sanctum
@@ -282,7 +282,7 @@ descfile=problem.pdf
 
 ### DevOps
 - **Container**: Docker / Laravel Sail
-- **Testing**: PHPUnit 11, Pest
+- **Testing**: PHPUnit 12, Pest
 - **Code Style**: Laravel Pint
 - **CI/CD**: GitHub Actions
 
