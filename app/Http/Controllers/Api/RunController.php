@@ -102,8 +102,9 @@ class RunController extends Controller
             'language_id' => $language->id,
         ]);
 
-        // Dispatch auto-judge job if enabled
-        if ($problem->auto_judge) {
+        // Dispatch auto-judge job if enabled (per-language override, falling
+        // back to the problem-level default -- see Problem::isAutoJudgeEnabledFor())
+        if ($problem->isAutoJudgeEnabledFor($language)) {
             JudgeRunJob::dispatch($run);
         }
 
@@ -157,7 +158,7 @@ class RunController extends Controller
             'auto_judge_stderr' => null,
         ]);
 
-        if ($run->problem->auto_judge) {
+        if ($run->problem->isAutoJudgeEnabledFor($run->language)) {
             JudgeRunJob::dispatch($run);
         }
 

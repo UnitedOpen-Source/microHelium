@@ -170,8 +170,8 @@ class AutoJudgeService
         $problem = $run->problem;
         $basename = pathinfo($run->filename, PATHINFO_FILENAME);
 
-        $timeLimit = $problem->time_limit;
-        $memoryLimit = $problem->memory_limit;
+        $timeLimit = $problem->getTimeLimitFor($language);
+        $memoryLimit = $problem->getMemoryLimitFor($language);
 
         // Check for custom run script
         $runScript = $problem->getRunScriptPath($language->extension);
@@ -399,9 +399,13 @@ class AutoJudgeService
 
     public function getNextPendingRun(): ?Run
     {
+        // auto_judge can be overridden per language (problem_language_limits),
+        // so a problem-level whereHas('auto_judge', true) alone isn't enough --
+        // filter with Problem::isAutoJudgeEnabledFor() once loaded.
         return Run::where('status', 'pending')
-            ->whereHas('problem', fn($q) => $q->where('auto_judge', true))
+            ->with(['problem.languageLimits', 'language'])
             ->orderBy('created_at')
-            ->first();
+            ->get()
+            ->first(fn (Run $run) => $run->problem->isAutoJudgeEnabledFor($run->language));
     }
 }
