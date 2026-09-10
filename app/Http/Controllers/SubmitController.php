@@ -9,6 +9,7 @@ use App\Models\Problem;
 use App\Models\Run;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
@@ -29,7 +30,6 @@ class SubmitController extends Controller
             ->get();
 
         return view('exercises.submit', [
-            'exercise' => $problem,
             'problem' => $problem,
             'languages' => $languages,
         ]);
@@ -44,10 +44,22 @@ class SubmitController extends Controller
     {
         $this->authorizeProblemAccess($problem);
 
+        // Matches the same check Api\RunController::store() already does --
+        // without it, this web path could accept submissions before the
+        // contest starts, after it ends, or while manually deactivated.
+        if (!$problem->contest->isRunning()) {
+            return back()->withErrors(['source_file' => 'Este contest nao esta em andamento no momento.']);
+        }
+
+        $maxFileSizeKb = config('autojudge.max_file_size', 100);
+
         $validated = $request->validate([
             'language_id' => 'required|exists:languages,id',
-            'source_file' => 'nullable|file|max:' . config('autojudge.max_file_size', 100),
-            'code_text' => 'nullable|string',
+            'source_file' => 'nullable|file|max:' . $maxFileSizeKb,
+            // Same size cap as the file upload path (in KB), applied to
+            // characters -- previously unbounded, letting the pasted-code
+            // path bypass the upload size limit entirely.
+            'code_text' => 'nullable|string|max:' . ($maxFileSizeKb * 1024),
         ]);
 
         if (!$request->hasFile('source_file') && trim((string) $request->input('code_text')) === '') {
@@ -64,7 +76,15 @@ class SubmitController extends Controller
 
         if ($request->hasFile('source_file')) {
             $file = $request->file('source_file');
-            $originalName = $this->sanitizeFilename($file->getClientOriginalName());
+            // The compile/run commands are chosen by the selected language,
+            // not by sniffing the file -- so the extension must always match
+            // $language->extension regardless of what the user named their
+            // file (e.g. picking "C" but uploading "solution.txt" would
+            // otherwise make gcc fail on a filename it doesn't recognize).
+            // The basename is preserved since some languages (Java) require
+            // it to match the program's class/entry-point name.
+            $basename = pathinfo($this->sanitizeFilename($file->getClientOriginalName()), PATHINFO_FILENAME);
+            $originalName = ($basename !== '' ? $basename : 'main') . '.' . $this->sanitizeFilename($language->extension);
             $sourceContent = file_get_contents($file->path());
         } else {
             $originalName = 'main.' . $this->sanitizeFilename($language->extension);
@@ -73,34 +93,61 @@ class SubmitController extends Controller
 
         $sourceHash = hash('sha256', $sourceContent);
 
-        $duplicate = Run::where('contest_id', $contest->id)
-            ->where('user_id', $user->user_id)
-            ->where('problem_id', $problem->id)
-            ->where('source_hash', $sourceHash)
-            ->first();
-
-        if ($duplicate) {
-            return back()->withErrors(['source_file' => "Submissao identica ja enviada (run #{$duplicate->run_number})."]);
-        }
-
-        $path = "runs/{$contest->id}/{$user->user_id}/" . uniqid('run_', true) . '_' . $originalName;
-        Storage::disk('local')->put($path, $sourceContent);
-
         $siteId = $user->site_id ?? $contest->sites()->value('id');
 
-        $run = Run::create([
-            'contest_id' => $contest->id,
-            'site_id' => $siteId,
-            'user_id' => $user->user_id,
-            'problem_id' => $problem->id,
-            'language_id' => $language->id,
-            'run_number' => Run::getNextRunNumber($contest->id, $siteId),
-            'filename' => $originalName,
-            'source_file' => $path,
-            'source_hash' => $sourceHash,
-            'contest_time' => $contest->getContestTime(),
-            'status' => 'pending',
-        ]);
+        if (!$siteId) {
+            return back()->withErrors(['source_file' => 'Este contest ainda nao tem nenhum site configurado; nao e possivel submeter.']);
+        }
+
+        try {
+            $run = DB::transaction(function () use ($contest, $user, $problem, $language, $siteId, $originalName, $sourceContent, $sourceHash) {
+                // Lock this contest+problem+user's runs for the duration of the
+                // transaction so a duplicate-content double-submit (double click,
+                // or a race between two requests) can't both pass the check
+                // before either commits.
+                $duplicate = Run::where('contest_id', $contest->id)
+                    ->where('user_id', $user->user_id)
+                    ->where('problem_id', $problem->id)
+                    ->where('source_hash', $sourceHash)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($duplicate) {
+                    throw new \RuntimeException("DUPLICATE:{$duplicate->run_number}");
+                }
+
+                // Lock the site's existing runs so two concurrent submissions
+                // can't compute the same MAX(run_number)+1 and collide on the
+                // unique (contest_id, site_id, run_number) constraint.
+                Run::where('contest_id', $contest->id)->where('site_id', $siteId)->lockForUpdate()->get();
+                $runNumber = Run::getNextRunNumber($contest->id, $siteId);
+
+                $path = "runs/{$contest->id}/{$user->user_id}/" . uniqid('run_', true) . '_' . $originalName;
+                Storage::disk('local')->put($path, $sourceContent);
+
+                return Run::create([
+                    'contest_id' => $contest->id,
+                    'site_id' => $siteId,
+                    'user_id' => $user->user_id,
+                    'problem_id' => $problem->id,
+                    'language_id' => $language->id,
+                    'run_number' => $runNumber,
+                    'filename' => $originalName,
+                    'source_file' => $path,
+                    'source_hash' => $sourceHash,
+                    'contest_time' => $contest->getContestTime(),
+                    'status' => 'pending',
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            if (str_starts_with($e->getMessage(), 'DUPLICATE:')) {
+                $runNumber = substr($e->getMessage(), strlen('DUPLICATE:'));
+
+                return back()->withErrors(['source_file' => "Submissao identica ja enviada (run #{$runNumber})."]);
+            }
+
+            throw $e;
+        }
 
         ContestLog::info($contest->id, "Run #{$run->run_number} submitted", [
             'user_id' => $user->user_id,

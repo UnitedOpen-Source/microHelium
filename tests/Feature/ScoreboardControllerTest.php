@@ -69,4 +69,22 @@ class ScoreboardControllerTest extends TestCase
         // Check for data
         $this->assertStringContainsString('1,"Team CSV",0,0', $content);
     }
+
+    /**
+     * A fullname starting with =, +, -, or @ opened in Excel/Sheets is
+     * interpreted as a formula (CSV/formula injection) unless neutralized.
+     */
+    public function test_scoreboard_export_neutralizes_formula_injection_in_team_name()
+    {
+        $contest = Contest::factory()->create(['is_active' => true]);
+        $user = User::factory()->create(['fullname' => '=HYPERLINK("http://evil.example")']);
+        Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $user->user_id, 'problems_solved' => 0, 'total_time' => 0, 'rank' => 1]);
+
+        $response = $this->get('/scoreboard/export');
+
+        $content = $response->streamedContent();
+
+        $this->assertStringNotContainsString(',=HYPERLINK', $content);
+        $this->assertStringContainsString("'=HYPERLINK", $content);
+    }
 }

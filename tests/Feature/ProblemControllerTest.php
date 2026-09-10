@@ -75,4 +75,36 @@ class ProblemControllerTest extends TestCase
         // 3. Assert
         $response->assertStatus(404);
     }
+
+    /**
+     * A problem belonging to a different, private contest than the one the
+     * viewer would see in the /exercises list must not be viewable just by
+     * guessing its numeric id -- ProblemController::show() had no
+     * authorization check at all before this.
+     */
+    public function test_exercise_show_page_returns_404_for_a_problem_from_another_private_contest()
+    {
+        // The contest the anonymous viewer would actually see via resolveContest()
+        Contest::factory()->create(['is_active' => true, 'is_public' => true]);
+
+        $otherContest = Contest::factory()->create(['is_active' => false, 'is_public' => false]);
+        $otherProblem = Problem::factory()->create(['contest_id' => $otherContest->id]);
+
+        $response = $this->get('/exercise/' . $otherProblem->id);
+
+        $response->assertStatus(404);
+    }
+
+    public function test_exercise_show_page_is_visible_for_a_problem_from_a_public_contest_even_if_not_current()
+    {
+        Contest::factory()->create(['is_active' => true, 'is_public' => true]);
+
+        $publicOldContest = Contest::factory()->create(['is_active' => false, 'is_public' => true]);
+        $problem = Problem::factory()->create(['contest_id' => $publicOldContest->id, 'name' => 'Old Public Problem']);
+
+        $response = $this->get('/exercise/' . $problem->id);
+
+        $response->assertStatus(200);
+        $response->assertSeeText('Old Public Problem');
+    }
 }

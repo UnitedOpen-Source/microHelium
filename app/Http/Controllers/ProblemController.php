@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contest;
-use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Score;
 
@@ -19,7 +18,7 @@ class ProblemController extends Controller
         $contest = $this->resolveContest();
 
         $problems = $contest
-            ? $contest->problems()->orderBy('sort_order')->orderBy('short_name')->get()
+            ? $contest->problems()->orderBy('short_name')->get()
             : collect();
 
         $solvedProblemIds = collect();
@@ -39,12 +38,9 @@ class ProblemController extends Controller
 
     public function show(Problem $problem)
     {
-        $languages = Language::where('contest_id', $problem->contest_id)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        $this->authorizeProblemVisibility($problem);
 
-        return view('exercises.show', compact('problem', 'languages'));
+        return view('exercises.show', compact('problem'));
     }
 
     /**
@@ -61,5 +57,33 @@ class ProblemController extends Controller
         }
 
         return Contest::where('is_active', true)->first();
+    }
+
+    /**
+     * index() only ever lists problems from the one contest resolveContest()
+     * picks, so it can't leak another contest's problems -- but show() takes
+     * a Problem straight from route-model-binding on a route with no auth
+     * middleware, so without this a problem from any other (private,
+     * inactive, or not-yet-announced) contest was viewable just by
+     * guessing/incrementing the numeric id.
+     */
+    private function authorizeProblemVisibility(Problem $problem): void
+    {
+        $user = auth()->user();
+
+        if ($user?->isAdmin() || $user?->isJudge()) {
+            return;
+        }
+
+        $currentContest = $this->resolveContest();
+        if ($currentContest && $problem->contest_id === $currentContest->id) {
+            return;
+        }
+
+        if ($problem->contest->is_public) {
+            return;
+        }
+
+        abort(404);
     }
 }

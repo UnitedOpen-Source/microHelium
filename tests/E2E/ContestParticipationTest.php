@@ -411,7 +411,10 @@ CODE;
             'user_id' => $this->user->user_id,
             'problem_id' => $problem->id,
             'language_id' => $language->id,
-            'filename' => 'solution.c',
+            // The extension is forced to match the selected language (not
+            // the uploaded file's own extension) -- see
+            // test_uploaded_filename_extension_is_forced_to_match_the_selected_language.
+            'filename' => 'solution.' . $language->extension,
             'status' => 'pending',
         ]);
 
@@ -498,6 +501,89 @@ CODE;
         $this->assertStringNotContainsString('/', $run->filename);
         $this->assertStringNotContainsString('..', $run->source_file);
         \Illuminate\Support\Facades\Storage::disk('local')->assertExists($run->source_file);
+    }
+
+    public function test_cannot_submit_when_the_contest_is_not_running()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        // Contest hasn't started yet.
+        $this->contest->update(['start_time' => now()->addHour()]);
+
+        $problem = $this->problems->first();
+        $language = $this->languages->first();
+        $file = UploadedFile::fake()->createWithContent('solution.c', "int main(){return 0;}");
+
+        $response = $this->actingAs($this->user)->post("/submit/{$problem->id}", [
+            'language_id' => $language->id,
+            'source_file' => $file,
+        ]);
+
+        $response->assertSessionHasErrors('source_file');
+        $this->assertDatabaseMissing('runs', ['problem_id' => $problem->id, 'user_id' => $this->user->user_id]);
+        \Illuminate\Support\Facades\Queue::assertNotPushed(\App\Jobs\JudgeRunJob::class);
+    }
+
+    public function test_cannot_submit_when_the_contest_has_no_site_configured_and_user_has_no_site()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $this->user->update(['site_id' => null]);
+        $this->site->delete();
+
+        $problem = $this->problems->first();
+        $language = $this->languages->first();
+        $file = UploadedFile::fake()->createWithContent('solution.c', "int main(){return 0;}");
+
+        $response = $this->actingAs($this->user)->post("/submit/{$problem->id}", [
+            'language_id' => $language->id,
+            'source_file' => $file,
+        ]);
+
+        $response->assertSessionHasErrors('source_file');
+        $this->assertDatabaseMissing('runs', ['problem_id' => $problem->id, 'user_id' => $this->user->user_id]);
+    }
+
+    public function test_uploaded_filename_extension_is_forced_to_match_the_selected_language()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $problem = $this->problems->first();
+        $language = $this->languages->first();
+        // Wrong extension on purpose -- the selected language must decide
+        // what gcc/javac/etc. actually receives, not the client's filename.
+        $file = UploadedFile::fake()->createWithContent('solution.txt', "int main(){return 0;}");
+
+        $this->actingAs($this->user)->post("/submit/{$problem->id}", [
+            'language_id' => $language->id,
+            'source_file' => $file,
+        ]);
+
+        $run = Run::where('problem_id', $problem->id)->where('user_id', $this->user->user_id)->firstOrFail();
+
+        $this->assertSame('solution.' . $language->extension, $run->filename);
+    }
+
+    public function test_pasted_code_longer_than_the_max_file_size_is_rejected()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $problem = $this->problems->first();
+        $language = $this->languages->first();
+        $maxKb = config('autojudge.max_file_size', 100);
+        $tooLong = str_repeat('a', ($maxKb * 1024) + 1);
+
+        $response = $this->actingAs($this->user)->post("/submit/{$problem->id}", [
+            'language_id' => $language->id,
+            'code_text' => $tooLong,
+        ]);
+
+        $response->assertSessionHasErrors('code_text');
+        $this->assertDatabaseMissing('runs', ['problem_id' => $problem->id, 'user_id' => $this->user->user_id]);
     }
 
     /**

@@ -20,7 +20,7 @@ class ScoreboardController extends Controller
     public function index()
     {
         $contest = $this->resolveContest();
-        $problems = $contest ? $contest->problems()->orderBy('sort_order')->orderBy('short_name')->get() : collect();
+        $problems = $contest ? $contest->problems()->orderBy('short_name')->get() : collect();
         $entries = $this->buildScoreboard($contest);
 
         return view('scoreboard', [
@@ -51,9 +51,11 @@ class ScoreboardController extends Controller
             fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
             fputcsv($file, ['Posicao', 'Time', 'Problemas Resolvidos', 'Penalidade']);
             foreach ($entries as $entry) {
+                $name = $entry['user']->fullname ?? ('Usuario #' . $entry['user_id']);
+
                 fputcsv($file, [
                     $entry['rank'],
-                    $entry['user']->fullname ?? ('Usuario #' . $entry['user_id']),
+                    $this->csvSafe($name),
                     $entry['problems_solved'],
                     $entry['total_time'],
                 ]);
@@ -62,6 +64,22 @@ class ScoreboardController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * `fullname` is a user-controlled registration field. A value like
+     * `=HYPERLINK("http://evil")` opened in Excel/Sheets is interpreted as a
+     * formula (CSV/formula injection) rather than plain text -- prefix a
+     * leading =, +, -, or @ with a single quote so spreadsheet apps treat
+     * the cell as text.
+     */
+    private function csvSafe(string $value): string
+    {
+        if (preg_match('/^[=+\-@]/', $value)) {
+            return "'" . $value;
+        }
+
+        return $value;
     }
 
     private function buildScoreboard(?Contest $contest): array
