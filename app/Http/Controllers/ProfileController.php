@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
@@ -18,11 +17,17 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        // current_password is only checked when the user is actually
+        // changing their password -- otherwise a stale/incorrect value
+        // left by a password manager's autocomplete would block unrelated
+        // profile edits (e.g. just fixing a typo in the fullname).
+        $changingPassword = $request->filled('password');
+
         $validated = $request->validate([
             'fullname' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->user_id, 'user_id')],
-            'current_password' => ['nullable', 'required_with:password', 'current_password'],
-            'password' => ['nullable', 'confirmed', Password::defaults()],
+            'current_password' => $changingPassword ? ['required', 'current_password'] : ['nullable'],
+            'password' => ['nullable', 'confirmed', 'min:8'],
         ]);
 
         $user->fullname = $validated['fullname'];

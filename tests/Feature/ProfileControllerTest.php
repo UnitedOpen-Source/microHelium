@@ -22,7 +22,31 @@ class ProfileControllerTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewIs('profile.edit');
-        $response->assertSeeText('Judge Judy');
+        // The fullname only appears inside the form's value="" attribute,
+        // not as visible text -- assertSeeText would pass regardless
+        // because the shared navbar also prints it. Check the raw HTML
+        // (assertSee with $escaped=false) so this actually exercises the
+        // form field being populated from $user.
+        $response->assertSee('value="Judge Judy"', false);
+    }
+
+    public function test_stale_current_password_does_not_block_an_unrelated_edit()
+    {
+        $user = $this->createTestUser(['password' => Hash::make('old-password')]);
+
+        // Simulates a password manager autofilling "Senha atual" with a
+        // stale/wrong value even though the user isn't changing their
+        // password (the "Nova senha" fields are left blank).
+        $response = $this->actingAs($user)->put('/profile', [
+            'fullname' => 'Fixed Typo',
+            'email' => $user->email,
+            'current_password' => 'stale-autofilled-value',
+        ]);
+
+        $response->assertSessionHasNoErrors();
+
+        $user->refresh();
+        $this->assertSame('Fixed Typo', $user->fullname);
     }
 
     public function test_user_can_update_fullname_and_email()
