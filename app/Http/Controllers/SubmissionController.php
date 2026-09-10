@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Run;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\View\View;
 
 class SubmissionController extends Controller
 {
@@ -35,5 +37,24 @@ class SubmissionController extends Controller
         }
 
         return view('submissions', compact('submissions', 'acceptedCount', 'totalCount'));
+    }
+
+    /**
+     * Show a single submission's detail (source code, judging output,
+     * verdict). The list view's "Ver" action linked here but the route
+     * never existed (404) -- see issue #30.
+     */
+    public function show(Run $run): View
+    {
+        $user = auth()->user();
+
+        if (!$user->isAdmin() && !$user->isJudge() && $run->user_id !== $user->user_id) {
+            abort(403, 'Voce nao pode ver esta submissao.');
+        }
+
+        $run->load(['problem', 'language', 'answer']);
+        $sourceCode = file_exists($run->getSourcePath()) ? file_get_contents($run->getSourcePath()) : null;
+
+        return view('submission-show', compact('run', 'sourceCode'));
     }
 }

@@ -35,6 +35,8 @@ Route::post('/clarifications', [\App\Http\Controllers\ClarificationController::c
 // Submissions
 Route::get('/submissions', [\App\Http\Controllers\SubmissionController::class, 'index'])->middleware('auth')->name('submissions');
 
+Route::get('/submission/{run}', [\App\Http\Controllers\SubmissionController::class, 'show'])->middleware('auth')->name('submission.show');
+
 // Submit solution -- creates a real Run and dispatches it to the auto-judge
 // queue (see App\Http\Controllers\SubmitController). Previously this was a
 // stub that wrote a 'pending' row to the legacy exercise_team table and
