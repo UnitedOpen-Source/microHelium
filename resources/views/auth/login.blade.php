@@ -72,7 +72,7 @@
                 Esqueceu a senha?
             </a>
         @endif
-        <a href="/home" class="text-muted-foreground hover:text-foreground transition-colors">
+        <a href="/" class="text-muted-foreground hover:text-foreground transition-colors">
             Voltar ao início
         </a>
     </div>

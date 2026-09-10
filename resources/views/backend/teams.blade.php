@@ -1,14 +1,16 @@
 @extends('layouts.app')
 
-@section('title', 'Gerenciar Times')
+@section('title', 'Gerenciar times')
+
+@section('description', 'Organize os times e acompanhe seus integrantes.')
 
 @section('content')
 <div class="space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar Times</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Gerenciar times</h2>
                     <p class="text-sm text-muted-foreground mt-1">Lista de todos os times da competicao</p>
                 </div>
                 <button onclick="openModal('addTeamModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
@@ -20,14 +22,15 @@
             </div>
         </div>
 
+        @include('partials.table-filter', ['tableId' => 'backend-teams-table', 'searchLabel' => 'times', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="backend-teams-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome do Time</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Pontuacao</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Pontuação</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Problemas</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Criado em</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acoes</th>
@@ -46,16 +49,6 @@
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $team->created_at }}</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2">
-                                <button class="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors" title="Ver">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                </button>
-                                <button class="p-1.5 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded transition-colors" title="Editar">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                </button>
                                 <form action="/backend/teams/{{ $team->team_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este time?')">
                                     @csrf
                                     @method('DELETE')
@@ -78,6 +71,7 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="backend-teams-table-empty" hidden><td colspan="7" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -90,7 +84,7 @@
             <p class="text-3xl font-bold text-foreground mt-2">{{ count($teams) }}</p>
         </div>
         <div class="bg-card rounded-lg border border-border shadow-sm p-6 text-center">
-            <p class="text-sm text-muted-foreground">Maior Pontuacao</p>
+            <p class="text-sm text-muted-foreground">Maior Pontuação</p>
             <p class="text-3xl font-bold text-green-600 mt-2">{{ $teams->max('score') ?? 0 }} pts</p>
         </div>
         <div class="bg-card rounded-lg border border-border shadow-sm p-6 text-center">
@@ -105,7 +99,7 @@
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('addTeamModal')"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-card rounded-xl shadow-xl border border-border w-full max-w-lg">
-            <div class="flex items-center justify-between p-6 border-b border-border">
+            <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
                 <h3 class="text-xl font-semibold text-foreground">Novo Time</h3>
                 <button onclick="closeModal('addTeamModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -117,16 +111,16 @@
                 @csrf
                 <div class="p-6 space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Nome do Time</label>
-                        <input type="text" name="teamName" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Os Programadores" required>
+                        <label for="teamName" class="block text-sm font-medium text-foreground mb-1">Nome do Time</label>
+                        <input id="teamName" type="text" name="teamName" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Os Programadores" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Email de Contato</label>
-                        <input type="email" name="email" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="time@exemplo.com">
+                        <label for="email" class="block text-sm font-medium text-foreground mb-1">Email de Contato</label>
+                        <input id="email" type="email" name="email" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="time@exemplo.com">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Pontuacao Inicial</label>
-                        <input type="number" name="score" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" value="0">
+                        <label for="score" class="block text-sm font-medium text-foreground mb-1">Pontuação Inicial</label>
+                        <input id="score" type="number" name="score" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" value="0">
                     </div>
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">

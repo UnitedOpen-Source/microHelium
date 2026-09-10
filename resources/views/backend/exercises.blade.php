@@ -1,34 +1,37 @@
 @extends('layouts.app')
 
-@section('title', 'Gerenciar Exercicios')
+@section('title', 'Gerenciar problemas')
+
+@section('description', 'Organize os desafios disponíveis para os participantes.')
 
 @section('content')
 <div class="space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar Exercicios</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Gerenciar problemas</h2>
                     <p class="text-sm text-muted-foreground mt-1">Lista de todos os exercicios/problemas da competicao</p>
                 </div>
                 <button onclick="openModal('addExerciseModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    Novo Exercicio
+                    Novo problema
                 </button>
             </div>
         </div>
 
+        @include('partials.table-filter', ['tableId' => 'backend-exercises-table', 'searchLabel' => 'problemas', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="backend-exercises-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Categoria</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Dificuldade</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Pontuacao</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Pontuação</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Criado em</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acoes</th>
                     </tr>
@@ -41,22 +44,17 @@
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $exercise->category ?? '-' }}</td>
                         <td class="px-4 py-3">
                             @if(($exercise->difficulty ?? 'medium') == 'easy')
-                                <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">Facil</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">Fácil</span>
                             @elseif(($exercise->difficulty ?? 'medium') == 'medium')
-                                <span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">Medio</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">Médio</span>
                             @else
-                                <span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">Dificil</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">Difícil</span>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-sm text-foreground">{{ $exercise->score ?? 100 }} pts</td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $exercise->created_at }}</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2">
-                                <button class="p-1.5 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded transition-colors" title="Editar">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                </button>
                                 <form action="/backend/exercises/{{ $exercise->exercise_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este exercicio?')">
                                     @csrf
                                     @method('DELETE')
@@ -79,19 +77,20 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="backend-exercises-table-empty" hidden><td colspan="7" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
 
-<!-- Modal Novo Exercicio -->
+<!-- Modal Novo problema -->
 <div id="addExerciseModal" class="fixed inset-0 z-50 hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('addExerciseModal')"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-card rounded-xl shadow-xl border border-border w-full max-w-lg">
-            <div class="flex items-center justify-between p-6 border-b border-border">
-                <h3 class="text-xl font-semibold text-foreground">Novo Exercicio</h3>
+            <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
+                <h3 class="text-xl font-semibold text-foreground">Novo problema</h3>
                 <button onclick="closeModal('addExerciseModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -102,28 +101,28 @@
                 @csrf
                 <div class="p-6 space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Nome do Exercicio</label>
-                        <input type="text" name="exerciseName" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Soma de Dois Numeros" required>
+                        <label for="exerciseName" class="block text-sm font-medium text-foreground mb-1">Nome do problema</label>
+                        <input id="exerciseName" type="text" name="exerciseName" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Soma de Dois Numeros" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Categoria</label>
-                        <input type="text" name="category" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Matematica, Strings, Grafos">
+                        <label for="category" class="block text-sm font-medium text-foreground mb-1">Categoria</label>
+                        <input id="category" type="text" name="category" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Matematica, Strings, Grafos">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Dificuldade</label>
-                        <select name="difficulty" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
-                            <option value="easy">Facil</option>
-                            <option value="medium" selected>Medio</option>
-                            <option value="hard">Dificil</option>
+                        <label for="difficulty" class="block text-sm font-medium text-foreground mb-1">Dificuldade</label>
+                        <select id="difficulty" name="difficulty" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="easy">Fácil</option>
+                            <option value="medium" selected>Médio</option>
+                            <option value="hard">Difícil</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Pontuacao</label>
-                        <input type="number" name="score" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" value="100">
+                        <label for="score" class="block text-sm font-medium text-foreground mb-1">Pontuação</label>
+                        <input id="score" type="number" name="score" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" value="100">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Resultado Esperado</label>
-                        <textarea name="expectedOutcome" rows="3" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="Descreva a saida esperada"></textarea>
+                        <label for="expectedOutcome" class="block text-sm font-medium text-foreground mb-1">Resultado Esperado</label>
+                        <textarea id="expectedOutcome" name="expectedOutcome" rows="3" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="Descreva a saida esperada"></textarea>
                     </div>
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">

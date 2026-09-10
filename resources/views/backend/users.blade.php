@@ -1,27 +1,30 @@
 @extends('layouts.app')
 
-@section('title', 'Gerenciar Usuarios')
+@section('title', 'Gerenciar usuários')
+
+@section('description', 'Gerencie participantes, credenciais e perfis de acesso.')
 
 @section('content')
 <div class="space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar Usuarios</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Gerenciar usuários</h2>
                     <p class="text-sm text-muted-foreground mt-1">Lista de todos os usuarios do sistema</p>
                 </div>
                 <button onclick="openModal('addUserModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    Novo Usuario
+                    Novo usuário
                 </button>
             </div>
         </div>
 
+        @include('partials.table-filter', ['tableId' => 'backend-users-table', 'searchLabel' => 'usuários', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="backend-users-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
@@ -60,11 +63,6 @@
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $user->created_at }}</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2">
-                                <button class="p-1.5 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded transition-colors" title="Editar">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                </button>
                                 <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este usuario?')">
                                     @csrf
                                     @method('DELETE')
@@ -87,19 +85,20 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="backend-users-table-empty" hidden><td colspan="8" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
 
-<!-- Modal Novo Usuario -->
+<!-- Modal Novo usuário -->
 <div id="addUserModal" class="fixed inset-0 z-50 hidden">
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('addUserModal')"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-card rounded-xl shadow-xl border border-border w-full max-w-lg">
-            <div class="flex items-center justify-between p-6 border-b border-border">
-                <h3 class="text-xl font-semibold text-foreground">Novo Usuario</h3>
+            <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
+                <h3 class="text-xl font-semibold text-foreground">Novo usuário</h3>
                 <button onclick="closeModal('addUserModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -110,24 +109,24 @@
                 @csrf
                 <div class="p-6 space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Nome Completo</label>
-                        <input type="text" name="fullname" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Nome completo" required>
+                        <label for="fullname" class="block text-sm font-medium text-foreground mb-1">Nome Completo</label>
+                        <input id="fullname" type="text" name="fullname" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Nome completo" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Username</label>
-                        <input type="text" name="username" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="nome.usuario" required>
+                        <label for="username" class="block text-sm font-medium text-foreground mb-1">Username</label>
+                        <input id="username" type="text" name="username" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="nome.usuario" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Email</label>
-                        <input type="email" name="email" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="email@exemplo.com">
+                        <label for="email" class="block text-sm font-medium text-foreground mb-1">Email</label>
+                        <input id="email" type="email" name="email" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="email@exemplo.com">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Senha</label>
-                        <input type="password" name="password" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Senha" required>
+                        <label for="password" class="block text-sm font-medium text-foreground mb-1">Senha</label>
+                        <input id="password" type="password" name="password" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Senha" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-1">Tipo de Usuario</label>
-                        <select name="user_type" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <label for="user_type" class="block text-sm font-medium text-foreground mb-1">Tipo de Usuario</label>
+                        <select id="user_type" name="user_type" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                             <option value="team">Competidor</option>
                             <option value="judge">Juiz</option>
                             <option value="admin">Administrador</option>

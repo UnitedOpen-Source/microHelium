@@ -1,14 +1,16 @@
 @extends('layouts.app')
 
-@section('title', 'Gerenciar Submissoes')
+@section('title', 'Gerenciar submissões')
+
+@section('description', 'Acompanhe os envios e resultados da competição.')
 
 @section('content')
 <div class="space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar Submissoes</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Gerenciar submissões</h2>
                     <p class="text-sm text-muted-foreground mt-1">Todas as submissoes da competicao</p>
                 </div>
             </div>
@@ -38,8 +40,9 @@
             </div>
         </div>
 
+        @include('partials.table-filter', ['tableId' => 'backend-submissions-table', 'searchLabel' => 'submissões', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="backend-submissions-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
@@ -125,6 +128,7 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="backend-submissions-table-empty" hidden><td colspan="9" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>

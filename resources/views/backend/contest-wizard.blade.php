@@ -1,6 +1,6 @@
 @extends('layouts.setup')
 
-@section('title', 'Criar Nova Maratona')
+@section('title', 'Criar Nova maratona')
 
 @php
     $availableLanguages = \App\Models\Language::getDefaultLanguages();
@@ -12,7 +12,7 @@
 <div class="max-w-5xl mx-auto">
     <!-- Progress Steps -->
     <div class="mb-8">
-        <div class="flex items-center justify-between text-xs sm:text-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
             @foreach([1 => 'Info', 2 => 'Agenda', 3 => 'Linguagens', 4 => 'Problemas', 5 => 'Confirmar'] as $num => $label)
             <div class="flex items-center">
                 <div id="step{{ $num }}-indicator" class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 {{ $num == 1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }} rounded-full font-bold text-sm">{{ $num }}</div>
@@ -50,25 +50,25 @@
                 </div>
                 <div class="p-6 space-y-6">
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Nome da Maratona *</label>
+                        <label for="contestName" class="block text-sm font-medium text-foreground mb-2">Nome da Maratona *</label>
                         <input type="text" name="name" id="contestName" required
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent text-lg"
                             placeholder="Ex: Maratona de Programacao 2025">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Descricao</label>
+                        <label for="contestDescription" class="block text-sm font-medium text-foreground mb-2">Descrição</label>
                         <textarea name="description" id="contestDescription" rows="3"
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                             placeholder="Descreva os objetivos e regras da competicao"></textarea>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-foreground mb-2">Penalidade (minutos)</label>
+                            <label for="contestPenalty" class="block text-sm font-medium text-foreground mb-2">Penalidade (minutos)</label>
                             <input type="number" name="penalty" id="contestPenalty" value="20" min="0" max="120"
                                 class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-foreground mb-2">Tamanho Max. Arquivo (KB)</label>
+                            <label for="contestMaxFile" class="block text-sm font-medium text-foreground mb-2">Tamanho Max. Arquivo (KB)</label>
                             <input type="number" name="max_file_size" id="contestMaxFile" value="100" min="1" max="10240"
                                 class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
@@ -87,12 +87,12 @@
                 <div class="p-6 space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label class="block text-sm font-medium text-foreground mb-2">Data e Hora de Inicio *</label>
+                            <label for="contestStart" class="block text-sm font-medium text-foreground mb-2">Data e Hora de Inicio *</label>
                             <input type="datetime-local" name="start_time" id="contestStart" required
                                 class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-foreground mb-2">Duracao (minutos) *</label>
+                            <label for="contestDuration" class="block text-sm font-medium text-foreground mb-2">Duracao (minutos) *</label>
                             <input type="number" name="duration" id="contestDuration" value="300" min="30" max="10080" required
                                 class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
@@ -107,7 +107,7 @@
                         </div>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Congelamento do Placar (minutos antes do fim)</label>
+                        <label for="contestFreeze" class="block text-sm font-medium text-foreground mb-2">Congelamento do Placar (minutos antes do fim)</label>
                         <input type="number" name="freeze_time" id="contestFreeze" value="60" min="0"
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
@@ -127,7 +127,7 @@
         <!-- Step 3: Languages -->
         <div id="step3" class="wizard-step hidden">
             <div class="bg-card rounded-lg border border-border shadow-sm">
-                <div class="p-6 border-b border-border flex items-center justify-between">
+                <div class="p-6 border-b border-border flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h2 class="text-xl font-semibold text-foreground">Linguagens Permitidas</h2>
                         <p class="text-sm text-muted-foreground mt-1">Selecione quais linguagens os participantes poderao usar</p>
@@ -161,7 +161,7 @@
         <div id="step4" class="wizard-step hidden">
             <div class="bg-card rounded-lg border border-border shadow-sm">
                 <div class="p-6 border-b border-border">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h2 class="text-xl font-semibold text-foreground">Banco de Problemas</h2>
                             <p class="text-sm text-muted-foreground mt-1">Selecione os problemas para a maratona ({{ $problemBank->count() }} disponiveis)</p>
@@ -174,9 +174,9 @@
                     <!-- Filters -->
                     <div class="flex gap-2 mt-4">
                         <button type="button" onclick="filterProblems('all')" class="filter-btn px-3 py-1 bg-primary text-primary-foreground rounded text-xs" data-filter="all">Todos</button>
-                        <button type="button" onclick="filterProblems('easy')" class="filter-btn px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded text-xs" data-filter="easy">Facil</button>
-                        <button type="button" onclick="filterProblems('medium')" class="filter-btn px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded text-xs" data-filter="medium">Medio</button>
-                        <button type="button" onclick="filterProblems('hard')" class="filter-btn px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded text-xs" data-filter="hard">Dificil</button>
+                        <button type="button" onclick="filterProblems('easy')" class="filter-btn px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded text-xs" data-filter="easy">Fácil</button>
+                        <button type="button" onclick="filterProblems('medium')" class="filter-btn px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded text-xs" data-filter="medium">Médio</button>
+                        <button type="button" onclick="filterProblems('hard')" class="filter-btn px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded text-xs" data-filter="hard">Difícil</button>
                     </div>
                 </div>
                 <div class="p-6 max-h-96 overflow-y-auto">
@@ -254,7 +254,7 @@
         </div>
 
         <!-- Navigation -->
-        <div class="flex items-center justify-between mt-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 mt-6">
             <button type="button" id="prevBtn" onclick="prevStep()" class="hidden px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors">
                 <span class="flex items-center gap-2">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>

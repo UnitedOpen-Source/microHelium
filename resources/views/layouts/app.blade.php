@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ app()->getLocale() }}" class="h-full">
+<html lang="pt-BR" class="h-full">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,46 +9,29 @@
     <meta name="keywords" content="hackathon, programação, maratona, contest">
     <meta name="description" content="MicroHelium - Sistema de Gerenciamento de Maratonas de Programação">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <script>
-        // Prevent flash of wrong theme
-        if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark')
-        }
-    </script>
+    @include('partials.theme-init')
 </head>
 <body class="h-full bg-background text-foreground antialiased">
+    <a href="#main-content" class="skip-link">Pular para o conteúdo</a>
     <div id="app" class="min-h-full">
         <div class="flex min-h-screen">
             <!-- Sidebar -->
-            <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 transform -translate-x-full transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 bg-card border-r border-border">
+            <aside id="sidebar" aria-label="Menu principal" class="app-sidebar fixed inset-y-0 left-0 z-50 w-64 transform -translate-x-full transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 bg-card border-r border-border">
                 <div class="flex flex-col h-full">
-                    <!-- Logo -->
-                    <div class="flex items-center justify-center h-16 px-4 border-b border-border">
-                        <a href="/home" class="flex items-center">
-                            <img src="{{ asset('img/Logo.png') }}" alt="MicroHelium" class="h-10 w-auto dark:invert" onerror="this.parentElement.innerHTML='<span class=\'text-xl font-bold text-primary\'>MicroHelium</span>'">
-                        </a>
-                    </div>
-
-                    <!-- Timer -->
-                    <div class="px-4 py-3 border-b border-border">
-                        <div class="flex items-center gap-2 text-muted-foreground">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <contest-timer></contest-timer>
-                        </div>
-                    </div>
+                    <div class="sidebar-brand">@include('partials.brand')<button type="button" class="icon-button lg:hidden" data-sidebar-close aria-label="Fechar menu">✕</button></div>
+                    <div class="sidebar-contest"><span class="eyebrow">RELÓGIO DA COMPETIÇÃO</span><contest-timer></contest-timer></div>
 
                     <!-- Navigation -->
-                    <nav class="flex-1 overflow-y-auto py-4">
+                    <nav aria-label="Navegação principal" class="flex-1 overflow-y-auto py-4">
+                        <p class="eyebrow px-6 mb-3">COMPETIÇÃO</p>
                         <div class="px-3 space-y-1">
-                            <a href="/home" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('home') || Request::is('/') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                            <a href="{{ Auth::check() ? '/home' : '/' }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('home') || Request::is('/') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                 </svg>
                                 Início
                             </a>
-                            <a href="/exercises" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('exercises*') && !Request::is('backend*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                            <a href="/exercises" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('exercises*', 'exercise/*', 'submit/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
@@ -66,7 +49,7 @@
                                 </svg>
                                 Clarificações
                             </a>
-                            <a href="/submissions" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('submissions*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                            <a href="/submissions" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('submissions*', 'submission/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
@@ -175,14 +158,14 @@
             <div id="sidebar-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden lg:hidden" onclick="toggleSidebar()"></div>
 
             <!-- Main content -->
-            <div class="flex-1 flex flex-col min-w-0 lg:ml-0">
+            <div id="app-content" class="app-content flex-1 flex flex-col min-w-0 lg:ml-0">
                 <!-- Top navbar -->
                 <header class="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6">
                     <!-- Mobile menu button -->
                     <button
                         type="button"
                         class="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                        onclick="toggleSidebar()"
+                        onclick="toggleSidebar()" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false" id="sidebar-toggle"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -190,7 +173,7 @@
                     </button>
 
                     <!-- Page title -->
-                    <h1 class="text-lg font-semibold">@yield('title', 'Dashboard')</h1>
+                    <div class="header-breadcrumb"><span class="hidden sm:inline">Workspace <span aria-hidden="true">/</span></span> @yield('title', 'Visão geral')</div>
 
                     <div class="flex-1"></div>
 
@@ -201,9 +184,9 @@
 
                         @if (Auth::check())
                             <!-- User dropdown -->
-                            <div class="relative" x-data="{ open: false }">
+                            <div class="relative">
                                 <button
-                                    onclick="toggleUserMenu()"
+                                    id="user-menu-toggle" aria-label="Menu da conta" aria-controls="user-menu" aria-expanded="false" onclick="toggleUserMenu()"
                                     class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                                 >
                                     <span class="hidden sm:inline">{{ Auth::user()->fullname ?? Auth::user()->username }}</span>
@@ -212,18 +195,7 @@
                                     </svg>
                                 </button>
                                 <div id="user-menu" class="hidden absolute right-0 mt-2 w-48 rounded-lg border border-border bg-popover p-1 shadow-lg">
-                                    <a href="/my-team" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-popover-foreground hover:bg-accent">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                        </svg>
-                                        Meu Time
-                                    </a>
-                                    <a href="/profile" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-popover-foreground hover:bg-accent">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                        </svg>
-                                        Perfil
-                                    </a>
+                                    <p class="px-3 py-2 text-sm font-medium break-words">{{ Auth::user()->fullname ?? Auth::user()->username }}</p>
                                     <div class="my-1 h-px bg-border"></div>
                                     <a
                                         href="{{ route('logout') }}"
@@ -246,10 +218,22 @@
                 </header>
 
                 <!-- Main content area -->
-                <main class="flex-1 p-4 sm:p-6">
+                <main id="main-content" tabindex="-1" class="page-content flex-1 p-4 sm:p-6">
+                    <div class="page-heading">
+                        <div><p class="eyebrow">{{ Request::is('backend*', 'judge*', 'staff*') ? 'ORGANIZAÇÃO' : 'MICROHELIUM / ARENA' }}</p>
+                        <h1>@yield('title', 'Visão geral')</h1>
+                        @hasSection('description')<p class="page-description">@yield('description')</p>@endif</div>
+                        @hasSection('page-actions')<div class="page-actions">@yield('page-actions')</div>@endif
+                    </div>
+                    @if($errors->any())
+                        <div role="alert" class="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                            <p class="font-semibold mb-2">Revise os campos e tente novamente.</p>
+                            <ul class="list-disc pl-5">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
+                        </div>
+                    @endif
                     <!-- Flash messages -->
                     @if(session('success'))
-                        <div class="mb-4 rounded-lg border border-success/50 bg-success/10 p-4 text-success">
+                        <div role="status" class="mb-4 rounded-lg border border-success/50 bg-success/10 p-4 text-success">
                             <div class="flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -259,7 +243,7 @@
                         </div>
                     @endif
                     @if(session('error'))
-                        <div class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
+                        <div role="alert" class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive">
                             <div class="flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -276,13 +260,13 @@
                 <footer class="border-t border-border py-4 px-4 sm:px-6">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
                         <nav class="flex flex-wrap justify-center gap-4">
-                            <a href="/home" class="hover:text-foreground transition-colors">Início</a>
+                            <a href="{{ Auth::check() ? '/home' : '/' }}" class="hover:text-foreground transition-colors">Início</a>
                             <a href="/exercises" class="hover:text-foreground transition-colors">Problemas</a>
                             <a href="/scoreboard" class="hover:text-foreground transition-colors">Placar</a>
                             <a href="/ajuda" class="hover:text-foreground transition-colors">Ajuda</a>
                         </nav>
                         <p>
-                            &copy; {{ date('Y') }} <a href="https://github.com/UniteOpenSource/microHelium" class="hover:text-foreground transition-colors">MicroHelium</a> -
+                            &copy; {{ date('Y') }} <a href="https://github.com/UnitedOpen-Source/microHelium" class="hover:text-foreground transition-colors">MicroHelium</a> -
                             Sistema de Maratonas de Programação
                         </p>
                     </div>
@@ -295,28 +279,6 @@
         @csrf
     </form>
 
-    <script>
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            sidebar.classList.toggle('-translate-x-full');
-            backdrop.classList.toggle('hidden');
-        }
-
-        function toggleUserMenu() {
-            const menu = document.getElementById('user-menu');
-            menu.classList.toggle('hidden');
-        }
-
-        // Close user menu when clicking outside
-        document.addEventListener('click', function(event) {
-            const menu = document.getElementById('user-menu');
-            const button = event.target.closest('button');
-            if (!event.target.closest('#user-menu') && !button?.onclick?.toString().includes('toggleUserMenu')) {
-                menu?.classList.add('hidden');
-            }
-        });
-    </script>
     @yield('scripts')
 </body>
 </html>

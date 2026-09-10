@@ -2,6 +2,8 @@
 
 @section('title', 'Problemas')
 
+@section('description', 'Explore os desafios da competição e coloque sua solução à prova.')
+
 @section('content')
 <div class="space-y-6">
     <!-- Problems List -->
@@ -26,8 +28,9 @@
             </div>
         </div>
 
+        @include('partials.table-filter', ['tableId' => 'exercises-index-table', 'searchLabel' => 'problemas', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="exercises-index-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-16">#</th>
@@ -41,7 +44,7 @@
                     @forelse ($problems as $problem)
                     <tr class="hover:bg-muted/50 transition-colors">
                         <td class="px-4 py-4">
-                            <span class="text-2xl font-bold" style="color: {{ $problem->color_hex ?? 'var(--primary)' }}">{{ $problem->short_name }}</span>
+                            <span class="text-2xl font-bold" style="color: {{ $problem->color_hex ?? 'var(--color-primary)' }}">{{ $problem->short_name }}</span>
                         </td>
                         <td class="px-4 py-4">
                             <a href="{{ route('exercise.show', $problem) }}" class="font-semibold text-foreground hover:text-primary transition-colors">
@@ -87,6 +90,7 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="exercises-index-table-empty" hidden><td colspan="5" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>

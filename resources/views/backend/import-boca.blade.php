@@ -2,6 +2,8 @@
 
 @section('title', 'Importar Problemas BOCA')
 
+@section('description', 'Adicione problemas ao acervo a partir de pacotes BOCA.')
+
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6">
     <!-- Header -->
@@ -124,7 +126,7 @@
             <div class="bg-muted rounded-lg p-4 font-mono text-sm overflow-x-auto">
 <pre class="text-muted-foreground">problema.zip
 ├── description/
-│   └── problem.txt        # Descricao do problema
+│   └── problem.txt        # Descrição do problema
 ├── input/
 │   ├── 01                 # Arquivo de entrada teste 1
 │   ├── 02                 # Arquivo de entrada teste 2

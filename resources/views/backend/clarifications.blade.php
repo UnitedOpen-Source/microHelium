@@ -1,14 +1,16 @@
 @extends('layouts.app')
 
-@section('title', 'Gerenciar Clarificacoes')
+@section('title', 'Gerenciar clarificações')
+
+@section('description', 'Responda às dúvidas dos times com clareza e agilidade.')
 
 @section('content')
 <div class="space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar Clarificacoes</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Gerenciar clarificações</h2>
                     <p class="text-sm text-muted-foreground mt-1">Responda as duvidas dos participantes</p>
                 </div>
             </div>

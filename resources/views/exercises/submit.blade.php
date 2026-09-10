@@ -2,6 +2,8 @@
 
 @section('title', 'Submeter - ' . $problem->name)
 
+@section('description', 'Selecione a linguagem e envie seu código-fonte para avaliação.')
+
 @section('content')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Main Form -->

@@ -2,21 +2,19 @@
 
 @section('title', 'Julgar Submissões')
 
+@section('description', 'Revise os envios pendentes e consulte os julgamentos recentes.')
+
 @section('content')
 <div class="space-y-6">
-    @if(session('success'))
-    <div class="px-4 py-3 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg text-sm">
-        {{ session('success') }}
-    </div>
-    @endif
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
             <h2 class="text-xl font-semibold text-foreground">Pendentes de Julgamento</h2>
             <p class="text-sm text-muted-foreground">{{ $contest?->name ?? 'Nenhum contest ativo' }}</p>
         </div>
+        @include('partials.table-filter', ['tableId' => 'judge-runs-table', 'searchLabel' => 'registros'])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="judge-runs-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Run</th>
@@ -36,7 +34,7 @@
                         <td class="px-4 py-3">
                             <form action="{{ route('judge.runs.judge', $run) }}" method="POST" class="flex items-center gap-2">
                                 @csrf
-                                <select name="answer_id" required class="text-sm px-2 py-1.5 bg-background border border-border rounded-lg">
+                                <select aria-label="Veredito da submissão {{ $run->run_number }}" name="answer_id" required class="text-sm px-2 py-1.5 bg-background border border-border rounded-lg">
                                     <option value="">Veredito...</option>
                                     @foreach($answers as $answer)
                                         <option value="{{ $answer->id }}">{{ $answer->name }}</option>
@@ -53,7 +51,7 @@
                         <td colspan="5" class="px-4 py-12 text-center text-muted-foreground">Nenhuma submissao pendente</td>
                     </tr>
                     @endforelse
-                </tbody>
+                <tr id="judge-runs-table-empty" hidden><td colspan="5" class="text-center text-muted-foreground">Nenhum resultado para estes filtros.</td></tr></tbody>
             </table>
         </div>
     </div>

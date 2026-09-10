@@ -2,6 +2,8 @@
 
 @section('title', 'Submissões')
 
+@section('description', 'Consulte seus envios e acompanhe os resultados do julgamento.')
+
 @section('content')
 <div class="space-y-6">
     <!-- Submissions Table -->
@@ -15,8 +17,9 @@
             </h3>
             <p class="text-sm text-muted-foreground">Histórico de todas as suas submissões na competição</p>
         </div>
+        @include('partials.table-filter', ['tableId' => 'submissions-table', 'searchLabel' => 'submissões', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="submissions-table" class="w-full">
                 <thead>
                     <tr class="border-b border-border bg-muted/50">
                         <th class="w-16 px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
@@ -138,6 +141,7 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="submissions-table-empty" hidden><td colspan="8" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>

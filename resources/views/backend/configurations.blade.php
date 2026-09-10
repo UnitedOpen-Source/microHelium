@@ -1,10 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Configuracoes')
+@section('title', 'Configurações')
 
 @php
     $availableLanguages = \App\Models\Language::getDefaultLanguages();
 @endphp
+
+@section('description', 'Configure as maratonas e controle o andamento dos eventos.')
 
 @section('content')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -13,16 +15,16 @@
         <!-- Hackathons List -->
         <div class="bg-card rounded-lg border border-border shadow-sm">
             <div class="p-6 border-b border-border">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h2 class="text-xl font-semibold text-foreground">Configuracoes da Maratona</h2>
+                        <h2 class="text-xl font-semibold text-foreground">Configurações da Maratona</h2>
                         <p class="text-sm text-muted-foreground mt-1">Gerencie as competicoes e hackathons</p>
                     </div>
                     <a href="{{ route('backend.contest-wizard') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                         </svg>
-                        Nova Maratona
+                        Nova maratona
                     </a>
                 </div>
             </div>
@@ -32,7 +34,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Descricao</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Descrição</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Inicio</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Fim</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acoes</th>
@@ -95,7 +97,7 @@
         <!-- System Config -->
         <div class="bg-card rounded-lg border border-border shadow-sm">
             <div class="p-4 border-b border-border">
-                <h3 class="font-semibold text-foreground">Configuracoes do Sistema</h3>
+                <h3 class="font-semibold text-foreground">Configurações do Sistema</h3>
             </div>
             <div class="p-4 space-y-4">
                 <div>
@@ -115,7 +117,7 @@
                     <input type="number" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" value="20">
                 </div>
                 <button type="button" class="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                    Salvar Configuracoes
+                    Salvar Configurações
                 </button>
             </div>
         </div>
@@ -183,7 +185,7 @@
     </div>
 </div>
 
-<!-- Modal Nova Maratona -->
+<!-- Modal Nova maratona -->
 <div id="addHackathonModal" class="fixed inset-0 z-50 hidden">
     <!-- Backdrop -->
     <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('addHackathonModal')"></div>
@@ -191,8 +193,8 @@
     <!-- Modal Content -->
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-card rounded-xl shadow-xl border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between p-6 border-b border-border">
-                <h3 class="text-xl font-semibold text-foreground">Nova Maratona</h3>
+            <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
+                <h3 class="text-xl font-semibold text-foreground">Nova maratona</h3>
                 <button onclick="closeModal('addHackathonModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -208,30 +210,30 @@
                         <h4 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Informacoes Basicas</h4>
 
                         <div>
-                            <label class="block text-sm font-medium text-foreground mb-1">Nome da Maratona *</label>
-                            <input type="text" name="eventName" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Maratona de Programacao 2025" required>
+                            <label for="eventName" class="block text-sm font-medium text-foreground mb-1">Nome da Maratona *</label>
+                            <input id="eventName" type="text" name="eventName" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: Maratona de Programacao 2025" required>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-foreground mb-1">Descricao</label>
-                            <textarea name="description" rows="3" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="Descricao da competicao"></textarea>
+                            <label for="description" class="block text-sm font-medium text-foreground mb-1">Descrição</label>
+                            <textarea id="description" name="description" rows="3" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="Descrição da competicao"></textarea>
                         </div>
 
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-medium text-foreground mb-1">Data/Hora de Inicio</label>
-                                <input type="datetime-local" name="starts_at" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <label for="starts_at" class="block text-sm font-medium text-foreground mb-1">Data/Hora de Inicio</label>
+                                <input id="starts_at" type="datetime-local" name="starts_at" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-foreground mb-1">Data/Hora de Termino</label>
-                                <input type="datetime-local" name="ends_at" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <label for="ends_at" class="block text-sm font-medium text-foreground mb-1">Data/Hora de Termino</label>
+                                <input id="ends_at" type="datetime-local" name="ends_at" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                             </div>
                         </div>
                     </div>
 
                     <!-- Languages Selection -->
                     <div class="space-y-4">
-                        <div class="flex items-center justify-between">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
                             <h4 class="text-sm font-medium text-muted-foreground uppercase tracking-wider">Linguagens Permitidas</h4>
                             <div class="flex gap-2">
                                 <button type="button" onclick="selectAllLanguages()" class="text-xs px-2 py-1 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors">

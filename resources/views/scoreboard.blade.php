@@ -2,6 +2,8 @@
 
 @section('title', 'Placar')
 
+@section('description', 'Acompanhe a classificação e os problemas resolvidos pelos times.')
+
 @section('content')
 <div class="space-y-6">
     <!-- Main Scoreboard -->
@@ -15,8 +17,9 @@
             </h3>
             <p class="text-sm text-muted-foreground">Classificação em tempo real dos times participantes</p>
         </div>
+        @include('partials.table-filter', ['tableId' => 'scoreboard-table', 'searchLabel' => 'times', 'difficulty' => false])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="scoreboard-table" class="w-full">
                 <thead>
                     <tr class="border-b border-border bg-muted/50">
                         <th class="w-16 px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
@@ -33,11 +36,11 @@
                     <tr class="hover:bg-muted/50 transition-colors {{ $index < 3 ? 'bg-success/5' : '' }}">
                         <td class="px-4 py-3 text-center">
                             @if($index == 0)
-                                <span class="text-2xl">🥇</span>
+                                <span class="rank-number">{{ $index + 1 }}</span>
                             @elseif($index == 1)
-                                <span class="text-2xl">🥈</span>
+                                <span class="rank-number">{{ $index + 1 }}</span>
                             @elseif($index == 2)
-                                <span class="text-2xl">🥉</span>
+                                <span class="rank-number">{{ $index + 1 }}</span>
                             @else
                                 <span class="font-bold text-muted-foreground">{{ $entry['rank'] }}</span>
                             @endif
@@ -82,6 +85,7 @@
                         </td>
                     </tr>
                     @endforelse
+                <tr id="scoreboard-table-empty" hidden><td colspan="6" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>

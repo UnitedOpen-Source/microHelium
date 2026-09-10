@@ -2,6 +2,8 @@
 
 @section('title', 'Editar Maratona')
 
+@section('description', 'Ajuste os dados, limites e regras desta maratona.')
+
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6">
     <!-- Header -->
@@ -28,14 +30,14 @@
             </div>
             <div class="p-6 space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Nome da Maratona *</label>
-                    <input type="text" name="name" required
+                    <label for="name" class="block text-sm font-medium text-foreground mb-2">Nome da Maratona *</label>
+                    <input id="name" type="text" name="name" required
                         class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         value="{{ $hackathon->eventName }}">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Descricao</label>
-                    <textarea name="description" rows="3"
+                    <label for="description" class="block text-sm font-medium text-foreground mb-2">Descrição</label>
+                    <textarea id="description" name="description" rows="3"
                         class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none">{{ $hackathon->description }}</textarea>
                 </div>
             </div>
@@ -49,35 +51,35 @@
             <div class="p-6 space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Data e Hora de Inicio *</label>
-                        <input type="datetime-local" name="start_time" required
+                        <label for="start_time" class="block text-sm font-medium text-foreground mb-2">Data e Hora de Inicio *</label>
+                        <input id="start_time" type="datetime-local" name="start_time" required
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                             value="{{ $contest ? \Carbon\Carbon::parse($contest->start_time)->format('Y-m-d\TH:i') : \Carbon\Carbon::parse($hackathon->starts_at)->format('Y-m-d\TH:i') }}">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Duracao (minutos) *</label>
-                        <input type="number" name="duration" required min="30" max="10080"
+                        <label for="duration" class="block text-sm font-medium text-foreground mb-2">Duracao (minutos) *</label>
+                        <input id="duration" type="number" name="duration" required min="30" max="10080"
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                             value="{{ $contest->duration ?? 300 }}">
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Penalidade (minutos)</label>
-                        <input type="number" name="penalty" min="0" max="120"
+                        <label for="penalty" class="block text-sm font-medium text-foreground mb-2">Penalidade (minutos)</label>
+                        <input id="penalty" type="number" name="penalty" min="0" max="120"
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                             value="{{ $contest->penalty ?? 20 }}">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-foreground mb-2">Congelamento (minutos antes do fim)</label>
-                        <input type="number" name="freeze_time" min="0"
+                        <label for="freeze_time" class="block text-sm font-medium text-foreground mb-2">Congelamento (minutos antes do fim)</label>
+                        <input id="freeze_time" type="number" name="freeze_time" min="0"
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                             value="{{ $contest->freeze_time ?? 60 }}">
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Tamanho Maximo de Arquivo (KB)</label>
-                    <input type="number" name="max_file_size" min="1" max="10240"
+                    <label for="max_file_size" class="block text-sm font-medium text-foreground mb-2">Tamanho Maximo de Arquivo (KB)</label>
+                    <input id="max_file_size" type="number" name="max_file_size" min="1" max="10240"
                         class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         value="{{ $contest->max_file_size ?? 100 }}">
                 </div>
@@ -87,7 +89,7 @@
         <!-- Settings -->
         <div class="bg-card rounded-lg border border-border shadow-sm">
             <div class="p-6 border-b border-border">
-                <h2 class="text-lg font-semibold text-foreground">Configuracoes</h2>
+                <h2 class="text-lg font-semibold text-foreground">Configurações</h2>
             </div>
             <div class="p-6 space-y-4">
                 <div class="flex gap-4">
@@ -107,8 +109,8 @@
                     </label>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Chave de Acesso (opcional)</label>
-                    <input type="text" name="unlock_key"
+                    <label for="unlock_key" class="block text-sm font-medium text-foreground mb-2">Chave de Acesso (opcional)</label>
+                    <input id="unlock_key" type="text" name="unlock_key"
                         class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         value="{{ $contest->unlock_key ?? '' }}"
                         placeholder="Deixe vazio para acesso livre">
@@ -118,7 +120,7 @@
         </div>
 
         <!-- Actions -->
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
             <a href="{{ route('backend.configurations') }}" class="px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors">
                 Cancelar
             </a>
@@ -126,7 +128,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                Salvar Alteracoes
+                Salvar alterações
             </button>
         </div>
     </form>
@@ -137,7 +139,7 @@
             <h2 class="text-lg font-semibold text-red-800 dark:text-red-300">Zona de Perigo</h2>
         </div>
         <div class="p-6">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <p class="font-medium text-red-800 dark:text-red-300">Excluir Maratona</p>
                     <p class="text-sm text-red-600 dark:text-red-400">Esta acao e irreversivel. Todos os dados serao perdidos.</p>

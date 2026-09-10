@@ -2,6 +2,8 @@
 
 @section('title', 'Clarificações')
 
+@section('description', 'Tire dúvidas sobre os problemas e acompanhe as respostas da organização.')
+
 @section('content')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Clarifications List -->
@@ -80,6 +82,7 @@
                 </h3>
             </div>
             <div class="p-6">
+                @auth
                 <form action="/clarifications" method="POST" class="space-y-4">
                     @csrf
                     <div class="space-y-2">
@@ -101,8 +104,8 @@
                             rows="4"
                             required
                             placeholder="Descreva sua dúvida de forma clara e objetiva..."
-                            class="flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        ></textarea>
+                            maxlength="2000" class="flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >{{ old('question') }}</textarea>
                     </div>
                     <button type="submit" class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -111,6 +114,9 @@
                         Enviar Pergunta
                     </button>
                 </form>
+                @else
+                <p class="text-sm text-muted-foreground mb-4">Entre na sua conta para enviar uma pergunta à organização.</p><a class="button-primary w-full" href="/login">Entrar para perguntar</a>
+                @endauth
             </div>
         </div>
 

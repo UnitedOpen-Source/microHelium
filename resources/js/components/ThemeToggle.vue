@@ -5,13 +5,7 @@ import { Sun, Moon } from '@lucide/vue'
 const isDark = ref(false)
 
 onMounted(() => {
-    // Check for saved preference or system preference
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme) {
-        isDark.value = savedTheme === 'dark'
-    } else {
-        isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
+    isDark.value = document.documentElement.classList.contains('dark')
     applyTheme()
 })
 
@@ -25,7 +19,7 @@ function applyTheme() {
 
 function toggleTheme() {
     isDark.value = !isDark.value
-    localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+    try { localStorage.setItem('theme', isDark.value ? 'dark' : 'light') } catch (_) { /* Theme remains usable without storage. */ }
     applyTheme()
 }
 </script>
@@ -33,7 +27,7 @@ function toggleTheme() {
 <template>
     <button
         @click="toggleTheme"
-        class="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+        type="button" class="icon-button" :aria-label="isDark ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="isDark"
         :title="isDark ? 'Modo Claro' : 'Modo Escuro'"
     >
         <Sun v-if="isDark" class="h-5 w-5" />

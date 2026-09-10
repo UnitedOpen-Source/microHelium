@@ -2,6 +2,8 @@
 
 @section('title', 'Banco de Problemas')
 
+@section('description', 'Encontre, revise e organize os problemas do seu acervo.')
+
 @section('content')
 <div class="space-y-6">
     <!-- Header -->
@@ -27,15 +29,15 @@
             <p class="text-2xl font-bold text-foreground">{{ $problems->count() }}</p>
         </div>
         <div class="bg-card border border-border rounded-lg p-4">
-            <p class="text-sm text-muted-foreground">Facil</p>
+            <p class="text-sm text-muted-foreground">Fácil</p>
             <p class="text-2xl font-bold text-green-600">{{ $problems->where('difficulty', 'easy')->count() }}</p>
         </div>
         <div class="bg-card border border-border rounded-lg p-4">
-            <p class="text-sm text-muted-foreground">Medio</p>
+            <p class="text-sm text-muted-foreground">Médio</p>
             <p class="text-2xl font-bold text-yellow-600">{{ $problems->where('difficulty', 'medium')->count() }}</p>
         </div>
         <div class="bg-card border border-border rounded-lg p-4">
-            <p class="text-sm text-muted-foreground">Dificil</p>
+            <p class="text-sm text-muted-foreground">Difícil</p>
             <p class="text-2xl font-bold text-red-600">{{ $problems->where('difficulty', 'hard')->count() }}</p>
         </div>
     </div>
@@ -45,11 +47,11 @@
         <div class="flex flex-wrap gap-2 items-center">
             <span class="text-sm font-medium text-foreground">Filtrar:</span>
             <button onclick="filterProblems('all')" class="filter-btn px-3 py-1 bg-primary text-primary-foreground rounded text-sm" data-filter="all">Todos</button>
-            <button onclick="filterProblems('easy')" class="filter-btn px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded text-sm" data-filter="easy">Facil</button>
-            <button onclick="filterProblems('medium')" class="filter-btn px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded text-sm" data-filter="medium">Medio</button>
-            <button onclick="filterProblems('hard')" class="filter-btn px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded text-sm" data-filter="hard">Dificil</button>
+            <button onclick="filterProblems('easy')" class="filter-btn px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded text-sm" data-filter="easy">Fácil</button>
+            <button onclick="filterProblems('medium')" class="filter-btn px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded text-sm" data-filter="medium">Médio</button>
+            <button onclick="filterProblems('hard')" class="filter-btn px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded text-sm" data-filter="hard">Difícil</button>
             <div class="flex-1"></div>
-            <input type="text" id="searchInput" placeholder="Buscar problema..."
+            <input type="text" id="searchInput" aria-label="Buscar problemas" placeholder="Buscar problema..."
                 class="px-3 py-1 bg-background border border-border rounded text-sm text-foreground w-48"
                 oninput="searchProblems(this.value)">
         </div>
@@ -57,7 +59,8 @@
 
     <!-- Problem List -->
     <div class="bg-card border border-border rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
+        <p id="bank-filter-status" role="status" class="px-6 py-3 text-sm text-muted-foreground"></p>
+    <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-muted/50">
                     <tr>
@@ -87,7 +90,7 @@
                                     'medium' => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
                                     'hard' => 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
                                 ];
-                                $labels = ['easy' => 'Facil', 'medium' => 'Medio', 'hard' => 'Dificil'];
+                                $labels = ['easy' => 'Fácil', 'medium' => 'Médio', 'hard' => 'Difícil'];
                             @endphp
                             <span class="px-2 py-1 rounded text-xs {{ $badges[$problem->difficulty] ?? 'bg-gray-100' }}">
                                 {{ $labels[$problem->difficulty] ?? 'Desconhecido' }}
@@ -160,7 +163,7 @@
 <!-- Problem Detail Modal -->
 <div id="problemModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
     <div class="bg-card rounded-lg border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div class="p-6 border-b border-border flex items-center justify-between">
+        <div class="p-6 border-b border-border flex flex-wrap items-center justify-between gap-3">
             <h3 id="modalTitle" class="text-xl font-semibold text-foreground">Detalhes do Problema</h3>
             <button onclick="closeModal()" class="p-2 hover:bg-muted rounded">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -180,28 +183,23 @@
 <script>
 const problems = @json($problems);
 
-function filterProblems(difficulty) {
+let activeDifficulty = 'all';
+let activeQuery = '';
+function applyProblemFilters() {
+    const normalize = text => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    let count = 0;
     document.querySelectorAll('.problem-row').forEach(row => {
-        if (difficulty === 'all' || row.dataset.difficulty === difficulty) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
+        const match = (activeDifficulty === 'all' || row.dataset.difficulty === activeDifficulty) && normalize(row.dataset.name + ' ' + row.dataset.code).includes(normalize(activeQuery));
+        row.hidden = !match;
+        if (match) count++;
     });
-}
-
-function searchProblems(query) {
-    query = query.toLowerCase();
-    document.querySelectorAll('.problem-row').forEach(row => {
-        const name = row.dataset.name;
-        const code = row.dataset.code;
-        if (name.includes(query) || code.includes(query)) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
+    document.querySelectorAll('.filter-btn').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.filter === activeDifficulty));
     });
+    document.getElementById('bank-filter-status').textContent = count ? `${count} problemas encontrados` : 'Nenhum problema encontrado. Altere a busca ou a dificuldade.';
 }
+function filterProblems(difficulty) { activeDifficulty = difficulty; applyProblemFilters(); }
+function searchProblems(query) { activeQuery = query; applyProblemFilters(); }
 
 function viewProblem(id) {
     const problem = problems.find(p => p.id === id);
@@ -211,7 +209,7 @@ function viewProblem(id) {
     document.getElementById('modalContent').innerHTML = `
         <div class="space-y-4">
             <div>
-                <h4 class="font-semibold text-foreground mb-2">Descricao</h4>
+                <h4 class="font-semibold text-foreground mb-2">Descrição</h4>
                 <div class="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/50 p-4 rounded">${escapeHtml(problem.description)}</div>
             </div>
             <div class="grid grid-cols-2 gap-4">

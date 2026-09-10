@@ -1,62 +1,14 @@
-@extends('layouts.site')
-
+@extends('layouts.app')
+@section('title', 'Primeiros passos')
+@section('description', 'Da escolha do problema à sua primeira submissão.')
 @section('content')
-<div class="row">
-  <div class="col-md-12">
-    <div class="card">
-      <div class="header">
-        <h4 class="title">Lista de Exercicios</h4>
-        <p class="category">Qualquer dúvida estamos a disposição</p>
-      </div>
-      <div class="content table-responsive table-full-width">
-        <table class="table table-hover table-striped">
-          <thead>
-            <th>ID</th>
-            <th>Descrição</th>
-            <th>Categoria</th>
-            <th>Valor</th>
-            <th>#</th>
-          </thead>
-          <tbody>
-            <tr>
-              <td>1</td>
-              <td>Exercicio 1</td>
-              <td>Crypto</td>
-              <td>20 pts</td>
-              <td><a href="exercicio.html">Ir para exercicio</a></td>
-            </tr>
-            <tr>
-              <td>2</td>
-              <td>Exercicio 2</td>
-              <td>Web</td>
-              <td>20 pts</td>
-              <td><a href="exercicio.html">Ir para exercicio</a></td>
-            </tr>
-            <tr>
-              <td>3</td>
-              <td>Exercicio 3</td>
-              <td>Python</td>
-              <td>20 pts</td>
-              <td><a href="exercicio.html">Ir para exercicio</a></td>
-            </tr>
-            <tr>
-              <td>4</td>
-              <td>Exercicio 4</td>
-              <td>Java</td>
-              <td>20 pts</td>
-              <td><a href="exercicio.html">Ir para exercicio</a></td>
-            </tr>
-            <tr>
-              <td>5</td>
-              <td>Exercicio 5</td>
-              <td>Crypto</td>
-              <td>20 pts</td>
-              <td><a href="exercicio.html">Ir para exercicio</a></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+<div class="grid gap-5 md:grid-cols-3">
+    @foreach([
+        ['01', 'Escolha seu desafio', 'Explore os problemas, leia os enunciados e confira as linguagens disponíveis.', '/exercises', 'Explorar problemas'],
+        ['02', 'Prepare sua solução', 'Desenvolva seu código e teste os exemplos de entrada e saída antes de enviar.', '/ajuda', 'Consultar o guia'],
+        ['03', 'Acompanhe a competição', 'Confira os resultados dos envios e a classificação dos times no placar.', '/scoreboard', 'Ver classificação'],
+    ] as [$number, $title, $description, $url, $action])
+    <article class="surface p-6"><span class="step-number">{{ $number }}</span><h2 class="text-xl font-semibold my-4">{{ $title }}</h2><p class="text-muted-foreground mb-6">{{ $description }}</p><a class="text-primary font-semibold" href="{{ $url }}">{{ $action }} →</a></article>
+    @endforeach
 </div>
 @endsection

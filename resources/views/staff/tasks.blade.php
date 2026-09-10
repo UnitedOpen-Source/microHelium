@@ -2,21 +2,19 @@
 
 @section('title', 'Tarefas')
 
+@section('description', 'Organize as entregas, impressões e solicitações dos participantes.')
+
 @section('content')
 <div class="space-y-6">
-    @if(session('success'))
-    <div class="px-4 py-3 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg text-sm">
-        {{ session('success') }}
-    </div>
-    @endif
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
             <h2 class="text-xl font-semibold text-foreground">Tarefas</h2>
             <p class="text-sm text-muted-foreground">{{ $contest?->name ?? 'Nenhum contest ativo' }} &mdash; entrega de balões, impressão e outras tarefas de staff</p>
         </div>
+        @include('partials.table-filter', ['tableId' => 'staff-tasks-table', 'searchLabel' => 'registros'])
         <div class="overflow-x-auto">
-            <table class="w-full">
+            <table id="staff-tasks-table" class="w-full">
                 <thead class="bg-muted/50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
@@ -63,7 +61,7 @@
                         <td colspan="6" class="px-4 py-12 text-center text-muted-foreground">Nenhuma tarefa cadastrada</td>
                     </tr>
                     @endforelse
-                </tbody>
+                <tr id="staff-tasks-table-empty" hidden><td colspan="6" class="text-center text-muted-foreground">Nenhum resultado para estes filtros.</td></tr></tbody>
             </table>
         </div>
     </div>
