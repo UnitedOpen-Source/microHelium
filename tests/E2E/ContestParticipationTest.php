@@ -255,7 +255,7 @@ class ContestParticipationTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewIs('exercises.index');
-        $response->assertViewHas('exercises');
+        $response->assertViewHas('problems');
 
         // Verify we can query problems directly from database
         $contestProblems = Problem::where('contest_id', $this->contest->id)
@@ -278,8 +278,15 @@ class ContestParticipationTest extends TestCase
     {
         $problem = $this->problems->first();
 
-        // Note: The route uses 'exercise_id' from exercises table, not problems table
-        // We'll test the problem model directly since routes use legacy schema
+        // The /exercise/{problem} route is now wired to the real Problem model
+        // (see App\Http\Controllers\ProblemController) instead of the legacy
+        // exercises table, so exercise this through an actual HTTP request.
+        $response = $this->actingAs($this->user)->get("/exercise/{$problem->id}");
+
+        $response->assertStatus(200);
+        $response->assertViewIs('exercises.show');
+        $response->assertViewHas('problem', fn ($viewProblem) => $viewProblem->id === $problem->id);
+        $response->assertSeeText($problem->name);
 
         // Verify problem has all required details
         $this->assertNotNull($problem->name);
@@ -374,6 +381,41 @@ CODE;
         $this->assertTrue($run->isPending());
         $this->assertFalse($run->isJudged());
         $this->assertFalse($run->isAccepted());
+    }
+
+    /**
+     * Test 5b: submitting through the actual web route creates a real Run
+     * and dispatches it to the auto-judge queue (App\Http\Controllers\SubmitController),
+     * instead of the old stub that wrote to the legacy exercise_team table
+     * and never judged anything.
+     */
+    public function test_user_can_submit_solution_through_the_real_route()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $problem = $this->problems->first();
+        $language = $this->languages->first();
+
+        $file = UploadedFile::fake()->createWithContent('solution.c', "int main(){return 0;}");
+
+        $response = $this->actingAs($this->user)->post("/submit/{$problem->id}", [
+            'language_id' => $language->id,
+            'source_file' => $file,
+        ]);
+
+        $response->assertRedirect(route('submissions'));
+
+        $this->assertDatabaseHas('runs', [
+            'contest_id' => $this->contest->id,
+            'user_id' => $this->user->user_id,
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'filename' => 'solution.c',
+            'status' => 'pending',
+        ]);
+
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\JudgeRunJob::class);
     }
 
     /**

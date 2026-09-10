@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\DB;
+use App\Models\Contest;
+use App\Models\Leaderboard;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ScoreboardController extends Controller
@@ -10,12 +11,23 @@ class ScoreboardController extends Controller
     /**
      * Display the scoreboard.
      *
+     * Rebuilt on top of the real BOCA-schema Leaderboard/Score models
+     * instead of the legacy `teams` table, which had no relation to actual
+     * judged runs.
+     *
      * @return \Illuminate\View\View
      */
     public function index()
     {
-        $teams = DB::table('teams')->orderBy('score', 'desc')->get();
-        return view('scoreboard', compact('teams'));
+        $contest = $this->resolveContest();
+        $problems = $contest ? $contest->problems()->orderBy('sort_order')->orderBy('short_name')->get() : collect();
+        $entries = $this->buildScoreboard($contest);
+
+        return view('scoreboard', [
+            'contest' => $contest,
+            'problems' => $problems,
+            'entries' => $entries,
+        ]);
     }
 
     /**
@@ -25,7 +37,8 @@ class ScoreboardController extends Controller
      */
     public function export(): StreamedResponse
     {
-        $teams = DB::table('teams')->orderBy('score', 'desc')->get();
+        $contest = $this->resolveContest();
+        $entries = $this->buildScoreboard($contest);
 
         $filename = 'placar_' . date('Y-m-d_H-i-s') . '.csv';
         $headers = [
@@ -33,26 +46,48 @@ class ScoreboardController extends Controller
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
 
-        $callback = function() use ($teams) {
+        $callback = function () use ($entries) {
             $file = fopen('php://output', 'w');
-            // BOM for Excel UTF-8 compatibility
-            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
-            // Header row
-            fputcsv($file, ['Posicao', 'Time', 'Problemas Resolvidos', 'Penalidade', 'Pontuacao']);
-            // Data rows
-            $position = 1;
-            foreach ($teams as $team) {
+            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fputcsv($file, ['Posicao', 'Time', 'Problemas Resolvidos', 'Penalidade']);
+            foreach ($entries as $entry) {
                 fputcsv($file, [
-                    $position++,
-                    $team->teamName ?? 'Time #' . $team->team_id,
-                    $team->problems_solved ?? 0,
-                    $team->penalty ?? 0,
-                    $team->score ?? 0,
+                    $entry['rank'],
+                    $entry['user']->fullname ?? ('Usuario #' . $entry['user_id']),
+                    $entry['problems_solved'],
+                    $entry['total_time'],
                 ]);
             }
             fclose($file);
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    private function buildScoreboard(?Contest $contest): array
+    {
+        if (!$contest) {
+            return [];
+        }
+
+        $entries = Leaderboard::getScoreboard($contest->id);
+
+        foreach ($entries as &$entry) {
+            $entry['user_id'] = $entry['user']->user_id ?? null;
+            $entry['problems'] = collect($entry['problems'])->keyBy('problem_id');
+        }
+
+        return $entries;
+    }
+
+    private function resolveContest(): ?Contest
+    {
+        $user = auth()->user();
+
+        if ($user?->contest_id) {
+            return Contest::find($user->contest_id);
+        }
+
+        return Contest::where('is_active', true)->first();
     }
 }

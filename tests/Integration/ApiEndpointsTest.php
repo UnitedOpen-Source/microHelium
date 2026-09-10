@@ -120,34 +120,23 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_scoreboard_api_returns_correct_data()
     {
-        // Create test teams
-        DB::table('teams')->insert([
-            [
-                'teamName' => 'Team Alpha',
-                'email' => 'alpha@test.com',
-                'score' => 100,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'teamName' => 'Team Beta',
-                'email' => 'beta@test.com',
-                'score' => 200,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        ]);
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        $alpha = \Helium\User::factory()->create(['fullname' => 'Team Alpha']);
+        $beta = \Helium\User::factory()->create(['fullname' => 'Team Beta']);
+
+        \App\Models\Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $alpha->user_id, 'problems_solved' => 1, 'total_time' => 100, 'rank' => 2]);
+        \App\Models\Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $beta->user_id, 'problems_solved' => 2, 'total_time' => 50, 'rank' => 1]);
 
         $response = $this->get('/scoreboard');
 
         $response->assertStatus(200)
             ->assertViewIs('scoreboard')
-            ->assertViewHas('teams');
+            ->assertViewHas('entries');
 
-        $teams = $response->viewData('teams');
-        $this->assertCount(2, $teams);
-        $this->assertEquals('Team Beta', $teams[0]->teamName); // Should be sorted by score desc
-        $this->assertEquals(200, $teams[0]->score);
+        $entries = $response->viewData('entries');
+        $this->assertCount(2, $entries);
+        $this->assertEquals('Team Beta', $entries[0]['user']->fullname); // Should be sorted by rank
+        $this->assertEquals(2, $entries[0]['problems_solved']);
     }
 
     /**
@@ -155,18 +144,9 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_scoreboard_export_csv_returns_correct_format()
     {
-
-
-        // Create test teams with team_id set
-        // Note: The route uses $team->name but the database column is teamName
-        // The teams table has team_id as primary key (not id)
-        $teamId = DB::table('teams')->insertGetId([
-            'teamName' => 'Team Test',
-            'email' => 'test@test.com',
-            'score' => 150,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        $user = \Helium\User::factory()->create(['fullname' => 'Team Test']);
+        \App\Models\Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $user->user_id, 'problems_solved' => 3, 'total_time' => 150, 'rank' => 1]);
 
         $response = $this->get('/scoreboard/export');
 
@@ -175,45 +155,27 @@ class ApiEndpointsTest extends TestCase
 
         $content = $response->streamedContent();
         $this->assertStringContainsString('Posicao', $content);
-        // The CSV should contain score and team information
+        // The CSV should contain team information and total time
         $this->assertStringContainsString('150', $content);
     }
 
     /**
-     * Test problem list API returns exercises
+     * Test problem list page returns problems for the active contest
      */
     public function test_problem_list_api_returns_exercises()
     {
-        // Create test exercises
-        DB::table('exercises')->insert([
-            [
-                'exerciseName' => 'Test Problem 1',
-                'category' => 'Algorithm',
-                'difficulty' => 'easy',
-                'score' => 100,
-                'expectedOutcome' => 'Test outcome',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'exerciseName' => 'Test Problem 2',
-                'category' => 'Data Structure',
-                'difficulty' => 'medium',
-                'score' => 200,
-                'expectedOutcome' => 'Test outcome 2',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        ]);
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        \App\Models\Problem::factory()->create(['contest_id' => $contest->id, 'short_name' => 'A', 'name' => 'Test Problem 1']);
+        \App\Models\Problem::factory()->create(['contest_id' => $contest->id, 'short_name' => 'B', 'name' => 'Test Problem 2']);
 
         $response = $this->get('/exercises');
 
         $response->assertStatus(200)
             ->assertViewIs('exercises.index')
-            ->assertViewHas('exercises');
+            ->assertViewHas('problems');
 
-        $exercises = $response->viewData('exercises');
-        $this->assertCount(2, $exercises);
+        $problems = $response->viewData('problems');
+        $this->assertCount(2, $problems);
     }
 
     /**
@@ -221,26 +183,20 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_single_problem_detail_returns_correct_data()
     {
-        // Create test exercise
-        $exerciseId = DB::table('exercises')->insertGetId([
-            'exerciseName' => 'Detailed Problem',
-            'category' => 'Algorithm',
-            'difficulty' => 'hard',
-            'score' => 300,
-            'expectedOutcome' => 'Expected output',
-            'created_at' => now(),
-            'updated_at' => now(),
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        $problem = \App\Models\Problem::factory()->create([
+            'contest_id' => $contest->id,
+            'name' => 'Detailed Problem',
         ]);
 
-        $response = $this->get("/exercise/{$exerciseId}");
+        $response = $this->get("/exercise/{$problem->id}");
 
         $response->assertStatus(200)
             ->assertViewIs('exercises.show')
-            ->assertViewHas('exercise');
+            ->assertViewHas('problem');
 
-        $exercise = $response->viewData('exercise');
-        $this->assertEquals('Detailed Problem', $exercise->exerciseName);
-        $this->assertEquals('hard', $exercise->difficulty);
+        $viewProblem = $response->viewData('problem');
+        $this->assertEquals('Detailed Problem', $viewProblem->name);
     }
 
     /**

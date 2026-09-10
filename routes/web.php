@@ -16,10 +16,10 @@ Route::get('/', [\App\Http\Controllers\HomeController::class, 'index']);
 
 Route::get('/home', [\App\Http\Controllers\HomeController::class, 'index'])->middleware('auth')->name('home');
 
-// Exercises
-Route::get('/exercises', [\App\Http\Controllers\ExerciseController::class, 'index'])->name('exercises');
+// Problems (real BOCA-schema Problem model, scoped to the user's contest)
+Route::get('/exercises', [\App\Http\Controllers\ProblemController::class, 'index'])->name('exercises');
 
-Route::get('/exercise/{id}', [\App\Http\Controllers\ExerciseController::class, 'show'])->name('exercise.show');
+Route::get('/exercise/{problem}', [\App\Http\Controllers\ProblemController::class, 'show'])->name('exercise.show');
 
 // Scoreboard
 Route::get('/scoreboard', [\App\Http\Controllers\ScoreboardController::class, 'index'])->name('scoreboard');
@@ -35,34 +35,13 @@ Route::post('/clarifications', [\App\Http\Controllers\ClarificationController::c
 // Submissions
 Route::get('/submissions', [\App\Http\Controllers\SubmissionController::class, 'index'])->middleware('auth')->name('submissions');
 
-// Submit solution
-Route::get('/submit/{id}', function ($id) {
-    $exercise = DB::table('exercises')->where('exercise_id', $id)->first();
-    if (!$exercise) {
-        abort(404);
-    }
-    return view('exercises.submit', compact('exercise'));
-})->name('exercise.submit');
+// Submit solution -- creates a real Run and dispatches it to the auto-judge
+// queue (see App\Http\Controllers\SubmitController). Previously this was a
+// stub that wrote a 'pending' row to the legacy exercise_team table and
+// never actually judged anything.
+Route::get('/submit/{problem}', [\App\Http\Controllers\SubmitController::class, 'create'])->name('exercise.submit');
 
-Route::post('/submit/{id}', function ($id) {
-    // Handle file upload and submission processing
-    // This would integrate with the auto-judge system
-    $exercise = DB::table('exercises')->where('exercise_id', $id)->first();
-    if (!$exercise) {
-        abort(404);
-    }
-
-    DB::table('exercise_team')->insert([
-        'exercise_id' => $id,
-        'team_id' => auth()->id() ?? 1,
-        'language' => request('language'),
-        'result' => 'pending',
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    return redirect()->route('submissions')->with('success', 'Submissao enviada! Aguarde o julgamento.');
-});
+Route::post('/submit/{problem}', [\App\Http\Controllers\SubmitController::class, 'store']);
 
 // Help page
 Route::get('/ajuda', function () {
