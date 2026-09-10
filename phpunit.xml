@@ -23,6 +23,9 @@
         <testsuite name="E2E">
             <directory>tests/E2E</directory>
         </testsuite>
+        <testsuite name="Smoke">
+            <directory>tests/Smoke</directory>
+        </testsuite>
     </testsuites>
     <coverage>
         <report>

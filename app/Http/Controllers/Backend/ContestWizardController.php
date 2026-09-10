@@ -46,7 +46,7 @@ class ContestWizardController extends Controller
 
         $hackathonId = DB::table('hackathons')->insertGetId([
             'eventName' => $validated['name'],
-            'description' => $validated['description'],
+            'description' => $validated['description'] ?? null,
             'starts_at' => $startTime->format('Y-m-d H:i:s'),
             'ends_at' => $endTime->format('Y-m-d H:i:s'),
             'created_at' => now(),
@@ -55,7 +55,7 @@ class ContestWizardController extends Controller
 
         $contestId = DB::table('contests')->insertGetId([
             'name' => $validated['name'],
-            'description' => $validated['description'],
+            'description' => $validated['description'] ?? null,
             'start_time' => $startTime->format('Y-m-d H:i:s'),
             'duration' => $validated['duration'],
             'freeze_time' => $validated['freeze_time'],
@@ -104,11 +104,13 @@ class ContestWizardController extends Controller
             $letters = range('A', 'Z');
             $colors = [['name' => 'Vermelho', 'hex' => '#EF4444'], ['name' => 'Azul', 'hex' => '#3B82F6'], ['name' => 'Verde', 'hex' => '#22C55E'], ['name' => 'Amarelo', 'hex' => '#EAB308'], ['name' => 'Roxo', 'hex' => '#A855F7'], ['name' => 'Rosa', 'hex' => '#EC4899'], ['name' => 'Laranja', 'hex' => '#F97316'], ['name' => 'Ciano', 'hex' => '#06B6D4'], ['name' => 'Indigo', 'hex' => '#6366F1'], ['name' => 'Teal', 'hex' => '#14B8A6']];
             foreach ($problemBank as $sortOrder => $problem) {
-                DB::table('problems')->insert([
+                $basename = Str::slug($problem->code);
+
+                $problemId = DB::table('problems')->insertGetId([
                     'contest_id' => $contestId,
                     'short_name' => $letters[$sortOrder] ?? chr(65 + $sortOrder),
                     'name' => $problem->name,
-                    'basename' => Str::slug($problem->code),
+                    'basename' => $basename,
                     'description' => $problem->description . "\n\n## Entrada\n" . $problem->input_description . "\n\n## Saida\n" . $problem->output_description,
                     'time_limit' => $problem->time_limit,
                     'memory_limit' => $problem->memory_limit,
@@ -120,6 +122,33 @@ class ContestWizardController extends Controller
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+
+                // Problem Bank only carries one sample input/output pair (no
+                // hidden test cases), but without at least this one, the
+                // problem has zero TestCase rows and AutoJudgeService would
+                // return "CS - no test cases found" for every submission,
+                // making every wizard-created contest unjudgeable. Not a
+                // substitute for a real problem package with hidden cases,
+                // but it makes the contest actually functional out of the box.
+                if (filled($problem->sample_input) && filled($problem->sample_output)) {
+                    $inputRelative = "problems/{$contestId}/{$basename}/input/1";
+                    $outputRelative = "problems/{$contestId}/{$basename}/output/1";
+
+                    \Illuminate\Support\Facades\Storage::disk('local')->put($inputRelative, $problem->sample_input);
+                    \Illuminate\Support\Facades\Storage::disk('local')->put($outputRelative, $problem->sample_output);
+
+                    DB::table('test_cases')->insert([
+                        'problem_id' => $problemId,
+                        'number' => 1,
+                        'input_file' => $inputRelative,
+                        'output_file' => $outputRelative,
+                        'input_hash' => hash('sha256', $problem->sample_input),
+                        'output_hash' => hash('sha256', $problem->sample_output),
+                        'is_sample' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
             }
         }
 

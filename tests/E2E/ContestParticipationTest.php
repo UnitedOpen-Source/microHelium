@@ -411,10 +411,12 @@ CODE;
             'user_id' => $this->user->user_id,
             'problem_id' => $problem->id,
             'language_id' => $language->id,
-            // The extension is forced to match the selected language (not
-            // the uploaded file's own extension) -- see
+            // The extension is forced to match the selected language's real
+            // file extension (not the uploaded file's own extension, and not
+            // $language->extension directly since that can be a
+            // compiler-variant id like "c_gcc13") -- see
             // test_uploaded_filename_extension_is_forced_to_match_the_selected_language.
-            'filename' => 'solution.' . $language->extension,
+            'filename' => 'solution.' . $language->getFileExtension(),
             'status' => 'pending',
         ]);
 
@@ -564,7 +566,12 @@ CODE;
 
         $run = Run::where('problem_id', $problem->id)->where('user_id', $this->user->user_id)->firstOrFail();
 
-        $this->assertSame('solution.' . $language->extension, $run->filename);
+        // $language->extension for this fixture is "c_gcc13" (a
+        // compiler-variant id from Language::getDefaultLanguages(), not a
+        // real file extension) -- the actual file must get the real
+        // extension gcc recognizes ("c"), via Language::getFileExtension().
+        $this->assertSame('solution.c', $run->filename);
+        $this->assertSame('c', $language->getFileExtension());
     }
 
     public function test_pasted_code_longer_than_the_max_file_size_is_rejected()
