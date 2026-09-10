@@ -159,7 +159,15 @@ class AutoJudgeService
 
         // Compare output
         $actualOutput = file_exists($outputFile) ? file_get_contents($outputFile) : '';
-        $compareResult = $this->compareOutput($expectedOutput, $actualOutput, $problem, $language);
+        $compareResult = $this->compareOutput(
+            $expectedOutput,
+            $actualOutput,
+            $problem,
+            $language,
+            $inputFile,
+            $testCase->getOutputPath(),
+            $outputFile
+        );
 
         return $compareResult;
     }
@@ -250,12 +258,23 @@ class AutoJudgeService
             "-- {$command}";
     }
 
-    protected function compareOutput(string $expected, string $actual, Problem $problem, object $language): array
-    {
-        // Check for custom compare script
+    protected function compareOutput(
+        string $expected,
+        string $actual,
+        Problem $problem,
+        object $language,
+        ?string $inputFile = null,
+        ?string $expectedOutputFile = null,
+        ?string $actualOutputFile = null
+    ): array {
+        // Check for a custom/special-judge compare script (BOCA's compare/<lang>
+        // convention), for problems with multiple valid outputs, numeric
+        // tolerance, order-independent results, etc. that a plain diff can't
+        // handle. Convention: `<script> <input> <expected_output> <actual_output>`,
+        // exit code 0 = correct, anything else = incorrect.
         $compareScript = $problem->getCompareScriptPath($language->extension);
-        if (file_exists($compareScript)) {
-            // Custom comparison would go here
+        if ($inputFile && $expectedOutputFile && $actualOutputFile && file_exists($compareScript)) {
+            return $this->runCompareScript($compareScript, $inputFile, $expectedOutputFile, $actualOutputFile);
         }
 
         // Normalize line endings
@@ -307,6 +326,30 @@ class AutoJudgeService
             'message' => 'Wrong Answer',
             'stdout' => '',
             'stderr' => '',
+        ];
+    }
+
+    protected function runCompareScript(string $script, string $inputFile, string $expectedOutputFile, string $actualOutputFile): array
+    {
+        $result = Process::timeout($this->defaultTimeLimit * 2)
+            ->run(['bash', $script, $inputFile, $expectedOutputFile, $actualOutputFile]);
+
+        if ($result->exitCode() === 0) {
+            return [
+                'success' => true,
+                'verdict' => 'AC',
+                'message' => 'Accepted (custom compare script)',
+                'stdout' => '',
+                'stderr' => '',
+            ];
+        }
+
+        return [
+            'success' => false,
+            'verdict' => 'WA',
+            'message' => 'Wrong Answer (custom compare script)',
+            'stdout' => $result->output(),
+            'stderr' => $result->errorOutput(),
         ];
     }
 

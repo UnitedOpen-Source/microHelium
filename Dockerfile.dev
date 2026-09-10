@@ -28,7 +28,10 @@ RUN apk add --no-cache \
     gcc \
     g++ \
     make \
-    python3
+    python3 \
+    # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
+    # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
+    bash
 
 # Configure and install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
