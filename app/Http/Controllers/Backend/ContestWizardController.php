@@ -114,77 +114,93 @@ class ContestWizardController extends Controller
      *
      * @return int number of problems actually added
      */
-    public static function addProblemsFromBank(int $contestId, array $problemBankIds, int $startingSortOrder = 0): int
+    public static function addProblemsFromBank(int $contestId, array $problemBankIds): int
     {
         if (empty($problemBankIds)) {
             return 0;
         }
 
-        $problemBank = DB::table('problem_bank')->whereIn('id', $problemBankIds)->where('is_active', true)->get();
-        $letters = range('A', 'Z');
-        $colors = [['name' => 'Vermelho', 'hex' => '#EF4444'], ['name' => 'Azul', 'hex' => '#3B82F6'], ['name' => 'Verde', 'hex' => '#22C55E'], ['name' => 'Amarelo', 'hex' => '#EAB308'], ['name' => 'Roxo', 'hex' => '#A855F7'], ['name' => 'Rosa', 'hex' => '#EC4899'], ['name' => 'Laranja', 'hex' => '#F97316'], ['name' => 'Ciano', 'hex' => '#06B6D4'], ['name' => 'Indigo', 'hex' => '#6366F1'], ['name' => 'Teal', 'hex' => '#14B8A6']];
+        return DB::transaction(function () use ($contestId, $problemBankIds) {
+            // Lock this contest's existing problems for the duration of the
+            // transaction: without it, two concurrent calls (two admins, or
+            // a double-submit) could both read the same "next sort_order"
+            // and both pass the same-basename existence check before either
+            // insert commits, colliding on the (contest_id, short_name) or
+            // (contest_id, basename) unique constraints.
+            $existingCount = DB::table('problems')->where('contest_id', $contestId)->lockForUpdate()->count();
+            $existingBasenames = DB::table('problems')->where('contest_id', $contestId)->pluck('basename');
 
-        $added = 0;
-        foreach ($problemBank as $i => $problem) {
-            $sortOrder = $startingSortOrder + $i;
-            $basename = Str::slug($problem->code);
+            $problemBank = DB::table('problem_bank')->whereIn('id', $problemBankIds)->where('is_active', true)->get();
+            $letters = range('A', 'Z');
+            $colors = [['name' => 'Vermelho', 'hex' => '#EF4444'], ['name' => 'Azul', 'hex' => '#3B82F6'], ['name' => 'Verde', 'hex' => '#22C55E'], ['name' => 'Amarelo', 'hex' => '#EAB308'], ['name' => 'Roxo', 'hex' => '#A855F7'], ['name' => 'Rosa', 'hex' => '#EC4899'], ['name' => 'Laranja', 'hex' => '#F97316'], ['name' => 'Ciano', 'hex' => '#06B6D4'], ['name' => 'Indigo', 'hex' => '#6366F1'], ['name' => 'Teal', 'hex' => '#14B8A6']];
 
-            // Same problem bank entry might already have been added to this
-            // contest -- keep this idempotent rather than erroring on the
-            // (contest_id, short_name)/(contest_id, basename) unique
-            // constraints.
-            $alreadyAdded = DB::table('problems')->where('contest_id', $contestId)->where('basename', $basename)->exists();
-            if ($alreadyAdded) {
-                continue;
-            }
+            $added = 0;
+            $sortOrder = $existingCount;
 
-            $problemId = DB::table('problems')->insertGetId([
-                'contest_id' => $contestId,
-                'short_name' => $letters[$sortOrder] ?? chr(65 + $sortOrder),
-                'name' => $problem->name,
-                'basename' => $basename,
-                'description' => $problem->description . "\n\n## Entrada\n" . $problem->input_description . "\n\n## Saida\n" . $problem->output_description,
-                'time_limit' => $problem->time_limit,
-                'memory_limit' => $problem->memory_limit,
-                'color_name' => $colors[$sortOrder % count($colors)]['name'],
-                'color_hex' => $colors[$sortOrder % count($colors)]['hex'],
-                'auto_judge' => true,
-                'is_fake' => false,
-                'sort_order' => $sortOrder,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            foreach ($problemBank as $problem) {
+                $basename = Str::slug($problem->code);
 
-            // Problem Bank only carries one sample input/output pair (no
-            // hidden test cases), but without at least this one, the
-            // problem has zero TestCase rows and AutoJudgeService would
-            // return "CS - no test cases found" for every submission,
-            // making the problem unjudgeable. Not a substitute for a real
-            // problem package with hidden cases, but it makes the problem
-            // actually functional out of the box.
-            if (filled($problem->sample_input) && filled($problem->sample_output)) {
-                $inputRelative = "problems/{$contestId}/{$basename}/input/1";
-                $outputRelative = "problems/{$contestId}/{$basename}/output/1";
+                // Same problem bank entry might already have been added to
+                // this contest -- keep this idempotent rather than erroring
+                // on the (contest_id, short_name)/(contest_id, basename)
+                // unique constraints. Skipped entries must NOT consume a
+                // sort_order/letter, or a later call could reuse one still
+                // held by an existing problem.
+                if ($existingBasenames->contains($basename)) {
+                    continue;
+                }
 
-                Storage::disk('local')->put($inputRelative, $problem->sample_input);
-                Storage::disk('local')->put($outputRelative, $problem->sample_output);
-
-                DB::table('test_cases')->insert([
-                    'problem_id' => $problemId,
-                    'number' => 1,
-                    'input_file' => $inputRelative,
-                    'output_file' => $outputRelative,
-                    'input_hash' => hash('sha256', $problem->sample_input),
-                    'output_hash' => hash('sha256', $problem->sample_output),
-                    'is_sample' => true,
+                $problemId = DB::table('problems')->insertGetId([
+                    'contest_id' => $contestId,
+                    'short_name' => $letters[$sortOrder] ?? chr(65 + $sortOrder),
+                    'name' => $problem->name,
+                    'basename' => $basename,
+                    'description' => $problem->description . "\n\n## Entrada\n" . $problem->input_description . "\n\n## Saida\n" . $problem->output_description,
+                    'time_limit' => $problem->time_limit,
+                    'memory_limit' => $problem->memory_limit,
+                    'color_name' => $colors[$sortOrder % count($colors)]['name'],
+                    'color_hex' => $colors[$sortOrder % count($colors)]['hex'],
+                    'auto_judge' => true,
+                    'is_fake' => false,
+                    'sort_order' => $sortOrder,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+
+                $existingBasenames->push($basename);
+                $sortOrder++;
+
+                // Problem Bank only carries one sample input/output pair (no
+                // hidden test cases), but without at least this one, the
+                // problem has zero TestCase rows and AutoJudgeService would
+                // return "CS - no test cases found" for every submission,
+                // making the problem unjudgeable. Not a substitute for a
+                // real problem package with hidden cases, but it makes the
+                // problem actually functional out of the box.
+                if (filled($problem->sample_input) && filled($problem->sample_output)) {
+                    $inputRelative = "problems/{$contestId}/{$basename}/input/1";
+                    $outputRelative = "problems/{$contestId}/{$basename}/output/1";
+
+                    Storage::disk('local')->put($inputRelative, $problem->sample_input);
+                    Storage::disk('local')->put($outputRelative, $problem->sample_output);
+
+                    DB::table('test_cases')->insert([
+                        'problem_id' => $problemId,
+                        'number' => 1,
+                        'input_file' => $inputRelative,
+                        'output_file' => $outputRelative,
+                        'input_hash' => hash('sha256', $problem->sample_input),
+                        'output_hash' => hash('sha256', $problem->sample_output),
+                        'is_sample' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                $added++;
             }
 
-            $added++;
-        }
-
-        return $added;
+            return $added;
+        });
     }
 }

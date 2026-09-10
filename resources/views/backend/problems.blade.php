@@ -51,7 +51,7 @@
                         <td class="px-4 py-3 font-bold" style="color: {{ $problem->color_hex ?? 'inherit' }}">{{ $problem->short_name }}</td>
                         <td class="px-4 py-3 text-sm">{{ $problem->name }}</td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $problem->time_limit }}s / {{ $problem->memory_limit }}MB</td>
-                        <td class="px-4 py-3 text-sm text-muted-foreground">{{ $problem->testCases()->count() }}</td>
+                        <td class="px-4 py-3 text-sm text-muted-foreground">{{ $problem->test_cases_count }}</td>
                     </tr>
                     @empty
                     <tr>

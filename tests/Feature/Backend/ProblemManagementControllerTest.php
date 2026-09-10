@@ -100,6 +100,63 @@ class ProblemManagementControllerTest extends TestCase
         $this->assertCount(1, Problem::where('contest_id', $contest->id)->get());
     }
 
+    /**
+     * Regression test for a bug the automated code review found: deriving
+     * short_name from the queried bank collection's array index (rather
+     * than from problems actually inserted) let a skipped duplicate leave a
+     * gap, which a later call's independently-computed starting point could
+     * then reuse, colliding with an existing short_name and throwing on the
+     * unique constraint.
+     */
+    public function test_adding_problems_across_multiple_calls_never_collides_on_short_name()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+
+        $make = fn (string $code) => ProblemBank::create([
+            'code' => $code,
+            'name' => $code,
+            'description' => 'desc',
+            'input_description' => 'in',
+            'output_description' => 'out',
+            'sample_input' => "1\n",
+            'sample_output' => "1\n",
+            'time_limit' => 1,
+            'memory_limit' => 256,
+            'difficulty' => 'easy',
+            'is_active' => true,
+        ]);
+        $p1 = $make('P1');
+        $p2 = $make('P2');
+        $p3 = $make('P3');
+        $p4 = $make('P4');
+
+        // Call 1: add P1, P2 -> A, B.
+        $this->actingAs($admin)->post('/backend/exercises', [
+            'contest_id' => $contest->id,
+            'problems' => [$p1->id, $p2->id],
+        ])->assertRedirect();
+
+        // Call 2: resubmit P1 (already added, skipped) alongside new P3 ->
+        // P3 must get C, not skip to D.
+        $this->actingAs($admin)->post('/backend/exercises', [
+            'contest_id' => $contest->id,
+            'problems' => [$p1->id, $p3->id],
+        ])->assertRedirect();
+
+        // Call 3: add P4 alone -> must get D, and must not collide with
+        // whatever letter P3 actually received.
+        $this->actingAs($admin)->post('/backend/exercises', [
+            'contest_id' => $contest->id,
+            'problems' => [$p4->id],
+        ])->assertRedirect(); // would 500 on the pre-fix bug
+
+        $shortNames = Problem::where('contest_id', $contest->id)->pluck('short_name');
+        $this->assertCount(4, $shortNames);
+        $this->assertCount(4, $shortNames->unique(), 'no two problems in the same contest may share a short_name');
+        $this->assertEqualsCanonicalizing(['A', 'B', 'C', 'D'], $shortNames->all());
+    }
+
     public function test_available_bank_items_excludes_problems_already_added_to_the_contest()
     {
         $admin = $this->createAdminUser();

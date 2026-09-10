@@ -26,21 +26,24 @@ class ProblemManagementController extends Controller
         $contests = Contest::orderByDesc('created_at')->get();
 
         $contestId = (int) $request->query('contest_id', 0);
-        $contest = $contestId
-            ? $contests->firstWhere('id', $contestId)
-            : $contests->first();
+        // A requested id that doesn't match any contest (stale bookmark,
+        // deleted contest) must not be confused with "no contests exist at
+        // all" -- fall back to the first available contest either way.
+        $contest = ($contestId ? $contests->firstWhere('id', $contestId) : null)
+            ?? $contests->first();
 
         $problems = collect();
         $availableBankItems = collect();
 
         if ($contest) {
             $problems = Problem::where('contest_id', $contest->id)
+                ->withCount('testCases')
                 ->orderBy('sort_order')
                 ->get();
 
             $addedBasenames = $problems->pluck('basename');
 
-            $availableBankItems = ProblemBank::where('is_active', true)
+            $availableBankItems = ProblemBank::active()
                 ->orderBy('name')
                 ->get()
                 ->reject(fn (ProblemBank $item) => $addedBasenames->contains(Str::slug($item->code)));
@@ -62,12 +65,9 @@ class ProblemManagementController extends Controller
             'problems.*' => 'integer|exists:problem_bank,id',
         ]);
 
-        $startingSortOrder = Problem::where('contest_id', $validated['contest_id'])->count();
-
         $added = ContestWizardController::addProblemsFromBank(
             (int) $validated['contest_id'],
-            $validated['problems'],
-            $startingSortOrder
+            $validated['problems']
         );
 
         $message = $added > 0
