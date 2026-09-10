@@ -184,7 +184,9 @@ class AutoJudgeServiceTest extends TestCase
         $this->createTestData();
         $run = Run::first();
         $runDir = storage_path("app/workdir/runs/{$run->id}");
-        mkdir($runDir, 0755, true);
+        if (!is_dir($runDir)) {
+            mkdir($runDir, 0755, true);
+        }
         
         $this->service->cleanup($run);
 

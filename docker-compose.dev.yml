@@ -18,6 +18,26 @@ services:
       redis:
         condition: service_healthy
 
+  # Queue Worker (auto-judge jobs dispatched via App\Jobs\JudgeRunJob)
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: microhelium-queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --sleep=1 --tries=3 --max-time=3600
+    volumes:
+      - .:/var/www/html
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+    networks:
+      - microhelium
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # Nginx Web Server
   webserver:
     image: nginx:alpine

@@ -1,30 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Submeter - ' . ($exercise->exerciseName ?? 'Problema'))
-
-@php
-    // Get active languages from the current contest or use defaults
-    $activeLanguages = [];
-    if (\Illuminate\Support\Facades\Schema::hasTable('languages') && \Illuminate\Support\Facades\Schema::hasTable('contests')) {
-        $contest = \Illuminate\Support\Facades\DB::table('contests')->where('is_active', true)->first();
-        if ($contest) {
-            $activeLanguages = \Illuminate\Support\Facades\DB::table('languages')
-                ->where('contest_id', $contest->id)
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get();
-        }
-    }
-    // Fallback to default languages if no contest or no languages
-    if ($activeLanguages instanceof \Illuminate\Support\Collection && $activeLanguages->isEmpty()) {
-        $activeLanguages = collect(\App\Models\Language::getDefaultLanguages())
-            ->filter(fn($l) => $l['is_active'] ?? true);
-    }
-    // Get accepted extensions for file input
-    $extensions = $activeLanguages instanceof \Illuminate\Support\Collection
-        ? $activeLanguages->pluck('extension')->map(fn($e) => '.' . $e)->implode(',')
-        : collect($activeLanguages)->pluck('extension')->map(fn($e) => '.' . $e)->implode(',');
-@endphp
+@section('title', 'Submeter - ' . $problem->name)
 
 @section('content')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -40,22 +16,27 @@
                     </div>
                     <div>
                         <h2 class="text-xl font-semibold text-foreground">Submeter Solucao</h2>
-                        <p class="text-sm text-muted-foreground">Problema: <strong>{{ $exercise->exerciseName }}</strong></p>
+                        <p class="text-sm text-muted-foreground">Problema: <strong>{{ $problem->short_name }} - {{ $problem->name }}</strong></p>
                     </div>
                 </div>
             </div>
 
-            <form action="/submit/{{ $exercise->exercise_id }}" method="POST" enctype="multipart/form-data" class="p-6 space-y-6">
+            @if ($errors->any())
+            <div class="mx-6 mt-6 px-4 py-3 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm">
+                {{ $errors->first() }}
+            </div>
+            @endif
+
+            <form action="{{ route('exercise.submit', $problem) }}" method="POST" enctype="multipart/form-data" class="p-6 space-y-6">
                 @csrf
 
                 <!-- Language Selection -->
                 <div>
                     <label class="block text-sm font-medium text-foreground mb-2">Linguagem de Programacao</label>
-                    <select name="language" required class="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
+                    <select name="language_id" required class="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
                         <option value="">Selecione a linguagem...</option>
-                        @foreach($activeLanguages as $lang)
-                            @php $langData = is_array($lang) ? $lang : (array)$lang; @endphp
-                            <option value="{{ $langData['extension'] }}">{{ $langData['name'] }}</option>
+                        @foreach($languages as $lang)
+                            <option value="{{ $lang->id }}">{{ $lang->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -64,9 +45,9 @@
                 <div>
                     <label class="block text-sm font-medium text-foreground mb-2">Arquivo de Codigo Fonte</label>
                     <div class="relative">
-                        <input type="file" name="source_code" id="source_code" accept="{{ $extensions }}"
+                        <input type="file" name="source_file" id="source_file"
                                class="hidden" onchange="updateFileName(this)">
-                        <label for="source_code" class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
+                        <label for="source_file" class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
                             <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-placeholder">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-muted-foreground mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -74,7 +55,6 @@
                                 <p class="text-sm text-muted-foreground">
                                     <span class="font-medium text-primary">Clique para selecionar</span> ou arraste o arquivo
                                 </p>
-                                <p class="text-xs text-muted-foreground mt-1">Extensoes: {{ str_replace('.', '', $extensions) }}</p>
                             </div>
                             <div class="hidden flex-col items-center justify-center pt-5 pb-6" id="upload-selected">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -96,12 +76,12 @@ int main() {
     // Seu codigo aqui
     return 0;
 }"></textarea>
-                    <p class="text-xs text-muted-foreground mt-1">Se voce colar codigo aqui, o arquivo enviado sera ignorado.</p>
+                    <p class="text-xs text-muted-foreground mt-1">Se voce enviar um arquivo, o codigo colado aqui sera ignorado.</p>
                 </div>
 
                 <!-- Actions -->
                 <div class="flex gap-4 pt-4 border-t border-border">
-                    <a href="/exercise/{{ $exercise->exercise_id }}" class="flex-1 px-4 py-2.5 text-center text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors">
+                    <a href="{{ route('exercise.show', $problem) }}" class="flex-1 px-4 py-2.5 text-center text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors">
                         Voltar ao Problema
                     </a>
                     <button type="submit" class="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
@@ -131,19 +111,15 @@ int main() {
                 <dl class="space-y-3">
                     <div class="flex justify-between">
                         <dt class="text-sm text-muted-foreground">Problema</dt>
-                        <dd class="text-sm font-medium text-foreground">{{ $exercise->exerciseName }}</dd>
-                    </div>
-                    <div class="flex justify-between">
-                        <dt class="text-sm text-muted-foreground">Pontos</dt>
-                        <dd class="text-sm font-medium text-foreground">{{ $exercise->score ?? 100 }} pts</dd>
+                        <dd class="text-sm font-medium text-foreground">{{ $problem->short_name }}</dd>
                     </div>
                     <div class="flex justify-between">
                         <dt class="text-sm text-muted-foreground">Tempo Limite</dt>
-                        <dd class="text-sm font-medium text-foreground">{{ $exercise->time_limit ?? 10 }}s</dd>
+                        <dd class="text-sm font-medium text-foreground">{{ $problem->time_limit }}s</dd>
                     </div>
                     <div class="flex justify-between">
                         <dt class="text-sm text-muted-foreground">Memoria</dt>
-                        <dd class="text-sm font-medium text-foreground">{{ $exercise->memory_limit ?? 512 }}MB</dd>
+                        <dd class="text-sm font-medium text-foreground">{{ $problem->memory_limit }}MB</dd>
                     </div>
                 </dl>
             </div>
@@ -161,10 +137,9 @@ int main() {
             </div>
             <div class="p-4">
                 <div class="flex flex-wrap gap-2">
-                    @foreach($activeLanguages as $lang)
-                        @php $langData = is_array($lang) ? $lang : (array)$lang; @endphp
+                    @foreach($languages as $lang)
                         <span class="px-2 py-1 text-xs font-medium bg-primary/10 text-primary rounded">
-                            {{ $langData['name'] }}
+                            {{ $lang->name }}
                         </span>
                     @endforeach
                 </div>
@@ -188,12 +163,6 @@ int main() {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
                         Teste seu codigo localmente antes de enviar
-                    </li>
-                    <li class="flex items-start gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                        Verifique o formato de entrada e saida
                     </li>
                     <li class="flex items-start gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
