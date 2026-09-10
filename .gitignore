@@ -9,3 +9,6 @@ Homestead.json
 Homestead.yaml
 npm-debug.log
 .env
+
+# BOCA reference source, kept locally for comparison only - not part of this project
+/boca-master
