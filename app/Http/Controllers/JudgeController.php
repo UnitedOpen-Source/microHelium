@@ -89,7 +89,9 @@ class JudgeController extends Controller
             'answer_id' => $answer->id,
             'judge_id' => auth()->id(),
             'judge_site_id' => auth()->user()->site_id,
-            'judged_time' => $run->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Run can outlive its contest
+            // being soft-deleted, so ->contest can resolve to null here.
+            'judged_time' => $run->contest?->getContestTime() ?? 0,
         ]);
 
         Score::updateScore($run);

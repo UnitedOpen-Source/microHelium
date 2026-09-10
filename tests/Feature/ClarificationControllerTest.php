@@ -106,6 +106,29 @@ class ClarificationControllerTest extends TestCase
     }
 
     /**
+     * Nothing deactivates other contests when one is activated, so more
+     * than one row can have is_active=true. If the resolved "active"
+     * contest isn't the one the user's own site belongs to, using that
+     * site anyway would insert a clarification whose contest_id and
+     * site_id disagree on which contest they belong to -- falls back to
+     * the resolved contest's own first site instead.
+     */
+    public function test_falls_back_to_the_active_contests_own_site_when_users_site_belongs_to_a_different_contest()
+    {
+        DB::table('contests')->insert(['id' => 2, 'name' => 'Other Contest', 'is_active' => true, 'duration' => 300, 'start_time' => now()]);
+        DB::table('sites')->insert(['id' => 2, 'contest_id' => 2, 'name' => 'Other Contest Site']);
+        $user = User::factory()->create(['site_id' => 2]);
+
+        $response = $this->actingAs($user)->post('/clarifications', ['question' => 'Which contest/site am I tagged with?']);
+
+        $response->assertRedirect(route('clarifications'));
+        $clarification = DB::table('clarifications')->where('question', 'Which contest/site am I tagged with?')->first();
+        $this->assertNotNull($clarification);
+        $site = DB::table('sites')->where('id', $clarification->site_id)->first();
+        $this->assertSame($clarification->contest_id, $site->contest_id, 'clarification contest_id and its site must belong to the same contest');
+    }
+
+    /**
      * Test storing a clarification fails if the active contest has no site.
      */
     public function test_storing_clarification_fails_if_active_contest_has_no_site()

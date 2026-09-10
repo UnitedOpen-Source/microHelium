@@ -50,10 +50,17 @@ class ClarificationController extends Controller
         // from a team at any other site, which would have made site-scoped
         // clarification answering (issue #18) silently show the wrong
         // (or no) questions to that site's coordinator/judges.
+        // Constrained to $activeContest's id too: nothing deactivates other
+        // contests when one is activated, so more than one row can have
+        // is_active=true. If the user's own site happens to belong to a
+        // different contest than the one resolved here, using it anyway
+        // would insert a clarification whose contest_id and site_id
+        // disagree on which contest they belong to.
         $siteId = auth()->user()->site_id;
         $site = $siteId
-            ? DB::table('sites')->where('id', $siteId)->first()
-            : DB::table('sites')->where('contest_id', $activeContest->id)->first();
+            ? DB::table('sites')->where('id', $siteId)->where('contest_id', $activeContest->id)->first()
+            : null;
+        $site ??= DB::table('sites')->where('contest_id', $activeContest->id)->first();
         if (!$site) {
             return redirect()->route('clarifications')->with('error', 'O concurso ativo nao possui um site configurado.');
         }

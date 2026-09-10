@@ -36,7 +36,7 @@
                         @forelse($recentRuns as $run)
                         <tr>
                             <td class="px-4 py-3 text-sm">{{ $run->user->fullname ?? $run->user->username }}</td>
-                            <td class="px-4 py-3 text-sm">{{ $run->problem->short_name }} - {{ $run->problem->name }}</td>
+                            <td class="px-4 py-3 text-sm">{{ $run->problem ? "{$run->problem->short_name} - {$run->problem->name}" : 'Problema removido' }}</td>
                             <td class="px-4 py-3">
                                 @if($run->status !== 'judged')
                                     <span class="px-2 py-1 text-xs font-medium bg-muted text-foreground rounded">Aguardando</span>

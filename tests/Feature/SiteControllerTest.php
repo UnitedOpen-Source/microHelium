@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Clarification;
 use App\Models\Contest;
+use App\Models\Problem;
+use App\Models\Run;
 use App\Models\Site;
 use App\Models\Task;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,6 +110,56 @@ class SiteControllerTest extends TestCase
 
         $response->assertSeeText('Own Site Question');
         $response->assertDontSeeText('Other Site Question');
+    }
+
+    /**
+     * A raw status === 'answered' check misses the broadcast_site/
+     * broadcast_all statuses Clarification::isAnswered() also treats as
+     * answered -- which would show an already-answered (and broadcast)
+     * question as pending here and still render the answer form.
+     */
+    public function test_a_broadcast_clarification_shows_as_answered_not_pending()
+    {
+        $contest = Contest::factory()->create();
+        $site = Site::factory()->create(['contest_id' => $contest->id]);
+        $coordinator = $this->createTestUser(['user_type' => 'site', 'site_id' => $site->id]);
+        Clarification::factory()->create([
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+            'question' => 'Broadcast Question',
+            'answer' => 'Already answered to everyone',
+            'status' => 'broadcast_all',
+        ]);
+
+        $response = $this->actingAs($coordinator)->get('/site/clarifications');
+
+        // "Pendentes" (the filter toolbar button) is always present
+        // regardless of data, so assert the answer form is gone instead of
+        // checking for the absence of that substring.
+        $response->assertSeeText('Respondida');
+        $response->assertDontSee('name="answer"', false);
+    }
+
+    /**
+     * Problem uses SoftDeletes, so Run::problem() can resolve to null once a
+     * problem is deleted after runs were submitted against it -- an
+     * unguarded $run->problem->short_name access would 500 the whole
+     * dashboard for that site.
+     */
+    public function test_dashboard_does_not_crash_when_a_runs_problem_was_deleted()
+    {
+        $contest = Contest::factory()->create();
+        $site = Site::factory()->create(['contest_id' => $contest->id]);
+        $coordinator = $this->createTestUser(['user_type' => 'site', 'site_id' => $site->id]);
+        $team = $this->createTestUser(['user_type' => 'team', 'site_id' => $site->id]);
+        $problem = Problem::factory()->create(['contest_id' => $contest->id]);
+        Run::factory()->create(['contest_id' => $contest->id, 'site_id' => $site->id, 'user_id' => $team->user_id, 'problem_id' => $problem->id]);
+        $problem->delete();
+
+        $response = $this->actingAs($coordinator)->get('/site/dashboard');
+
+        $response->assertStatus(200);
+        $response->assertSeeText('Problema removido');
     }
 
     public function test_coordinator_can_answer_their_own_sites_clarification()

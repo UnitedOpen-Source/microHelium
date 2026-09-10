@@ -73,7 +73,9 @@ class SiteController extends Controller
 
         $task->update([
             'status' => 'done',
-            'completed_time' => $task->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Task can outlive its contest
+            // being soft-deleted, so ->contest can resolve to null here.
+            'completed_time' => $task->contest?->getContestTime() ?? 0,
             'staff_id' => auth()->id(),
             'staff_site_id' => $task->site_id,
         ]);
@@ -133,7 +135,12 @@ class SiteController extends Controller
                 ->orderBy('clarifications.created_at', 'desc')
                 ->get()
                 ->map(function ($item) {
-                    $item->answered = $item->status === 'answered';
+                    // Matches Clarification::isAnswered() -- a raw
+                    // status === 'answered' check misses broadcast_site/
+                    // broadcast_all, which would show an already-answered
+                    // (and broadcast) question as pending here, and let a
+                    // resubmit silently overwrite the broadcast answer.
+                    $item->answered = in_array($item->status, ['answered', 'broadcast_site', 'broadcast_all']);
                     $item->problem = $item->problem_id ? 'Problema #' . $item->problem_id : null;
                     return $item;
                 })
@@ -151,7 +158,7 @@ class SiteController extends Controller
         $clarification->update([
             'answer' => $request->input('answer'),
             'status' => 'answered',
-            'answered_time' => $clarification->contest->getContestTime(),
+            'answered_time' => $clarification->contest?->getContestTime() ?? 0,
         ]);
 
         return redirect()->route('site.clarifications')->with('success', 'Resposta enviada!');
