@@ -8,6 +8,7 @@ use Helium\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
@@ -19,9 +20,12 @@ class UserController extends Controller
     public function index()
     {
         $users = DB::table('users')->orderBy('user_id', 'desc')->get();
-        $sites = Site::orderBy('name')->get();
+        // Grouped by contest in the view so an admin managing a multi-contest
+        // install can't accidentally assign a user to a site belonging to a
+        // different contest than intended.
+        $sitesByContest = Site::with('contest:id,name')->orderBy('name')->get()->groupBy('contest.name');
 
-        return view('backend.users', compact('users', 'sites'));
+        return view('backend.users', compact('users', 'sitesByContest'));
     }
 
     /**
@@ -45,7 +49,15 @@ class UserController extends Controller
                 User::TYPE_ADMIN, User::TYPE_JUDGE, User::TYPE_TEAM,
                 User::TYPE_STAFF, User::TYPE_SCORE, User::TYPE_SITE,
             ]),
-            'site_id' => 'nullable|required_if:user_type,' . User::TYPE_SITE . '|exists:sites,id',
+            // exists:sites,id queries the raw table and would accept a
+            // soft-deleted site's id -- Site::find() below applies Eloquent's
+            // SoftDeletingScope and returns null for that same id, which
+            // would otherwise crash on ->contest_id.
+            'site_id' => [
+                'nullable',
+                'required_if:user_type,' . User::TYPE_SITE,
+                Rule::exists('sites', 'id')->whereNull('deleted_at'),
+            ],
         ]);
 
         $siteId = $validated['site_id'] ?? null;

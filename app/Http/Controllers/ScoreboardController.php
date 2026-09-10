@@ -104,6 +104,18 @@ class ScoreboardController extends Controller
      * 'own_site' only sees their own site's rows -- admins/judges/staff/
      * spectators always get the unrestricted view, matching BOCA's
      * admin/score bypass on sitescorelevel.
+     *
+     * Known limitation, kept intentionally: /scoreboard and /scoreboard/
+     * export have no auth middleware (a deliberate, pre-existing feature --
+     * a public spectator/projector link that works without logging in, see
+     * ScoreboardControllerTest::test_scoreboard_index_page_loads_and_
+     * displays_teams). A guest therefore always gets the unrestricted view,
+     * so a team member can trivially bypass their own site's 'own_site'
+     * restriction by logging out. This is a courtesy filter for logged-in
+     * team accounts, not a hard access control. If a real event needs
+     * own_site to be airtight against a determined visitor, that requires
+     * also requiring auth on the scoreboard routes -- a separate, breaking
+     * change to a route that's public today.
      */
     private function applySiteVisibility(array $entries): array
     {

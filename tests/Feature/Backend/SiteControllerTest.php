@@ -112,6 +112,46 @@ class SiteControllerTest extends TestCase
         ]);
     }
 
+    public function test_a_judging_route_cannot_point_to_a_site_in_another_contest()
+    {
+        $admin = $this->createAdminUser();
+        $contestA = Contest::factory()->create();
+        $contestB = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contestA->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contestB->id]);
+
+        $response = $this->actingAs($admin)->put("/backend/sites/{$siteA->id}", [
+            'name' => $siteA->name,
+            'score_visibility' => 'all',
+            'max_judge_wait_time' => 900,
+            'judging_routes' => [$siteB->id],
+        ]);
+
+        $response->assertSessionHasErrors('judging_routes.0');
+        $this->assertDatabaseMissing('site_judging_routes', [
+            'host_site_id' => $siteA->id,
+            'source_site_id' => $siteB->id,
+        ]);
+    }
+
+    public function test_a_soft_deleted_site_cannot_be_used_as_a_judging_route()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB->delete();
+
+        $response = $this->actingAs($admin)->put("/backend/sites/{$siteA->id}", [
+            'name' => $siteA->name,
+            'score_visibility' => 'all',
+            'max_judge_wait_time' => 900,
+            'judging_routes' => [$siteB->id],
+        ]);
+
+        $response->assertSessionHasErrors('judging_routes.0');
+    }
+
     public function test_admin_can_delete_a_site()
     {
         $admin = $this->createAdminUser();
@@ -122,5 +162,31 @@ class SiteControllerTest extends TestCase
 
         $response->assertRedirect();
         $this->assertSoftDeleted('sites', ['id' => $site->id]);
+    }
+
+    /**
+     * Site uses SoftDeletes, so the users.site_id / site_judging_routes
+     * foreign keys' nullOnDelete()/cascadeOnDelete() never fire on a soft
+     * delete (only a real row DELETE triggers those). Without explicit
+     * cleanup, a judge whose site was deleted would crash JudgeController
+     * (site_id set but ->site resolves to null) the next time they loaded
+     * /judge/runs.
+     */
+    public function test_deleting_a_site_clears_dangling_references()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contest->id]);
+        $judge = $this->createTestUser(['user_type' => 'judge', 'contest_id' => $contest->id, 'site_id' => $siteA->id]);
+        SiteJudgingRoute::create(['host_site_id' => $siteA->id, 'source_site_id' => $siteB->id]);
+        SiteJudgingRoute::create(['host_site_id' => $siteB->id, 'source_site_id' => $siteA->id]);
+
+        $this->actingAs($admin)->delete("/backend/sites/{$siteA->id}");
+
+        $judge->refresh();
+        $this->assertNull($judge->site_id);
+        $this->assertDatabaseMissing('site_judging_routes', ['host_site_id' => $siteA->id]);
+        $this->assertDatabaseMissing('site_judging_routes', ['source_site_id' => $siteA->id]);
     }
 }

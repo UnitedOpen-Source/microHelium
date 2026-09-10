@@ -42,7 +42,10 @@ class JudgeController extends Controller
             // plus whatever other sites were explicitly routed to them
             // (Backend\SiteController's "judging routes"). No site set on
             // the judge, or an admin, keeps the original contest-wide view.
-            if (!$user->isAdmin() && $user->site_id) {
+            // $user->site can still resolve to null even with site_id set
+            // (e.g. the site was soft-deleted) -- SiteController::destroy()
+            // clears site_id on delete, but this is defense in depth.
+            if (!$user->isAdmin() && $user->site_id && $user->site) {
                 $query->whereIn('site_id', $user->site->routedJudgingSiteIds());
             }
 

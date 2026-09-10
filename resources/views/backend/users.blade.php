@@ -143,8 +143,12 @@
                         <label for="site_id" class="block text-sm font-medium text-foreground mb-1">Site</label>
                         <select id="site_id" name="site_id" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                             <option value="">Nenhum (nao vinculado a um site)</option>
-                            @foreach($sites as $site)
-                                <option value="{{ $site->id }}" @selected((string) old('site_id') === (string) $site->id)>{{ $site->name }}</option>
+                            @foreach($sitesByContest as $contestName => $sites)
+                                <optgroup label="{{ $contestName }}">
+                                    @foreach($sites as $site)
+                                        <option value="{{ $site->id }}" @selected((string) old('site_id') === (string) $site->id)>{{ $site->name }}</option>
+                                    @endforeach
+                                </optgroup>
                             @endforeach
                         </select>
                         <p class="text-sm text-muted-foreground mt-1">Obrigatorio para o perfil "Coordenador de site".</p>
