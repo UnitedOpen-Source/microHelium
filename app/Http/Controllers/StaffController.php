@@ -39,7 +39,9 @@ class StaffController extends Controller
 
         $task->update([
             'status' => 'done',
-            'completed_time' => $task->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Task can outlive its contest
+            // being soft-deleted, so ->contest can resolve to null here.
+            'completed_time' => $task->contest?->getContestTime() ?? 0,
             'staff_id' => auth()->id(),
             'staff_site_id' => auth()->user()->site_id,
         ]);

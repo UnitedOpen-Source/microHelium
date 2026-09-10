@@ -146,6 +146,20 @@ Route::post('/staff/tasks/{task}/complete', [\App\Http\Controllers\StaffControll
 
 /*
 |--------------------------------------------------------------------------
+| Site Coordinator Routes (issue #18 -- multi-site coordination)
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/site/dashboard', [\App\Http\Controllers\SiteController::class, 'dashboard'])->name('site.dashboard');
+Route::get('/site/tasks', [\App\Http\Controllers\SiteController::class, 'tasks'])->name('site.tasks');
+Route::post('/site/tasks/{task}/complete', [\App\Http\Controllers\SiteController::class, 'completeTask'])->name('site.tasks.complete');
+Route::get('/site/teams', [\App\Http\Controllers\SiteController::class, 'teams'])->name('site.teams');
+Route::post('/site/teams', [\App\Http\Controllers\SiteController::class, 'storeTeam'])->name('site.teams.store');
+Route::get('/site/clarifications', [\App\Http\Controllers\SiteController::class, 'clarifications'])->name('site.clarifications');
+Route::post('/site/clarifications/{clarification}/answer', [\App\Http\Controllers\SiteController::class, 'answerClarification'])->name('site.clarifications.answer');
+
+/*
+|--------------------------------------------------------------------------
 | Backend Routes (Admin)
 |--------------------------------------------------------------------------
 */

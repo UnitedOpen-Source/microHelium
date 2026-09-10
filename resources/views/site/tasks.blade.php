@@ -1,0 +1,70 @@
+@extends('layouts.app')
+
+@section('title', 'Tarefas do Site')
+
+@section('description', 'Entregas, impressões e outras tarefas de staff, restritas ao seu site.')
+
+@section('content')
+<div class="space-y-6">
+    {{-- layouts/app.blade.php already renders session('success')/session('error') globally --}}
+
+    <div class="bg-card rounded-lg border border-border shadow-sm">
+        <div class="p-6 border-b border-border">
+            <h2 class="text-xl font-semibold text-foreground">Tarefas</h2>
+            <p class="text-sm text-muted-foreground">{{ $site?->name ?? 'Nenhum site vinculado' }}</p>
+        </div>
+        @include('partials.table-filter', ['tableId' => 'site-tasks-table', 'searchLabel' => 'registros'])
+        <div class="overflow-x-auto">
+            <table id="site-tasks-table" class="w-full">
+                <thead class="bg-muted/50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Descricao</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Concluida por</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acao</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                    @forelse ($tasks as $task)
+                    <tr class="hover:bg-muted/50 transition-colors">
+                        <td class="px-4 py-3 font-mono text-sm">
+                            <span class="font-mono font-semibold text-foreground">#{{ $task->task_number }}</span>
+                        </td>
+                        <td class="px-4 py-3 text-sm">{{ $task->description }}</td>
+                        <td class="px-4 py-3 text-sm">{{ $task->user->fullname ?? $task->user->username }}</td>
+                        <td class="px-4 py-3">
+                            @if($task->isDone())
+                                <span class="px-2 py-1 text-xs font-medium bg-success-soft text-success rounded">Concluida</span>
+                            @elseif($task->status === 'processing')
+                                <span class="px-2 py-1 text-xs font-medium bg-warning-soft text-warning rounded">Em andamento</span>
+                            @else
+                                <span class="px-2 py-1 text-xs font-medium bg-muted text-muted-foreground rounded">Pendente</span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-sm text-muted-foreground">{{ $task->staff->fullname ?? $task->staff->username ?? '-' }}</td>
+                        <td class="px-4 py-3">
+                            @unless($task->isDone())
+                            <form action="{{ route('site.tasks.complete', $task) }}" method="POST">
+                                @csrf
+                                <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary-hover transition-colors">
+                                    Marcar concluida
+                                </button>
+                            </form>
+                            @else
+                            <span class="text-muted-foreground text-sm">-</span>
+                            @endunless
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="6" class="px-4 py-12 text-center text-muted-foreground">Nenhuma tarefa cadastrada neste site</td>
+                    </tr>
+                    @endforelse
+                <tr id="site-tasks-table-empty" hidden><td colspan="6" class="text-center text-muted-foreground">Nenhum resultado para estes filtros.</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+@endsection
