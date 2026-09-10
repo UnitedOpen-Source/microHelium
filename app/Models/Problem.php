@@ -61,6 +61,42 @@ class Problem extends Model
         return $this->hasMany(Score::class);
     }
 
+    public function languageLimits(): HasMany
+    {
+        return $this->hasMany(ProblemLanguageLimit::class);
+    }
+
+    /**
+     * BOCA models problemtable.problemautojudge as a bitmask so autojudge
+     * can be enabled per language, and each language in a problem package
+     * carries its own limits/<lang> file. These three accessors give the
+     * same per-problem-per-language granularity via problem_language_limits,
+     * falling back to this problem's own defaults when no override exists.
+     */
+    public function getTimeLimitFor(Language $language): int
+    {
+        return $this->limitOverrideFor($language)?->time_limit ?? $this->time_limit;
+    }
+
+    public function getMemoryLimitFor(Language $language): int
+    {
+        return $this->limitOverrideFor($language)?->memory_limit ?? $this->memory_limit;
+    }
+
+    public function isAutoJudgeEnabledFor(Language $language): bool
+    {
+        $override = $this->limitOverrideFor($language)?->auto_judge_enabled;
+
+        return $override ?? $this->auto_judge;
+    }
+
+    private function limitOverrideFor(Language $language): ?ProblemLanguageLimit
+    {
+        return $this->relationLoaded('languageLimits')
+            ? $this->languageLimits->firstWhere('language_id', $language->id)
+            : $this->languageLimits()->where('language_id', $language->id)->first();
+    }
+
     public function getPackagePath(): string
     {
         return storage_path("app/problems/{$this->contest_id}/{$this->basename}");
