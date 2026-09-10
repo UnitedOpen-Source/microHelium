@@ -12,6 +12,8 @@ WORKDIR /var/www/html
 RUN apk add --no-cache \
     git \
     curl \
+    wget \
+    ca-certificates \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
@@ -24,14 +26,68 @@ RUN apk add --no-cache \
     postgresql-dev \
     linux-headers \
     $PHPIZE_DEPS \
-    # Compilers for autojudge
+    # Compilers for autojudge -- this list must cover every language
+    # Language::getDefaultLanguages() marks is_active by default, or admins
+    # can select a language in the Contest Wizard that the judge then can't
+    # actually compile/run.
     gcc \
     g++ \
     make \
     python3 \
+    openjdk21-jdk \
+    nodejs \
+    npm \
+    dotnet8-sdk \
+    go \
+    rust \
+    ruby \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
     bash
+
+# TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
+RUN npm install -g typescript
+
+# Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
+# zip. This is the same install method used by every other Kotlin judge
+# container (it's pure JVM + a launcher script, so it's arch-independent
+# given the JDK above).
+ARG KOTLIN_VERSION=2.4.20
+RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -O /tmp/kotlin.zip \
+    && unzip -q /tmp/kotlin.zip -d /opt \
+    && rm /tmp/kotlin.zip \
+    && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc \
+    && ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin
+
+# Free Pascal has no Alpine package either. Its official releases ship a
+# pre-built compiler binary per architecture (no compilation needed); we
+# only need the compiler + RTL units, not the full units-* extras or docs.
+# The SourceForge download occasionally serves a truncated file under
+# automated tools, hence the retry loop with byte-count verification.
+ARG FPC_VERSION=3.2.2
+RUN set -eu; \
+    arch="$(apk --print-arch)"; \
+    case "$arch" in \
+        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64 ;; \
+        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64 ;; \
+        *) echo "Unsupported arch for FPC: $arch" >&2; exit 1 ;; \
+    esac; \
+    url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
+    tries=0; \
+    until wget -q -c "$url" -O /tmp/fpc.tar && tar -tf /tmp/fpc.tar >/dev/null 2>&1; do \
+        tries=$((tries + 1)); \
+        [ "$tries" -ge 6 ] && { echo "Failed to download a valid FPC tarball after $tries attempts" >&2; exit 1; }; \
+        rm -f /tmp/fpc.tar; \
+    done; \
+    mkdir -p /tmp/fpcx && tar -xf /tmp/fpc.tar -C /tmp/fpcx; \
+    cd "/tmp/fpcx/fpc-${FPC_VERSION}.${fpc_arch}"; \
+    tar -xf "binary.${fpc_arch}.tar" "base.${fpc_arch}.tar.gz"; \
+    mkdir -p "/opt/fpc/${FPC_VERSION}"; \
+    tar -xzf "base.${fpc_arch}.tar.gz" -C "/opt/fpc/${FPC_VERSION}"; \
+    install -m 755 "/opt/fpc/${FPC_VERSION}/lib/fpc/${FPC_VERSION}/${fpc_bin}" /usr/local/bin/fpc; \
+    printf -- '-Fu/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n-Fl/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n' \
+        "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" > /etc/fpc.cfg; \
+    rm -rf /tmp/fpc.tar /tmp/fpcx
 
 # Configure and install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \

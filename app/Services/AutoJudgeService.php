@@ -117,8 +117,14 @@ class AutoJudgeService
         // Use default compile command
         $compileCommand = $this->buildCompileCommand($language, $runDir, $run->filename);
 
+        // npm/npx (TypeScript), dotnet and go all write caches under $HOME;
+        // PHP-FPM doesn't set HOME for the worker user, so without this
+        // they'd try to write to a HOME they can't access (or none at all)
+        // and fail with a permission/lookup error unrelated to the
+        // submitted code. $runDir is already writable and unique per run.
         $result = Process::timeout($this->defaultTimeLimit * 2)
             ->path($runDir)
+            ->env(['HOME' => $runDir])
             ->run($compileCommand);
 
         return [
@@ -134,6 +140,7 @@ class AutoJudgeService
         $command = $language->compile_command;
         $basename = pathinfo($filename, PATHINFO_FILENAME);
 
+        $command = str_replace('{judge_runtime}', base_path('resources/judge-runtime'), $command);
         $command = str_replace('{source}', $filename, $command);
         $command = str_replace('{output}', $basename, $command);
         $command = str_replace('{basename}', $basename, $command);
@@ -187,6 +194,7 @@ class AutoJudgeService
             $command = "bash {$runScript} {$basename} {$inputFile} {$timeLimit} 1 {$memoryLimit} 1024";
         } else {
             $runCommand = $language->run_command;
+            $runCommand = str_replace('{judge_runtime}', base_path('resources/judge-runtime'), $runCommand);
             $runCommand = str_replace('{executable}', $basename, $runCommand);
             $runCommand = str_replace('{classname}', $basename, $runCommand);
             $runCommand = str_replace('{source}', $run->filename, $runCommand);
@@ -202,6 +210,7 @@ class AutoJudgeService
 
         $result = Process::timeout($timeLimit + 5)
             ->path($runDir)
+            ->env(['HOME' => $runDir])
             ->run($command);
 
         $exitCode = $result->exitCode();
