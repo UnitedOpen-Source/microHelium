@@ -41,7 +41,7 @@ class AdminContestManagementTest extends TestCase
             ->get('/backend/exercises');
 
         $response->assertStatus(200);
-        $response->assertViewIs('backend.exercises');
+        $response->assertViewIs('backend.problems');
 
         // Test access to users management
         $response = $this->actingAs($this->admin)

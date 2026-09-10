@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ContestWizardController extends Controller
@@ -98,13 +99,56 @@ class ContestWizardController extends Controller
             DB::table('answers')->insert(array_merge($answer, ['contest_id' => $contestId, 'created_at' => now(), 'updated_at' => now()]));
         }
 
-        $selectedProblems = $request->input('problems', []);
-        if (!empty($selectedProblems)) {
-            $problemBank = DB::table('problem_bank')->whereIn('id', $selectedProblems)->where('is_active', true)->get();
+        $addedCount = self::addProblemsFromBank($contestId, $request->input('problems', []));
+
+        return redirect()->route('backend.configurations')->with('success', 'Maratona "' . $validated['name'] . '" criada com ' . $addedCount . ' problemas!');
+    }
+
+    /**
+     * Copy the selected Problem Bank entries into a contest as real Problem
+     * rows (with a starter TestCase from the bank's sample input/output).
+     * Shared between the wizard (new contest) and
+     * Backend\ProblemManagementController (adding to an existing contest,
+     * see issue #34 -- previously there was no way to add a problem to a
+     * contest after the wizard's initial creation).
+     *
+     * @return int number of problems actually added
+     */
+    public static function addProblemsFromBank(int $contestId, array $problemBankIds): int
+    {
+        if (empty($problemBankIds)) {
+            return 0;
+        }
+
+        return DB::transaction(function () use ($contestId, $problemBankIds) {
+            // Lock this contest's existing problems for the duration of the
+            // transaction: without it, two concurrent calls (two admins, or
+            // a double-submit) could both read the same "next sort_order"
+            // and both pass the same-basename existence check before either
+            // insert commits, colliding on the (contest_id, short_name) or
+            // (contest_id, basename) unique constraints.
+            $existingCount = DB::table('problems')->where('contest_id', $contestId)->lockForUpdate()->count();
+            $existingBasenames = DB::table('problems')->where('contest_id', $contestId)->pluck('basename');
+
+            $problemBank = DB::table('problem_bank')->whereIn('id', $problemBankIds)->where('is_active', true)->get();
             $letters = range('A', 'Z');
             $colors = [['name' => 'Vermelho', 'hex' => '#EF4444'], ['name' => 'Azul', 'hex' => '#3B82F6'], ['name' => 'Verde', 'hex' => '#22C55E'], ['name' => 'Amarelo', 'hex' => '#EAB308'], ['name' => 'Roxo', 'hex' => '#A855F7'], ['name' => 'Rosa', 'hex' => '#EC4899'], ['name' => 'Laranja', 'hex' => '#F97316'], ['name' => 'Ciano', 'hex' => '#06B6D4'], ['name' => 'Indigo', 'hex' => '#6366F1'], ['name' => 'Teal', 'hex' => '#14B8A6']];
-            foreach ($problemBank as $sortOrder => $problem) {
+
+            $added = 0;
+            $sortOrder = $existingCount;
+
+            foreach ($problemBank as $problem) {
                 $basename = Str::slug($problem->code);
+
+                // Same problem bank entry might already have been added to
+                // this contest -- keep this idempotent rather than erroring
+                // on the (contest_id, short_name)/(contest_id, basename)
+                // unique constraints. Skipped entries must NOT consume a
+                // sort_order/letter, or a later call could reuse one still
+                // held by an existing problem.
+                if ($existingBasenames->contains($basename)) {
+                    continue;
+                }
 
                 $problemId = DB::table('problems')->insertGetId([
                     'contest_id' => $contestId,
@@ -123,19 +167,22 @@ class ContestWizardController extends Controller
                     'updated_at' => now(),
                 ]);
 
+                $existingBasenames->push($basename);
+                $sortOrder++;
+
                 // Problem Bank only carries one sample input/output pair (no
                 // hidden test cases), but without at least this one, the
                 // problem has zero TestCase rows and AutoJudgeService would
                 // return "CS - no test cases found" for every submission,
-                // making every wizard-created contest unjudgeable. Not a
-                // substitute for a real problem package with hidden cases,
-                // but it makes the contest actually functional out of the box.
+                // making the problem unjudgeable. Not a substitute for a
+                // real problem package with hidden cases, but it makes the
+                // problem actually functional out of the box.
                 if (filled($problem->sample_input) && filled($problem->sample_output)) {
                     $inputRelative = "problems/{$contestId}/{$basename}/input/1";
                     $outputRelative = "problems/{$contestId}/{$basename}/output/1";
 
-                    \Illuminate\Support\Facades\Storage::disk('local')->put($inputRelative, $problem->sample_input);
-                    \Illuminate\Support\Facades\Storage::disk('local')->put($outputRelative, $problem->sample_output);
+                    Storage::disk('local')->put($inputRelative, $problem->sample_input);
+                    Storage::disk('local')->put($outputRelative, $problem->sample_output);
 
                     DB::table('test_cases')->insert([
                         'problem_id' => $problemId,
@@ -149,9 +196,11 @@ class ContestWizardController extends Controller
                         'updated_at' => now(),
                     ]);
                 }
-            }
-        }
 
-        return redirect()->route('backend.configurations')->with('success', 'Maratona "' . $validated['name'] . '" criada com ' . count($selectedProblems) . ' problemas!');
+                $added++;
+            }
+
+            return $added;
+        });
     }
 }
