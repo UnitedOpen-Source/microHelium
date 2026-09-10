@@ -174,6 +174,9 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
 <script>
 const problems = @json($problems);
 

@@ -213,6 +213,9 @@ int main() {
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
 <script>
 function updateFileName(input) {
     const placeholder = document.getElementById('upload-placeholder');

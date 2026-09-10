@@ -166,6 +166,9 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
 <script>
 function updateFileName(input) {
     const fileName = document.getElementById('fileName');
