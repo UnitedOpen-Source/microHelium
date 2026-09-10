@@ -85,6 +85,27 @@ class ClarificationControllerTest extends TestCase
     }
 
     /**
+     * store() previously always tagged a new clarification with "the first
+     * site associated with the contest," regardless of which site the
+     * asking user actually belonged to -- which would have made site-scoped
+     * clarification answering (issue #18) show the wrong (or no) questions
+     * to a site coordinator whose site wasn't site id 1.
+     */
+    public function test_clarification_is_tagged_with_the_users_own_site_not_the_contests_first_site()
+    {
+        DB::table('sites')->insert(['id' => 2, 'contest_id' => 1, 'name' => 'Second Site']);
+        $user = User::factory()->create(['site_id' => 2]);
+
+        $response = $this->actingAs($user)->post('/clarifications', ['question' => 'Which site am I tagged with?']);
+
+        $response->assertRedirect(route('clarifications'));
+        $this->assertDatabaseHas('clarifications', [
+            'question' => 'Which site am I tagged with?',
+            'site_id' => 2,
+        ]);
+    }
+
+    /**
      * Test storing a clarification fails if the active contest has no site.
      */
     public function test_storing_clarification_fails_if_active_contest_has_no_site()

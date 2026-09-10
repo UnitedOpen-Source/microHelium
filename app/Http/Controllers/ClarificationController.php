@@ -44,8 +44,16 @@ class ClarificationController extends Controller
             return redirect()->route('clarifications')->with('error', 'Nenhuma competicao ativa no momento.');
         }
 
-        // Assuming the first site associated with the contest is the one to use.
-        $site = DB::table('sites')->where('contest_id', $activeContest->id)->first();
+        // Use the asking user's own site when they have one -- falling back
+        // to the contest's first site only for accounts with no site_id.
+        // Always defaulting to "the first site" mistagged every question
+        // from a team at any other site, which would have made site-scoped
+        // clarification answering (issue #18) silently show the wrong
+        // (or no) questions to that site's coordinator/judges.
+        $siteId = auth()->user()->site_id;
+        $site = $siteId
+            ? DB::table('sites')->where('id', $siteId)->first()
+            : DB::table('sites')->where('contest_id', $activeContest->id)->first();
         if (!$site) {
             return redirect()->route('clarifications')->with('error', 'O concurso ativo nao possui um site configurado.');
         }

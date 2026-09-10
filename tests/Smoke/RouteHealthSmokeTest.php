@@ -66,6 +66,7 @@ class RouteHealthSmokeTest extends TestCase
             'admin contest wizard' => ['/backend/contest-wizard'],
             'judge runs' => ['/judge/runs'],
             'staff tasks' => ['/staff/tasks'],
+            'site dashboard' => ['/site/dashboard'],
         ];
     }
 
@@ -110,6 +111,7 @@ class RouteHealthSmokeTest extends TestCase
             'admin configurations' => ['/backend/configurations'],
             'judge runs' => ['/judge/runs'],
             'staff tasks' => ['/staff/tasks'],
+            'site dashboard' => ['/site/dashboard'],
         ];
     }
 
@@ -155,6 +157,7 @@ class RouteHealthSmokeTest extends TestCase
             'admin submissions' => ['/backend/submissions'],
             'judge runs (admin too)' => ['/judge/runs'],
             'staff tasks (admin too)' => ['/staff/tasks'],
+            'site dashboard (admin too)' => ['/site/dashboard'],
         ];
     }
 
