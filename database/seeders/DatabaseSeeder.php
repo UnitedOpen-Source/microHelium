@@ -19,6 +19,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if (app()->environment('production')) {
+            $this->command?->warn('Skipping demo data: DatabaseSeeder creates accounts with well-known default passwords and must not run in production.');
+
+            return;
+        }
+
         $contest = Contest::firstOrCreate(
             ['name' => 'MicroHelium Demo Contest'],
             [
