@@ -148,3 +148,16 @@ test('wizard reveals a hidden step when the server returns an error for its fiel
     assert.equal(document.activeElement.id, 'contestStart');
     assert.equal(document.getElementById('wizard-status').textContent, 'Etapa 2 de 5');
 });
+
+test('clarification status filters expose pressed state, empty feedback and restore from URL', () => {
+    page('<div data-status-filter="questions"><button data-status="all">Todas</button><button data-status="pending">Pendentes</button><button data-status="answered">Respondidas</button><p role="status"></p></div><div id="questions"><article data-status="answered">Resposta</article><p data-filter-empty hidden>Nenhuma pergunta</p></div>', 'https://microhelium.test/?ui-questions=pending&contest=3');
+    initializeUI();
+    assert.equal(document.querySelector('article').hidden, true);
+    assert.equal(document.querySelector('[data-filter-empty]').hidden, false);
+    assert.equal(document.querySelector('button[data-status=pending]').getAttribute('aria-pressed'), 'true');
+    document.querySelector('button[data-status=answered]').click();
+    assert.equal(document.querySelector('article').hidden, false);
+    assert.equal(document.querySelector('[role=status]').textContent, '1 de 1 perguntas');
+    assert.equal(new URL(location.href).searchParams.get('contest'), '3');
+    assert.equal(new URL(location.href).searchParams.get('ui-questions'), 'answered');
+});

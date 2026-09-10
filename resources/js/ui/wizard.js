@@ -17,9 +17,9 @@ export function initializeWizard() {
             indicator.setAttribute('aria-label', `Etapa ${i}${i < step ? ': concluída' : ''}`);
             if (i === step) indicator.setAttribute('aria-current', 'step'); else indicator.removeAttribute('aria-current');
             if (i < step) {
-                indicator.className = 'flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-green-700 text-white rounded-full font-bold text-sm';
-                indicator.innerHTML = '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
-                if (text) text.className = 'ml-1 sm:ml-2 font-medium text-green-600 hidden md:inline';
+                indicator.className = 'flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-success text-success-foreground rounded-full font-bold text-sm';
+                indicator.innerHTML = '<svg aria-hidden="true" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+                if (text) text.className = 'ml-1 sm:ml-2 font-medium text-success hidden md:inline';
             } else if (i === step) {
                 indicator.className = 'flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-primary text-primary-foreground rounded-full font-bold text-sm';
                 indicator.innerHTML = i;

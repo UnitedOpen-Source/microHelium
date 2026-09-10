@@ -15,7 +15,7 @@
                 </p>
             </div>
             @if($run->answer)
-                <span class="px-3 py-1.5 text-sm font-medium rounded-lg {{ $run->answer->is_accepted ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }}">
+                <span class="px-3 py-1.5 text-sm font-medium rounded-lg {{ $run->answer->is_accepted ? 'bg-success-soft text-success ' : 'bg-destructive-soft text-destructive ' }}">
                     {{ $run->answer->name }}
                 </span>
             @else

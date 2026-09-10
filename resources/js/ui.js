@@ -1,6 +1,7 @@
 import { initializeDialogs } from './ui/dialogs.js';
 import { initializeForms } from './ui/forms.js';
 import { initializeWizard } from './ui/wizard.js';
+import { initializeStatusFilters } from './ui/status-filters.js';
 
 // Blade owns the document; Vue owns only its component islands.
 export function initializeUI() {
@@ -51,6 +52,7 @@ export function initializeUI() {
         if (!menu?.contains(event.target) && !menuToggle?.contains(event.target)) closeMenu();
     });
 
+    initializeStatusFilters();
     initializeWizard();
     const dialogs = initializeDialogs();
     initializeForms(dialogs);

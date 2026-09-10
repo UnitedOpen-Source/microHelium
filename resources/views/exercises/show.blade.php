@@ -10,14 +10,14 @@
             <span class="text-sm text-muted-foreground">{{ $problem->color_name }}</span>
         </div>
         <div class="p-6 sm:p-8 space-y-8">
-            <section><h2 class="text-lg font-semibold mb-3">Enunciado</h2><div class="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">{{ $problem->description ?? 'O enunciado ainda não foi disponibilizado.' }}</div></section>
+            <section><h2 class="text-lg font-semibold mb-3">Enunciado</h2><div class="reading-content whitespace-pre-wrap break-words">{{ $problem->description ?? 'O enunciado ainda não foi disponibilizado.' }}</div></section>
             @php $samples = $problem->testCases()->where('is_sample', true)->get(); @endphp
             @if($samples->isNotEmpty())
             <section><h2 class="text-lg font-semibold mb-4">Exemplos</h2><div class="space-y-4">
                 @foreach($samples as $sample)
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="min-w-0 rounded-xl border border-border overflow-hidden"><h3 class="px-4 py-3 border-b border-border text-xs font-semibold bg-muted">Entrada de exemplo</h3><pre class="p-4 text-sm leading-relaxed">{{ file_exists($sample->getInputPath()) ? file_get_contents($sample->getInputPath()) : 'Exemplo não disponível.' }}</pre></div>
-                    <div class="min-w-0 rounded-xl border border-border overflow-hidden"><h3 class="px-4 py-3 border-b border-border text-xs font-semibold bg-muted">Saída de exemplo</h3><pre class="p-4 text-sm leading-relaxed">{{ file_exists($sample->getOutputPath()) ? file_get_contents($sample->getOutputPath()) : 'Exemplo não disponível.' }}</pre></div>
+                    <div class="min-w-0 rounded-xl border border-border overflow-hidden"><h3 class="px-4 py-3 border-b border-border text-xs font-semibold bg-muted">Entrada de exemplo</h3><pre tabindex="0" translate="no" class="p-4 text-sm leading-relaxed">{{ file_exists($sample->getInputPath()) ? file_get_contents($sample->getInputPath()) : 'Exemplo não disponível.' }}</pre></div>
+                    <div class="min-w-0 rounded-xl border border-border overflow-hidden"><h3 class="px-4 py-3 border-b border-border text-xs font-semibold bg-muted">Saída de exemplo</h3><pre tabindex="0" translate="no" class="p-4 text-sm leading-relaxed">{{ file_exists($sample->getOutputPath()) ? file_get_contents($sample->getOutputPath()) : 'Exemplo não disponível.' }}</pre></div>
                 </div>
                 @endforeach
             </div></section>

@@ -10,11 +10,11 @@
         <div class="p-6 border-b border-border">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar times</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Times cadastrados</h2>
                     <p class="text-sm text-muted-foreground mt-1">Lista de todos os times da competicao</p>
                 </div>
-                <button onclick="openModal('addTeamModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button onclick="openModal('addTeamModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
                     Novo Time
@@ -33,7 +33,7 @@
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Pontuação</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Problemas</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Criado em</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acoes</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
@@ -43,7 +43,7 @@
                         <td class="px-4 py-3 text-sm font-medium text-foreground">{{ $team->teamName }}</td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $team->email ?? '-' }}</td>
                         <td class="px-4 py-3">
-                            <span class="px-2 py-1 text-xs font-medium bg-primary/10 text-primary rounded">{{ $team->score ?? 0 }} pts</span>
+                            <span class="px-2 py-1 text-xs font-medium bg-primary-soft text-primary rounded">{{ $team->score ?? 0 }} pts</span>
                         </td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $team->problems_solved ?? 0 }}</td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $team->created_at }}</td>
@@ -52,8 +52,8 @@
                                 <form action="/backend/teams/{{ $team->team_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este time?')">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" title="Excluir">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <button type="submit" class="p-1.5 text-destructive hover:bg-destructive-soft rounded transition-colors" title="Excluir">
+                                        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
@@ -64,7 +64,7 @@
                     @empty
                     <tr>
                         <td colspan="7" class="px-4 py-12 text-center text-muted-foreground">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
                             Nenhum time cadastrado
@@ -85,7 +85,7 @@
         </div>
         <div class="bg-card rounded-lg border border-border shadow-sm p-6 text-center">
             <p class="text-sm text-muted-foreground">Maior Pontuação</p>
-            <p class="text-3xl font-bold text-green-600 mt-2">{{ $teams->max('score') ?? 0 }} pts</p>
+            <p class="text-3xl font-bold text-success mt-2">{{ $teams->max('score') ?? 0 }} pts</p>
         </div>
         <div class="bg-card rounded-lg border border-border shadow-sm p-6 text-center">
             <p class="text-sm text-muted-foreground">Media de Pontos</p>
@@ -102,7 +102,7 @@
             <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
                 <h3 class="text-xl font-semibold text-foreground">Novo Time</h3>
                 <button onclick="closeModal('addTeamModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
@@ -125,7 +125,7 @@
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">
                     <button type="button" onclick="closeModal('addTeamModal')" class="px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors">Cancelar</button>
-                    <button type="submit" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">Salvar</button>
+                    <button type="submit" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">Salvar</button>
                 </div>
             </form>
         </div>

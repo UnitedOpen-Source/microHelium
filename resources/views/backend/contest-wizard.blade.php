@@ -20,7 +20,7 @@
             </div>
             @if($num < 5)
             <div class="flex-1 h-1 mx-2 sm:mx-4 bg-border rounded">
-                <div id="progress-{{ $num }}-{{ $num+1 }}" class="h-full bg-primary rounded transition-all duration-300" style="width: 0%"></div>
+                <div id="progress-{{ $num }}-{{ $num+1 }}" class="h-full bg-primary rounded transition-colors duration-300" style="width: 0%"></div>
             </div>
             @endif
             @endforeach
@@ -28,12 +28,12 @@
     </div>
 
     @if(session('error'))
-    <div class="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+    <div class="mb-6 bg-destructive-soft border border-destructive/25 rounded-lg p-4">
         <div class="flex gap-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-destructive flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p class="text-sm text-red-700 dark:text-red-400">{{ session('error') }}</p>
+            <p class="text-sm text-destructive">{{ session('error') }}</p>
         </div>
     </div>
     @endif
@@ -104,7 +104,7 @@
                             <button type="button" data-wizard-action="setDuration" data-value="60" class="px-3 py-1.5 bg-muted text-muted-foreground rounded hover:bg-muted/80">1h</button>
                             <button type="button" data-wizard-action="setDuration" data-value="120" class="px-3 py-1.5 bg-muted text-muted-foreground rounded hover:bg-muted/80">2h</button>
                             <button type="button" data-wizard-action="setDuration" data-value="180" class="px-3 py-1.5 bg-muted text-muted-foreground rounded hover:bg-muted/80">3h</button>
-                            <button type="button" data-wizard-action="setDuration" data-value="300" class="px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90">5h</button>
+                            <button type="button" data-wizard-action="setDuration" data-value="300" class="px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary-hover">5h</button>
                         </div>
                     </div>
                     <div>
@@ -113,7 +113,7 @@
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div class="p-4 bg-muted/50 rounded-lg flex items-center gap-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <div>
@@ -141,13 +141,13 @@
                 <div class="p-6">
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                         @foreach($availableLanguages as $lang)
-                        <label class="language-card flex items-center gap-3 p-3 bg-background border-2 rounded-lg cursor-pointer hover:border-primary/50 transition-all {{ $lang['is_active'] ? 'selected' : '' }}" data-lang="{{ $lang['extension'] }}">
+                        <label class="language-card flex items-center gap-3 p-3 bg-background border-2 rounded-lg cursor-pointer hover:border-primary/50 transition-colors {{ $lang['is_active'] ? 'selected' : '' }}" data-lang="{{ $lang['extension'] }}">
                             <input type="checkbox" name="languages[]" value="{{ $lang['extension'] }}" class="sr-only" @checked(session()->hasOldInput() ? in_array($lang['extension'], old('languages', [])) : $lang['is_active'])>
-                            <span class="w-8 h-8 bg-primary/10 rounded flex items-center justify-center flex-shrink-0">
+                            <span class="w-8 h-8 bg-primary-soft rounded flex items-center justify-center flex-shrink-0">
                                 <span class="text-xs font-bold text-primary">.{{ $lang['file_ext'] ?? $lang['extension'] }}</span>
                             </span>
                             <span class="font-medium text-foreground text-sm truncate flex-1">{{ $lang['name'] }}</span>
-                            <svg class="check-icon h-5 w-5 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg aria-hidden="true" class="check-icon h-5 w-5 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                             </svg>
                         </label>
@@ -175,25 +175,25 @@
                     <!-- Filters -->
                     <div class="flex gap-2 mt-4">
                         <button type="button" data-wizard-action="filterProblems" data-value="all" class="filter-btn px-3 py-1 bg-primary text-primary-foreground rounded text-xs" data-filter="all">Todos</button>
-                        <button type="button" data-wizard-action="filterProblems" data-value="easy" class="filter-btn px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded text-xs" data-filter="easy">Fácil</button>
-                        <button type="button" data-wizard-action="filterProblems" data-value="medium" class="filter-btn px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded text-xs" data-filter="medium">Médio</button>
-                        <button type="button" data-wizard-action="filterProblems" data-value="hard" class="filter-btn px-3 py-1 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded text-xs" data-filter="hard">Difícil</button>
+                        <button type="button" data-wizard-action="filterProblems" data-value="easy" class="filter-btn px-3 py-1 bg-success-soft text-success rounded text-xs" data-filter="easy">Fácil</button>
+                        <button type="button" data-wizard-action="filterProblems" data-value="medium" class="filter-btn px-3 py-1 bg-warning-soft text-warning rounded text-xs" data-filter="medium">Médio</button>
+                        <button type="button" data-wizard-action="filterProblems" data-value="hard" class="filter-btn px-3 py-1 bg-destructive-soft text-destructive rounded text-xs" data-filter="hard">Difícil</button>
                     </div>
                 </div>
                 <div class="p-6 max-h-96 overflow-y-auto">
                     <div class="space-y-2" id="problemsList">
                         @foreach($problemBank as $problem)
-                        <label class="problem-card flex items-center gap-4 p-3 bg-background border-2 border-border rounded-lg cursor-pointer hover:border-primary/50 transition-all" data-difficulty="{{ $problem->difficulty }}" data-id="{{ $problem->id }}">
+                        <label class="problem-card flex items-center gap-4 p-3 bg-background border-2 border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors" data-difficulty="{{ $problem->difficulty }}" data-id="{{ $problem->id }}">
                             <input type="checkbox" name="problems[]" value="{{ $problem->id }}" class="sr-only" @checked(in_array($problem->id, old('problems', [])))>
                             <span class="w-16 text-center">
-                                <span class="text-xs font-mono font-bold text-primary bg-primary/10 px-2 py-1 rounded">{{ $problem->code }}</span>
+                                <span class="text-xs font-mono font-bold text-primary bg-primary-soft px-2 py-1 rounded">{{ $problem->code }}</span>
                             </span>
                             <span class="flex-1 min-w-0">
                                 <span class="font-medium text-foreground truncate">{{ $problem->name }}</span>
                                 <span class="text-xs text-muted-foreground truncate">{{ Str::limit($problem->description, 80) }}</span>
                             </span>
-                            <span class="px-2 py-0.5 text-xs rounded {{ $problem->difficulty_badge }}">{{ $problem->difficulty_label }}</span>
-                            <svg class="check-icon h-5 w-5 text-primary hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <span class="px-2 py-0.5 text-xs rounded {{ ['easy' => 'bg-success-soft text-success', 'medium' => 'bg-warning-soft text-warning', 'hard' => 'bg-destructive-soft text-destructive'][$problem->difficulty] ?? 'bg-muted text-muted-foreground' }}">{{ $problem->difficulty_label }}</span>
+                            <svg aria-hidden="true" class="check-icon h-5 w-5 text-primary hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                             </svg>
                         </label>
@@ -258,20 +258,20 @@
         <div class="flex flex-wrap items-center justify-between gap-3 mt-6">
             <button type="button" id="prevBtn" data-wizard-action="prevStep" class="hidden px-6 py-3 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors">
                 <span class="flex items-center gap-2">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    <svg aria-hidden="true" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                     Anterior
                 </span>
             </button>
             <div></div>
-            <button type="button" id="nextBtn" data-wizard-action="nextStep" class="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+            <button type="button" id="nextBtn" data-wizard-action="nextStep" class="px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
                 <span class="flex items-center gap-2">
                     Próximo
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                    <svg aria-hidden="true" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                 </span>
             </button>
-            <button type="submit" id="submitBtn" class="hidden px-8 py-3 bg-green-700 text-white rounded-lg hover:bg-green-800 transition-colors">
+            <button type="submit" id="submitBtn" class="hidden px-8 py-3 bg-success text-success-foreground rounded-lg hover:bg-success-hover transition-colors">
                 <span class="flex items-center gap-2">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                    <svg aria-hidden="true" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                     Criar Maratona
                 </span>
             </button>

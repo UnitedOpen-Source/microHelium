@@ -40,7 +40,7 @@
                 ['RE', 'Erro de execução', 'O programa falhou durante a execução.', 'destructive'],
                 ['CE', 'Erro de compilação', 'O código não pôde ser compilado.', 'info'],
             ] as [$code, $title, $description, $tone])
-            <div class="flex gap-3"><dt class="shrink-0"><span @class(['inline-flex justify-center w-11 rounded-md py-1 text-xs font-mono font-semibold', 'bg-success/10 text-success' => $tone === 'success', 'bg-destructive/10 text-destructive' => $tone === 'destructive', 'bg-warning/10 text-warning' => $tone === 'warning', 'bg-info/10 text-info' => $tone === 'info'])>{{ $code }}</span></dt><dd><p class="text-sm font-semibold">{{ $title }}</p><p class="text-xs text-muted-foreground mt-1 leading-relaxed">{{ $description }}</p></dd></div>
+            <div class="flex gap-3"><dt class="shrink-0"><span @class(['inline-flex justify-center w-11 rounded-md py-1 text-xs font-mono font-semibold', 'bg-success-soft text-success' => $tone === 'success', 'bg-destructive-soft text-destructive' => $tone === 'destructive', 'bg-warning-soft text-warning' => $tone === 'warning', 'bg-info-soft text-info' => $tone === 'info'])>{{ $code }}</span></dt><dd><p class="text-sm font-semibold">{{ $title }}</p><p class="text-xs text-muted-foreground mt-1 leading-relaxed">{{ $description }}</p></dd></div>
             @endforeach
         </dl></section>
         <section class="surface p-6"><h2 class="font-semibold mb-3">Pronto para começar?</h2><p class="text-sm text-muted-foreground mb-5">Escolha um desafio e coloque suas ideias em prática.</p><a href="/exercises" class="button-secondary w-full">Explorar problemas →</a></section>

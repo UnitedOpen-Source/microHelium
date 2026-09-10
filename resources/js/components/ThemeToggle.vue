@@ -10,6 +10,8 @@ onMounted(() => {
 })
 
 function applyTheme() {
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', isDark.value ? '#101a22' : '#f3f6f6')
     if (isDark.value) {
         document.documentElement.classList.add('dark')
     } else {
@@ -30,7 +32,7 @@ function toggleTheme() {
         type="button" class="icon-button" :aria-label="isDark ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="isDark"
         :title="isDark ? 'Modo Claro' : 'Modo Escuro'"
     >
-        <Sun v-if="isDark" class="h-5 w-5" />
-        <Moon v-else class="h-5 w-5" />
+        <Sun aria-hidden="true" v-if="isDark" class="h-5 w-5" />
+        <Moon aria-hidden="true" v-else class="h-5 w-5" />
     </button>
 </template>

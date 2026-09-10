@@ -10,11 +10,11 @@
         <div class="p-6 border-b border-border">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-xl font-semibold text-foreground">Gerenciar usuários</h2>
+                    <h2 class="text-xl font-semibold text-foreground">Contas cadastradas</h2>
                     <p class="text-sm text-muted-foreground mt-1">Lista de todos os usuarios do sistema</p>
                 </div>
-                <button onclick="openModal('addUserModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button onclick="openModal('addUserModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
                     Novo usuário
@@ -34,7 +34,7 @@
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tipo</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Criado em</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acoes</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
@@ -46,18 +46,18 @@
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $user->email ?? '-' }}</td>
                         <td class="px-4 py-3">
                             @if(($user->user_type ?? 'team') == 'admin')
-                                <span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">Admin</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-info-soft text-info rounded">Admin</span>
                             @elseif(($user->user_type ?? 'team') == 'judge')
-                                <span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">Juiz</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-muted text-foreground rounded">Juiz</span>
                             @else
-                                <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded">Competidor</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-info-soft text-info rounded">Competidor</span>
                             @endif
                         </td>
                         <td class="px-4 py-3">
                             @if($user->is_enabled ?? true)
-                                <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded">Ativo</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-success-soft text-success rounded">Ativo</span>
                             @else
-                                <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 rounded">Inativo</span>
+                                <span class="px-2 py-1 text-xs font-medium bg-muted text-foreground rounded">Inativo</span>
                             @endif
                         </td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $user->created_at }}</td>
@@ -66,8 +66,8 @@
                                 <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este usuario?')">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" title="Excluir {{ $user->fullname }}">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <button type="submit" class="p-1.5 text-destructive hover:bg-destructive-soft rounded transition-colors" title="Excluir {{ $user->fullname }}">
+                                        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
@@ -78,7 +78,7 @@
                     @empty
                     <tr>
                         <td colspan="8" class="px-4 py-12 text-center text-muted-foreground">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                             </svg>
                             Nenhum usuario cadastrado
@@ -100,7 +100,7 @@
             <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
                 <h3 class="text-xl font-semibold text-foreground">Novo usuário</h3>
                 <button onclick="closeModal('addUserModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
@@ -136,7 +136,7 @@
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">
                     <button type="button" onclick="closeModal('addUserModal')" class="px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors">Cancelar</button>
-                    <button type="submit" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">Salvar</button>
+                    <button type="submit" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">Salvar</button>
                 </div>
             </form>
         </div>

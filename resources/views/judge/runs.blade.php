@@ -40,7 +40,7 @@
                                         <option value="{{ $answer->id }}">{{ $answer->name }}</option>
                                     @endforeach
                                 </select>
-                                <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors">
+                                <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary-hover transition-colors">
                                     Confirmar
                                 </button>
                             </form>
@@ -77,7 +77,7 @@
                         <td class="px-4 py-3 text-sm">{{ $run->user->fullname ?? $run->user->username }}</td>
                         <td class="px-4 py-3 text-sm">{{ $run->problem->short_name }} - {{ $run->problem->name }}</td>
                         <td class="px-4 py-3">
-                            <span class="px-2 py-1 text-xs font-medium rounded {{ $run->answer?->is_accepted ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }}">
+                            <span class="px-2 py-1 text-xs font-medium rounded {{ $run->answer?->is_accepted ? 'bg-success-soft text-success ' : 'bg-destructive-soft text-destructive ' }}">
                                 {{ $run->answer->short_name ?? '-' }}
                             </span>
                         </td>

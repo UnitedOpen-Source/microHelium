@@ -17,12 +17,12 @@
         <!-- Recent Submissions -->
         <div class="rounded-xl border border-border bg-card overflow-hidden">
             <div class="border-b border-border px-6 py-4">
-                <h3 class="text-lg font-semibold flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Submissões Recentes
-                </h3>
+                </h2>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full">
@@ -44,15 +44,7 @@
                             <td class="px-4 py-3 text-sm">{{ $submission->problem_name }}</td>
                             <td class="px-4 py-3 text-sm">{{ $submission->language }}</td>
                             <td class="px-4 py-3 text-sm">
-                                @if($submission->result == 'AC')
-                                    <span class="inline-flex items-center rounded-md bg-success/10 px-2 py-1 text-xs font-medium text-success ring-1 ring-inset ring-success/20">AC</span>
-                                @elseif($submission->result == 'WA')
-                                    <span class="inline-flex items-center rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20">WA</span>
-                                @elseif($submission->result == 'TLE')
-                                    <span class="inline-flex items-center rounded-md bg-warning/10 px-2 py-1 text-xs font-medium text-warning ring-1 ring-inset ring-warning/20">TLE</span>
-                                @else
-                                    <span class="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border">{{ $submission->result }}</span>
-                                @endif
+                                @include('partials.verdict', ['code' => $submission->result, 'compact' => true])
                             </td>
                             <td class="px-4 py-3 text-sm text-muted-foreground">{{ $submission->time !== null ? $submission->time . 's' : '—' }}</td>
                         </tr>
