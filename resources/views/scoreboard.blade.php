@@ -15,7 +15,7 @@
                 </svg>
                 Placar da Competição
             </h3>
-            <p class="text-sm text-muted-foreground">Classificação em tempo real dos times participantes</p>
+            <p class="text-sm text-muted-foreground">Classificação dos times participantes. Recarregue para consultar novos resultados.</p>
         </div>
         @include('partials.table-filter', ['tableId' => 'scoreboard-table', 'searchLabel' => 'times', 'difficulty' => false])
         <div class="overflow-x-auto">
@@ -85,7 +85,7 @@
                         </td>
                     </tr>
                     @endforelse
-                <tr id="scoreboard-table-empty" hidden><td colspan="6" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
+                <tr id="scoreboard-table-empty" hidden><td colspan="{{ 4 + count($problems) }}" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
                 </tbody>
             </table>
         </div>

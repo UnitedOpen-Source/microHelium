@@ -349,6 +349,8 @@ function showStep(step) {
     document.getElementById('nextBtn').classList.toggle('hidden', step === totalSteps);
     document.getElementById('submitBtn').classList.toggle('hidden', step !== totalSteps);
 
+    const heading = document.querySelector('#step' + step + ' h2');
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
     if (step === 5) updateSummary();
 }
 

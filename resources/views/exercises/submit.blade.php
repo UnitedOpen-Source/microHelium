@@ -34,28 +34,28 @@
 
                 <!-- Language Selection -->
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Linguagem de Programacao</label>
-                    <select name="language_id" required class="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
+                    <label for="language_id" class="block text-sm font-medium text-foreground mb-2">Linguagem de programação</label>
+                    <select id="language_id" name="language_id" required class="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
                         <option value="">Selecione a linguagem...</option>
                         @foreach($languages as $lang)
-                            <option value="{{ $lang->id }}">{{ $lang->name }}</option>
+                            <option value="{{ $lang->id }}" @selected(old('language_id') == $lang->id)>{{ $lang->name }}</option>
                         @endforeach
                     </select>
                 </div>
 
                 <!-- File Upload -->
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Arquivo de Codigo Fonte</label>
-                    <div class="relative">
+                    <label for="source_file" class="block text-sm font-medium text-foreground mb-2">Arquivo de código-fonte</label>
+                    <div class="relative rounded-lg focus-within:ring-2 focus-within:ring-primary">
                         <input type="file" name="source_file" id="source_file"
-                               class="hidden" onchange="updateFileName(this)">
+                               class="sr-only" onchange="updateFileName(this)">
                         <label for="source_file" class="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
                             <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-placeholder">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-muted-foreground mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
                                 <p class="text-sm text-muted-foreground">
-                                    <span class="font-medium text-primary">Clique para selecionar</span> ou arraste o arquivo
+                                    <span class="font-medium text-primary">Clique para selecionar</span> de código-fonte
                                 </p>
                             </div>
                             <div class="hidden flex-col items-center justify-center pt-5 pb-6" id="upload-selected">
@@ -71,13 +71,13 @@
 
                 <!-- Code Textarea -->
                 <div>
-                    <label class="block text-sm font-medium text-foreground mb-2">Ou cole seu codigo aqui:</label>
-                    <textarea name="code_text" rows="12" class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="#include <stdio.h>
+                    <label for="code_text" class="block text-sm font-medium text-foreground mb-2">Ou cole seu codigo aqui:</label>
+                    <textarea id="code_text" name="code_text" rows="12" class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="#include <stdio.h>
 
 int main() {
     // Seu codigo aqui
     return 0;
-}"></textarea>
+}">{{ old('code_text') }}</textarea>
                     <p class="text-xs text-muted-foreground mt-1">Se voce enviar um arquivo, o codigo colado aqui sera ignorado.</p>
                 </div>
 
