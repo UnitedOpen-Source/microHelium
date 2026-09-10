@@ -122,6 +122,24 @@ Route::post('/password/email', function () {
 
 /*
 |--------------------------------------------------------------------------
+| Judge Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/judge/runs', [\App\Http\Controllers\JudgeController::class, 'index'])->name('judge.runs');
+Route::post('/judge/runs/{run}', [\App\Http\Controllers\JudgeController::class, 'judge'])->name('judge.runs.judge');
+
+/*
+|--------------------------------------------------------------------------
+| Staff Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/staff/tasks', [\App\Http\Controllers\StaffController::class, 'tasks'])->name('staff.tasks');
+Route::post('/staff/tasks/{task}/complete', [\App\Http\Controllers\StaffController::class, 'complete'])->name('staff.tasks.complete');
+
+/*
+|--------------------------------------------------------------------------
 | Backend Routes (Admin)
 |--------------------------------------------------------------------------
 */
