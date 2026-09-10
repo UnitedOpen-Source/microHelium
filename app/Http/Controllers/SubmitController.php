@@ -21,6 +21,8 @@ class SubmitController extends Controller
 
     public function create(Problem $problem): View
     {
+        $this->authorizeProblemAccess($problem);
+
         $languages = Language::where('contest_id', $problem->contest_id)
             ->where('is_active', true)
             ->orderBy('name')
@@ -40,6 +42,8 @@ class SubmitController extends Controller
      */
     public function store(Request $request, Problem $problem): RedirectResponse
     {
+        $this->authorizeProblemAccess($problem);
+
         $validated = $request->validate([
             'language_id' => 'required|exists:languages,id',
             'source_file' => 'nullable|file|max:' . config('autojudge.max_file_size', 100),
@@ -60,10 +64,10 @@ class SubmitController extends Controller
 
         if ($request->hasFile('source_file')) {
             $file = $request->file('source_file');
-            $originalName = $file->getClientOriginalName();
+            $originalName = $this->sanitizeFilename($file->getClientOriginalName());
             $sourceContent = file_get_contents($file->path());
         } else {
-            $originalName = 'main.' . $language->extension;
+            $originalName = 'main.' . $this->sanitizeFilename($language->extension);
             $sourceContent = $request->input('code_text');
         }
 
@@ -109,5 +113,41 @@ class SubmitController extends Controller
         }
 
         return redirect()->route('submissions')->with('success', 'Submissao enviada! Aguarde o julgamento.');
+    }
+
+    /**
+     * A team must only be able to view/submit to problems that belong to
+     * their own contest -- without this, a team could submit (and pollute
+     * the scoreboard/logs of) any other contest's problem just by guessing
+     * its numeric id, since Problem route-model-binding alone doesn't scope
+     * by contest. Admins and judges are trusted across contests.
+     */
+    private function authorizeProblemAccess(Problem $problem): void
+    {
+        $user = auth()->user();
+
+        if ($user->isAdmin() || $user->isJudge()) {
+            return;
+        }
+
+        if ($user->contest_id !== $problem->contest_id) {
+            abort(403, 'Este problema nao pertence ao seu contest.');
+        }
+    }
+
+    /**
+     * The client-supplied filename (getClientOriginalName()) is untrusted
+     * input that was being concatenated straight into the storage path --
+     * a name like "../../../../etc/cron.d/evil" would escape the intended
+     * runs/{contest}/{user}/ directory. Strip any path component and only
+     * keep a conservative character set.
+     */
+    private function sanitizeFilename(string $name): string
+    {
+        $name = basename($name);
+        $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
+        $name = ltrim($name, '.');
+
+        return $name !== '' ? substr($name, 0, 150) : 'source';
     }
 }

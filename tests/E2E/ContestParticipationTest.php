@@ -419,6 +419,88 @@ CODE;
     }
 
     /**
+     * A team must not be able to view or submit to a problem belonging to a
+     * different contest just by guessing/incrementing the problem id --
+     * SubmitController::authorizeProblemAccess() must block this.
+     */
+    public function test_user_cannot_submit_to_a_problem_from_another_contest()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $otherContest = Contest::create([
+            'name' => 'Someone Else\'s Contest',
+            'start_time' => now()->subHour(),
+            'duration' => 300,
+            'freeze_time' => 60,
+            'penalty' => 20,
+            'max_file_size' => 100,
+            'is_active' => true,
+            'is_public' => true,
+        ]);
+        $otherProblem = Problem::create([
+            'contest_id' => $otherContest->id,
+            'short_name' => 'X',
+            'name' => 'Not Yours',
+            'basename' => 'not-yours',
+            'time_limit' => 1000,
+            'memory_limit' => 256,
+            'auto_judge' => true,
+        ]);
+        $otherLanguage = Language::create([
+            'contest_id' => $otherContest->id,
+            'name' => 'C',
+            'extension' => 'c',
+            'compile_command' => 'gcc {source}',
+            'run_command' => './{executable}',
+            'is_active' => true,
+        ]);
+
+        $viewResponse = $this->actingAs($this->user)->get("/submit/{$otherProblem->id}");
+        $viewResponse->assertStatus(403);
+
+        $file = UploadedFile::fake()->createWithContent('solution.c', "int main(){return 0;}");
+        $postResponse = $this->actingAs($this->user)->post("/submit/{$otherProblem->id}", [
+            'language_id' => $otherLanguage->id,
+            'source_file' => $file,
+        ]);
+        $postResponse->assertStatus(403);
+
+        $this->assertDatabaseMissing('runs', ['problem_id' => $otherProblem->id]);
+        \Illuminate\Support\Facades\Queue::assertNotPushed(\App\Jobs\JudgeRunJob::class);
+    }
+
+    /**
+     * The client-supplied filename must be sanitized before it's used to
+     * build the storage path -- a path-traversal-style name must not escape
+     * the intended runs/{contest}/{user}/ directory.
+     */
+    public function test_submitted_filename_is_sanitized_against_path_traversal()
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+        \Illuminate\Support\Facades\Queue::fake();
+
+        $problem = $this->problems->first();
+        $language = $this->languages->first();
+
+        $file = UploadedFile::fake()->createWithContent('../../../../etc/cron.d/evil.c', "int main(){return 0;}");
+
+        $response = $this->actingAs($this->user)->post("/submit/{$problem->id}", [
+            'language_id' => $language->id,
+            'source_file' => $file,
+        ]);
+
+        $response->assertRedirect(route('submissions'));
+
+        $run = Run::where('problem_id', $problem->id)->where('user_id', $this->user->user_id)->firstOrFail();
+
+        $this->assertStringNotContainsString('..', $run->filename);
+        $this->assertStringNotContainsString('/', $run->filename);
+        $this->assertStringNotContainsString('..', $run->source_file);
+        \Illuminate\Support\Facades\Storage::disk('local')->assertExists($run->source_file);
+    }
+
+    /**
      * Test 6: User can see submission status
      */
     public function test_user_can_see_submission_status()
