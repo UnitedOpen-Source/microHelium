@@ -16,6 +16,10 @@ Route::get('/', [\App\Http\Controllers\HomeController::class, 'index']);
 
 Route::get('/home', [\App\Http\Controllers\HomeController::class, 'index'])->middleware('auth')->name('home');
 
+// Profile (own account, any authenticated role)
+Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'edit'])->middleware('auth')->name('profile.edit');
+Route::put('/profile', [\App\Http\Controllers\ProfileController::class, 'update'])->middleware('auth')->name('profile.update');
+
 // Problems (real BOCA-schema Problem model, scoped to the user's contest)
 Route::get('/exercises', [\App\Http\Controllers\ProblemController::class, 'index'])->name('exercises');
 
