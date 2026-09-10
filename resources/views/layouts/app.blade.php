@@ -80,6 +80,41 @@
                             </a>
                         </div>
 
+                        @if(Auth::check() && (Auth::user()->isJudge() || Auth::user()->isAdmin()))
+                        <!-- Judge Section -->
+                        <div class="mt-6 px-3">
+                            <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Julgamento
+                            </h3>
+                            <div class="mt-2 space-y-1">
+                                <a href="/judge/runs" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('judge/runs*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                    </svg>
+                                    Julgar Submissões
+                                </a>
+                            </div>
+                        </div>
+                        @endif
+
+                        @if(Auth::check() && (Auth::user()->isStaff() || Auth::user()->isAdmin()))
+                        <!-- Staff Section -->
+                        <div class="mt-6 px-3">
+                            <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                Staff
+                            </h3>
+                            <div class="mt-2 space-y-1">
+                                <a href="/staff/tasks" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('staff/tasks*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                    </svg>
+                                    Tarefas
+                                </a>
+                            </div>
+                        </div>
+                        @endif
+
+                        @if(Auth::check() && Auth::user()->isAdmin())
                         <!-- Admin Section -->
                         <div class="mt-6 px-3">
                             <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -131,6 +166,7 @@
                                 </a>
                             </div>
                         </div>
+                        @endif
                     </nav>
                 </div>
             </aside>
