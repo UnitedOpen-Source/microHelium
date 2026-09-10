@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ContestWizardController extends Controller
@@ -98,60 +99,92 @@ class ContestWizardController extends Controller
             DB::table('answers')->insert(array_merge($answer, ['contest_id' => $contestId, 'created_at' => now(), 'updated_at' => now()]));
         }
 
-        $selectedProblems = $request->input('problems', []);
-        if (!empty($selectedProblems)) {
-            $problemBank = DB::table('problem_bank')->whereIn('id', $selectedProblems)->where('is_active', true)->get();
-            $letters = range('A', 'Z');
-            $colors = [['name' => 'Vermelho', 'hex' => '#EF4444'], ['name' => 'Azul', 'hex' => '#3B82F6'], ['name' => 'Verde', 'hex' => '#22C55E'], ['name' => 'Amarelo', 'hex' => '#EAB308'], ['name' => 'Roxo', 'hex' => '#A855F7'], ['name' => 'Rosa', 'hex' => '#EC4899'], ['name' => 'Laranja', 'hex' => '#F97316'], ['name' => 'Ciano', 'hex' => '#06B6D4'], ['name' => 'Indigo', 'hex' => '#6366F1'], ['name' => 'Teal', 'hex' => '#14B8A6']];
-            foreach ($problemBank as $sortOrder => $problem) {
-                $basename = Str::slug($problem->code);
+        $addedCount = self::addProblemsFromBank($contestId, $request->input('problems', []));
 
-                $problemId = DB::table('problems')->insertGetId([
-                    'contest_id' => $contestId,
-                    'short_name' => $letters[$sortOrder] ?? chr(65 + $sortOrder),
-                    'name' => $problem->name,
-                    'basename' => $basename,
-                    'description' => $problem->description . "\n\n## Entrada\n" . $problem->input_description . "\n\n## Saida\n" . $problem->output_description,
-                    'time_limit' => $problem->time_limit,
-                    'memory_limit' => $problem->memory_limit,
-                    'color_name' => $colors[$sortOrder % count($colors)]['name'],
-                    'color_hex' => $colors[$sortOrder % count($colors)]['hex'],
-                    'auto_judge' => true,
-                    'is_fake' => false,
-                    'sort_order' => $sortOrder,
+        return redirect()->route('backend.configurations')->with('success', 'Maratona "' . $validated['name'] . '" criada com ' . $addedCount . ' problemas!');
+    }
+
+    /**
+     * Copy the selected Problem Bank entries into a contest as real Problem
+     * rows (with a starter TestCase from the bank's sample input/output).
+     * Shared between the wizard (new contest) and
+     * Backend\ProblemManagementController (adding to an existing contest,
+     * see issue #34 -- previously there was no way to add a problem to a
+     * contest after the wizard's initial creation).
+     *
+     * @return int number of problems actually added
+     */
+    public static function addProblemsFromBank(int $contestId, array $problemBankIds, int $startingSortOrder = 0): int
+    {
+        if (empty($problemBankIds)) {
+            return 0;
+        }
+
+        $problemBank = DB::table('problem_bank')->whereIn('id', $problemBankIds)->where('is_active', true)->get();
+        $letters = range('A', 'Z');
+        $colors = [['name' => 'Vermelho', 'hex' => '#EF4444'], ['name' => 'Azul', 'hex' => '#3B82F6'], ['name' => 'Verde', 'hex' => '#22C55E'], ['name' => 'Amarelo', 'hex' => '#EAB308'], ['name' => 'Roxo', 'hex' => '#A855F7'], ['name' => 'Rosa', 'hex' => '#EC4899'], ['name' => 'Laranja', 'hex' => '#F97316'], ['name' => 'Ciano', 'hex' => '#06B6D4'], ['name' => 'Indigo', 'hex' => '#6366F1'], ['name' => 'Teal', 'hex' => '#14B8A6']];
+
+        $added = 0;
+        foreach ($problemBank as $i => $problem) {
+            $sortOrder = $startingSortOrder + $i;
+            $basename = Str::slug($problem->code);
+
+            // Same problem bank entry might already have been added to this
+            // contest -- keep this idempotent rather than erroring on the
+            // (contest_id, short_name)/(contest_id, basename) unique
+            // constraints.
+            $alreadyAdded = DB::table('problems')->where('contest_id', $contestId)->where('basename', $basename)->exists();
+            if ($alreadyAdded) {
+                continue;
+            }
+
+            $problemId = DB::table('problems')->insertGetId([
+                'contest_id' => $contestId,
+                'short_name' => $letters[$sortOrder] ?? chr(65 + $sortOrder),
+                'name' => $problem->name,
+                'basename' => $basename,
+                'description' => $problem->description . "\n\n## Entrada\n" . $problem->input_description . "\n\n## Saida\n" . $problem->output_description,
+                'time_limit' => $problem->time_limit,
+                'memory_limit' => $problem->memory_limit,
+                'color_name' => $colors[$sortOrder % count($colors)]['name'],
+                'color_hex' => $colors[$sortOrder % count($colors)]['hex'],
+                'auto_judge' => true,
+                'is_fake' => false,
+                'sort_order' => $sortOrder,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Problem Bank only carries one sample input/output pair (no
+            // hidden test cases), but without at least this one, the
+            // problem has zero TestCase rows and AutoJudgeService would
+            // return "CS - no test cases found" for every submission,
+            // making the problem unjudgeable. Not a substitute for a real
+            // problem package with hidden cases, but it makes the problem
+            // actually functional out of the box.
+            if (filled($problem->sample_input) && filled($problem->sample_output)) {
+                $inputRelative = "problems/{$contestId}/{$basename}/input/1";
+                $outputRelative = "problems/{$contestId}/{$basename}/output/1";
+
+                Storage::disk('local')->put($inputRelative, $problem->sample_input);
+                Storage::disk('local')->put($outputRelative, $problem->sample_output);
+
+                DB::table('test_cases')->insert([
+                    'problem_id' => $problemId,
+                    'number' => 1,
+                    'input_file' => $inputRelative,
+                    'output_file' => $outputRelative,
+                    'input_hash' => hash('sha256', $problem->sample_input),
+                    'output_hash' => hash('sha256', $problem->sample_output),
+                    'is_sample' => true,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-
-                // Problem Bank only carries one sample input/output pair (no
-                // hidden test cases), but without at least this one, the
-                // problem has zero TestCase rows and AutoJudgeService would
-                // return "CS - no test cases found" for every submission,
-                // making every wizard-created contest unjudgeable. Not a
-                // substitute for a real problem package with hidden cases,
-                // but it makes the contest actually functional out of the box.
-                if (filled($problem->sample_input) && filled($problem->sample_output)) {
-                    $inputRelative = "problems/{$contestId}/{$basename}/input/1";
-                    $outputRelative = "problems/{$contestId}/{$basename}/output/1";
-
-                    \Illuminate\Support\Facades\Storage::disk('local')->put($inputRelative, $problem->sample_input);
-                    \Illuminate\Support\Facades\Storage::disk('local')->put($outputRelative, $problem->sample_output);
-
-                    DB::table('test_cases')->insert([
-                        'problem_id' => $problemId,
-                        'number' => 1,
-                        'input_file' => $inputRelative,
-                        'output_file' => $outputRelative,
-                        'input_hash' => hash('sha256', $problem->sample_input),
-                        'output_hash' => hash('sha256', $problem->sample_output),
-                        'is_sample' => true,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
             }
+
+            $added++;
         }
 
-        return redirect()->route('backend.configurations')->with('success', 'Maratona "' . $validated['name'] . '" criada com ' . count($selectedProblems) . ' problemas!');
+        return $added;
     }
 }

@@ -27,8 +27,8 @@ class BackendRoutesTest extends TestCase
 
         // Assert successful response
         $response->assertStatus(200);
-        $response->assertViewIs('backend.exercises');
-        $response->assertViewHas('exercises');
+        $response->assertViewIs('backend.problems');
+        $response->assertViewHas('problems');
     }
 
     /**

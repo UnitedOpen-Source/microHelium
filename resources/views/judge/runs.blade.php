@@ -4,11 +4,7 @@
 
 @section('content')
 <div class="space-y-6">
-    @if(session('success'))
-    <div class="px-4 py-3 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-lg text-sm">
-        {{ session('success') }}
-    </div>
-    @endif
+    {{-- layouts/app.blade.php already renders session('success')/session('error') globally --}}
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
