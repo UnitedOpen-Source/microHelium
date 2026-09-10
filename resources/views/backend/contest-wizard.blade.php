@@ -142,7 +142,7 @@
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                         @foreach($availableLanguages as $lang)
                         <label class="language-card flex items-center gap-3 p-3 bg-background border-2 rounded-lg cursor-pointer hover:border-primary/50 transition-colors {{ $lang['is_active'] ? 'selected' : '' }}" data-lang="{{ $lang['extension'] }}">
-                            <input type="checkbox" name="languages[]" value="{{ $lang['extension'] }}" class="sr-only" @checked(session()->hasOldInput() ? in_array($lang['extension'], old('languages', [])) : $lang['is_active'])>
+                            <input type="checkbox" name="languages[]" value="{{ $lang['extension'] }}" class="sr-only" @checked(session()->hasOldInput('languages') ? in_array($lang['extension'], old('languages', [])) : $lang['is_active'])>
                             <span class="w-8 h-8 bg-primary-soft rounded flex items-center justify-center flex-shrink-0">
                                 <span class="text-xs font-bold text-primary">.{{ $lang['file_ext'] ?? $lang['extension'] }}</span>
                             </span>
@@ -242,11 +242,11 @@
                     </div>
                     <div class="flex gap-4">
                         <label class="flex-1 flex items-center gap-3 p-3 bg-background border border-border rounded-lg cursor-pointer">
-                            <input type="checkbox" name="is_active" value="1" @checked(session()->hasOldInput() ? old('is_active') : true) class="w-5 h-5 rounded">
+                            <input type="checkbox" name="is_active" value="1" @checked(session()->hasOldInput('is_active') ? old('is_active') : true) class="w-5 h-5 rounded">
                             <span class="text-sm">Ativar Imediatamente</span>
                         </label>
                         <label class="flex-1 flex items-center gap-3 p-3 bg-background border border-border rounded-lg cursor-pointer">
-                            <input type="checkbox" name="is_public" value="1" @checked(session()->hasOldInput() ? old('is_public') : true) class="w-5 h-5 rounded">
+                            <input type="checkbox" name="is_public" value="1" @checked(session()->hasOldInput('is_public') ? old('is_public') : true) class="w-5 h-5 rounded">
                             <span class="text-sm">Maratona Publica</span>
                         </label>
                     </div>
