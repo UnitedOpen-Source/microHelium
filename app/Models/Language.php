@@ -57,23 +57,37 @@ class Language extends Model
 
             // Python
             ['name' => 'Python 3.12', 'extension' => 'py3', 'file_ext' => 'py', 'compile_command' => 'python3 -m py_compile {source}', 'run_command' => 'python3 {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'Python 3 (PyPy)', 'extension' => 'pypy3', 'file_ext' => 'py', 'compile_command' => 'pypy3 -m py_compile {source}', 'run_command' => 'pypy3 {source}', 'is_active' => true, 'category' => 'interpreted'],
+            // PyPy has no musl/Alpine build (upstream only ships glibc
+            // binaries), so it's left inactive rather than silently failing
+            // every submission; CPython 3.12 above covers the language.
+            ['name' => 'Python 3 (PyPy)', 'extension' => 'pypy3', 'file_ext' => 'py', 'compile_command' => 'pypy3 -m py_compile {source}', 'run_command' => 'pypy3 {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Python 2.7', 'extension' => 'py2', 'file_ext' => 'py', 'compile_command' => 'python2 -m py_compile {source}', 'run_command' => 'python2 {source}', 'is_active' => false, 'category' => 'interpreted'],
 
-            // JavaScript / Node.js (using NVM)
-            ['name' => 'JavaScript (Node 24)', 'extension' => 'js_node24', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'source ~/.nvm/nvm.sh && nvm use 24 && node {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'JavaScript (Node 22)', 'extension' => 'js_node22', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'source ~/.nvm/nvm.sh && nvm use 22 && node {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'JavaScript (Node 20 LTS)', 'extension' => 'js_node20', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'source ~/.nvm/nvm.sh && nvm use 20 && node {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'TypeScript (Node 22)', 'extension' => 'ts', 'file_ext' => 'ts', 'compile_command' => 'npx tsc --strict --outFile {output}.js {source}', 'run_command' => 'source ~/.nvm/nvm.sh && nvm use 22 && node {executable}.js', 'is_active' => true, 'category' => 'compiled'],
+            // JavaScript / Node.js -- the container only installs a single
+            // Node runtime (the current LTS, via Alpine's `nodejs` package),
+            // so only one Node entry is real; the others are kept in the
+            // catalog for a future multi-version (nvm-based) setup but left
+            // inactive since selecting them today would silently fail.
+            ['name' => 'JavaScript (Node 24 LTS)', 'extension' => 'js_node24', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'JavaScript (Node 22)', 'extension' => 'js_node22', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'JavaScript (Node 20 LTS)', 'extension' => 'js_node20', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'TypeScript (Node 24)', 'extension' => 'ts', 'file_ext' => 'ts', 'compile_command' => 'npx tsc --strict --module commonjs {source}', 'run_command' => 'node {executable}.js', 'is_active' => true, 'category' => 'compiled'],
 
             // JVM Languages
-            ['name' => 'Kotlin (1.9)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Scala 3', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala {classname}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Groovy 4', 'extension' => 'groovy', 'file_ext' => 'groovy', 'compile_command' => 'groovyc {source}', 'run_command' => 'groovy {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Clojure', 'extension' => 'clj', 'file_ext' => 'clj', 'compile_command' => 'clojure -M --main clojure.main --eval "(compile \'main)"', 'run_command' => 'clojure {source}', 'is_active' => false, 'category' => 'interpreted'],
 
             // .NET Languages
-            ['name' => 'C# (.NET 8)', 'extension' => 'cs_dotnet', 'file_ext' => 'cs', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => true, 'category' => 'compiled'],
+            // `dotnet build`/`dotnet run` need a project, not a bare .cs
+            // file, so C# uses wrapper scripts that scaffold a throwaway
+            // console project around the submitted source before building
+            // it (see resources/judge-runtime/csharp/). {judge_runtime} is
+            // resolved by AutoJudgeService, not here -- this array must stay
+            // callable from contexts where the app isn't booted yet (e.g.
+            // PHPUnit data providers), where base_path() isn't available.
+            ['name' => 'C# (.NET 8)', 'extension' => 'cs_dotnet', 'file_ext' => 'cs', 'compile_command' => 'bash {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'bash {judge_runtime}/csharp/run.sh {executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'C# (Mono)', 'extension' => 'cs_mono', 'file_ext' => 'cs', 'compile_command' => 'mcs -out:{output}.exe {source}', 'run_command' => 'mono {executable}.exe', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'F# (.NET 8)', 'extension' => 'fs_dotnet', 'file_ext' => 'fs', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Visual Basic (.NET 8)', 'extension' => 'vb', 'file_ext' => 'vb', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],
