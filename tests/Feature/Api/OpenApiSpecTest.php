@@ -20,6 +20,17 @@ class OpenApiSpecTest extends TestCase
      */
     private const EXCLUDED_PATHS = ['/openapi.yaml'];
 
+    /**
+     * `/api/frontend/*` (see routes/frontend_api_similarity.php and
+     * docs/specs/README.md) shares the "api/" URI prefix with this file's
+     * subject but is a completely different contract: web session + CSRF
+     * for the app's own Vue features, documented per-feature under
+     * docs/specs/*.md, not the bearer-token Sanctum surface this
+     * hand-maintained spec describes. Matched by prefix so future
+     * /api/frontend/* features don't each need a new literal entry here.
+     */
+    private const EXCLUDED_PREFIXES = ['/frontend/'];
+
     public function test_spec_file_is_valid_yaml_with_a_paths_section()
     {
         $spec = Yaml::parseFile(base_path('docs/api/openapi.yaml'));
@@ -38,7 +49,8 @@ class OpenApiSpecTest extends TestCase
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/'))
             ->map(fn ($route) => '/' . substr($route->uri(), strlen('api/')))
             ->unique()
-            ->reject(fn ($path) => in_array($path, self::EXCLUDED_PATHS, true))
+            ->reject(fn ($path) => in_array($path, self::EXCLUDED_PATHS, true)
+                || collect(self::EXCLUDED_PREFIXES)->contains(fn ($prefix) => str_starts_with($path, $prefix)))
             ->values()
             ->all();
 

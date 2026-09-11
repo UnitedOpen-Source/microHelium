@@ -446,3 +446,4 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 });
 
 require __DIR__.'/frontend.php';
+require __DIR__.'/frontend_api_similarity.php';

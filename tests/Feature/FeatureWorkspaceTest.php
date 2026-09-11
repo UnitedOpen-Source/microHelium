@@ -46,7 +46,6 @@ class FeatureWorkspaceTest extends TestCase
     public function test_missing_feature_api_never_reports_a_successful_mutation(): void
     {
         $this->actingAs($this->createAdminUser());
-        $this->postJson('/api/frontend/similarity/checks', ['problem_id' => 1])->assertNotFound();
         $this->postJson('/api/frontend/managed-accounts', ['username' => 'new'])->assertNotFound();
     }
 }

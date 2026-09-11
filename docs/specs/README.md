@@ -6,7 +6,7 @@ Status: frontend implementado; endpoints e regras de domínio propostos para o t
 
 | Issue | Interface entregue | Spec |
 | --- | --- | --- |
-| [#42](https://github.com/UnitedOpen-Source/microHelium/issues/42) | `/backend/similarity`: solicitar análise, estados e pares | [Similaridade](42-similarity.md) |
+| [#42](https://github.com/UnitedOpen-Source/microHelium/issues/42) | `/backend/similarity`: solicitar análise, estados e pares — **backend implementado** (migrations, job, JPlag real) | [Similaridade](42-similarity.md) |
 | [#43](https://github.com/UnitedOpen-Source/microHelium/issues/43) | `/practice`, `/practice/problems/{id}`, `/practice/history`; publicação no banco | [Treino Livre](43-practice.md) |
 | [#44](https://github.com/UnitedOpen-Source/microHelium/issues/44) | `/backend/webcast`: exportação, emissão e revogação de credenciais | [Transmissão](44-webcast.md) |
 | [#45](https://github.com/UnitedOpen-Source/microHelium/issues/45) | `/judge/health`: situação, limites, atividade e recuperação | [Watchdog](45-watchdog.md) |
