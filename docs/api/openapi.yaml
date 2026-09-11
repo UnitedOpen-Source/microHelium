@@ -21,6 +21,7 @@ tags:
   - name: Scoreboard
   - name: ManagedAccounts
   - name: Misc
+  - name: Webcast
 
 paths:
   /user:
@@ -679,6 +680,34 @@ paths:
                   is_running: { type: boolean }
                   is_frozen: { type: boolean }
 
+  /frontend/webcast:
+    get:
+      tags: [Webcast]
+      summary: Webcast export + credential management workspace (issue #44)
+      description: >
+        Session-authenticated admin endpoint (web guard + CSRF via
+        routes/frontend_api_webcast.php, gated by ['auth','admin']) -- NOT
+        Sanctum. Listed here only because this spec documents every
+        registered /api/* route regardless of guard; see
+        app/Http/Controllers/Frontend/WebcastController::index().
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ContestIdQuery"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Contests, selected contest, capabilities, export URL and paginated credential metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebcastWorkspace" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /frontend/managed-accounts:
     get:
       tags: [ManagedAccounts]
@@ -816,12 +845,173 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /frontend/webcast/credentials:
+    post:
+      tags: [Webcast]
+      summary: Issue a webcast credential (issue #44)
+      description: >
+        Session-authenticated admin endpoint, NOT Sanctum. The raw secret is
+        returned exactly once, here, and never again in any later response
+        (including an idempotent replay of this same call, which reports
+        secret: null) -- see App\Models\WebcastCredential::issue() and
+        App\Http\Controllers\Frontend\WebcastController::storeCredential().
+        Idempotency handled by the shared App\Support\IdempotencyStore
+        (issue #47); requires an `Idempotency-Key` header like every other
+        mutating /api/frontend/* endpoint.
+      security: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contest_id, label, expires_at]
+              properties:
+                contest_id: { type: integer }
+                label: { type: string, minLength: 1, maxLength: 80 }
+                expires_at: { type: string, format: date-time }
+      responses:
+        "201":
+          description: Credential created (or, on an idempotent replay of the same key+payload, the same shape with secret null)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      secret: { type: string, nullable: true, description: "The raw secret, present only in the response to the call that actually created the credential; null on any later idempotent replay." }
+        "400":
+          description: Missing Idempotency-Key header
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Idempotency-Key reused with a different payload, or a prior attempt with this key is still in flight
+
+  /frontend/webcast/credentials/{id}:
+    delete:
+      tags: [Webcast]
+      summary: Revoke a webcast credential (issue #44)
+      description: >
+        Session-authenticated admin endpoint, NOT Sanctum. Idempotent at
+        the domain level -- revoking an already-revoked or nonexistent id
+        still returns 200 -- in addition to going through
+        App\Support\IdempotencyStore like every other mutating
+        /api/frontend/* endpoint, so it also requires an `Idempotency-Key`
+        header.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Credential revoked (or already was)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      revoked: { type: boolean }
+        "400":
+          description: Missing Idempotency-Key header
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /frontend/webcast/export:
+    get:
+      tags: [Webcast]
+      summary: Download the BOCA-format webcast ZIP for a contest (issue #44)
+      description: >
+        Session-authenticated admin endpoint, NOT Sanctum. Gated off by
+        config('webcast.export_enabled') (default false) until a real
+        Animeitor consumer fixture confirms byte-format compatibility --
+        see docs/specs/44-webcast.md. Returns 503 while disabled.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ContestIdQuery"
+      responses:
+        "200":
+          description: application/zip attachment (contest, runs, version, time, icpc)
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Export not enabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /webcast/scoreboard:
+    get:
+      tags: [Webcast]
+      summary: Unfrozen scoreboard for a webcast credential's own contest (issue #44)
+      description: >
+        The ONLY route a webcast credential can reach -- registered outside
+        both the `web` and `api` groups (see bootstrap/app.php and
+        routes/webcast_consumer.php), authenticated by
+        App\Http\Middleware\AuthenticateWebcastCredential, not by Sanctum or
+        the web session. Rate-limited (throttle:20,1).
+      security:
+        - webcastCredential: []
+      responses:
+        "200":
+          description: Live, unfrozen scoreboard for the credential's contest
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contest: { type: object, properties: { id: { type: integer }, name: { type: string } } }
+                  generated_at: { type: string, format: date-time }
+                  scoreboard:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rank: { type: integer }
+                        team_id: { type: integer }
+                        team_name: { type: string }
+                        problems_solved: { type: integer }
+                        total_time: { type: integer }
+        "401":
+          description: Missing, invalid, expired, or revoked credential (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
 components:
   securitySchemes:
     sanctum:
       type: http
       scheme: bearer
       description: "Laravel Sanctum personal-access token, sent as `Authorization: Bearer <token>`."
+    webcastCredential:
+      type: http
+      scheme: bearer
+      description: >
+        Issue #44 webcast credential secret, sent as `Authorization: Bearer
+        <secret>`. Verified against webcast_credentials.token_hash by
+        App\Http\Middleware\AuthenticateWebcastCredential -- entirely
+        separate from Sanctum and from any `user_type`.
 
   parameters:
     ContestId:
@@ -886,6 +1076,43 @@ components:
       properties:
         message: { type: string }
         error: { type: string }
+
+    WebcastWorkspace:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            contests:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+            contest:
+              nullable: true
+              type: object
+              properties:
+                id: { type: integer }
+                name: { type: string }
+            capabilities:
+              type: object
+              properties:
+                can_export: { type: boolean }
+                can_manage_credentials: { type: boolean }
+            export_url: { type: string, nullable: true }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  label: { type: string }
+                  status: { type: string, enum: [active, expired, revoked] }
+                  expires_at: { type: string, format: date-time }
+                  last_used_at: { type: string, format: date-time, nullable: true }
+            meta: { $ref: "#/components/schemas/PaginationMeta" }
 
     User:
       type: object
