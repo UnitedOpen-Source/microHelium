@@ -309,6 +309,8 @@ make rollback PREV=<tag>
 
 `make rollback` re-tags `microhelium-app:<tag>` and `microhelium-judge:<tag>` as `:prod`, restarts the stack with `--no-build`, and runs the smoke gate again to confirm the rollback is healthy.
 
+**This does not revert database migrations.** If the deploy being rolled back ran a schema-breaking migration (a dropped/renamed column the old code still reads), re-pointing the image alone won't restore compatibility -- run that migration's `down()` manually first.
+
 ### Smoke checks
 
 ```bash

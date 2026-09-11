@@ -28,7 +28,10 @@ docker compose "${COMPOSE_FILES[@]}" exec -T app php artisan test --testsuite=Sm
 
 check_endpoint() {
     local path="$1" expect="$2" code
-    code=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 "${BASE_URL}${path}" || echo "000")
+    # No -f: an HTTP error status is exactly what we want to see and compare
+    # below, not a curl failure. Only a transport-level failure (timeout,
+    # connection refused, DNS) should fall back to "000".
+    code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "${BASE_URL}${path}") || code="000"
     if [ "$code" != "$expect" ]; then
         echo "FAIL: ${path} returned HTTP ${code} (expected ${expect})" >&2
         return 1

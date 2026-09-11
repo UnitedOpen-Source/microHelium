@@ -211,21 +211,28 @@ PROD_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.prod.yml
 
 deploy:
 	@echo "Building images tagged $(DEPLOY_TAG)..."
-	@IMAGE_TAG=$(DEPLOY_TAG) $(PROD_COMPOSE) build
+	@IMAGE_TAG=$(DEPLOY_TAG) $(PROD_COMPOSE) build app autojudge
 	@echo "Promoting $(DEPLOY_TAG) to :prod..."
 	@docker tag microhelium-app:$(DEPLOY_TAG) microhelium-app:prod
 	@docker tag microhelium-judge:$(DEPLOY_TAG) microhelium-judge:prod
 	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d
-	@docker compose exec -T app php artisan migrate --force
+	@echo "Waiting for the database to be healthy..."
+	@until [ "$$(docker inspect -f '{{.State.Health.Status}}' microhelium-db 2>/dev/null)" = "healthy" ]; do sleep 2; done
+	@$(PROD_COMPOSE) exec -T app php artisan migrate --force
 	@echo "Deployed $(DEPLOY_TAG). Running smoke tests..."
 	@$(MAKE) smoke || (echo "" && echo "Smoke tests FAILED after deploying $(DEPLOY_TAG)." && echo "Roll back with: make rollback PREV=<previous-tag>" && exit 1)
 	@echo "Deploy of $(DEPLOY_TAG) verified healthy."
 
+# NOTE: this re-points images and restarts containers only -- it does NOT
+# revert database migrations. If the deploy being rolled back included a
+# schema-breaking migration (a dropped/renamed column the old code still
+# reads), rolling back the image alone will not restore compatibility; you
+# must also manually run the down migration(s) for that deploy first.
 rollback:
 ifndef PREV
 	$(error Usage: make rollback PREV=<git-sha-tag>. List available tags with: docker images microhelium-app)
 endif
-	@echo "Rolling back :prod to $(PREV) (no rebuild)..."
+	@echo "Rolling back :prod to $(PREV) (no rebuild, migrations NOT reverted -- see Makefile comment)..."
 	@docker tag microhelium-app:$(PREV) microhelium-app:prod
 	@docker tag microhelium-judge:$(PREV) microhelium-judge:prod
 	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d --no-build
