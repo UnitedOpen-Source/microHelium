@@ -10,7 +10,7 @@ Status: frontend implementado; endpoints e regras de domínio propostos para o t
 | [#43](https://github.com/UnitedOpen-Source/microHelium/issues/43) | `/practice`, `/practice/problems/{id}`, `/practice/history`; publicação no banco | [Treino Livre](43-practice.md) |
 | [#44](https://github.com/UnitedOpen-Source/microHelium/issues/44) | `/backend/webcast`: exportação, emissão e revogação de credenciais | [Transmissão](44-webcast.md) |
 | [#45](https://github.com/UnitedOpen-Source/microHelium/issues/45) | `/judge/health`: situação, limites, atividade e recuperação | [Watchdog](45-watchdog.md) |
-| [#46](https://github.com/UnitedOpen-Source/microHelium/issues/46) | `/backend/bank-governance`: responsável, etiquetas e capacidades | [Propriedade](46-bank-ownership.md) |
+| [#46](https://github.com/UnitedOpen-Source/microHelium/issues/46) | `/backend/bank-governance`: responsável, etiquetas e capacidades. **Backend implementado**: `GET`/`PATCH /api/frontend/bank-governance` reais, organizações/membership `editor`, policy reaplicada a `toggle`/`destroy`/import BOCA | [Propriedade](46-bank-ownership.md) |
 | [#47](https://github.com/UnitedOpen-Source/microHelium/issues/47) | `/backend/managed-accounts`: cadastro privado e restrições | [Contas gerenciadas](47-managed-accounts.md) |
 | [#48](https://github.com/UnitedOpen-Source/microHelium/issues/48) | Estado 403 compartilhado; nenhuma regra alterada | [Autorização](48-authorization.md) |
 
