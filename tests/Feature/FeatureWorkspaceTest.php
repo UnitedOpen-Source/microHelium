@@ -47,6 +47,5 @@ class FeatureWorkspaceTest extends TestCase
     {
         $this->actingAs($this->createAdminUser());
         $this->postJson('/api/frontend/similarity/checks', ['problem_id' => 1])->assertNotFound();
-        $this->postJson('/api/frontend/managed-accounts', ['username' => 'new'])->assertNotFound();
     }
 }

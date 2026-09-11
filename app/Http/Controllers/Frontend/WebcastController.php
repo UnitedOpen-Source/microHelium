@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\WebcastCredential;
 use App\Services\BocaWebcastZipBuilder;
-use App\Services\IdempotencyGuard;
+use App\Support\IdempotencyStore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -30,10 +30,21 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * check on revoke is kept anyway as the same defense-in-depth convention
  * used elsewhere in this codebase, in case a scoped role is ever added
  * here later.
+ *
+ * Idempotency-Key handling goes through App\Support\IdempotencyStore --
+ * the shared mechanism introduced by issue #47's managed-accounts create
+ * endpoint (App\Http\Controllers\Api\Frontend\ManagedAccountsController).
+ * This controller previously had its own, near-identical App\Services\
+ * IdempotencyGuard; that was deleted in favor of this one shared
+ * implementation when both landed on master around the same time -- see
+ * storeCredential() for how the one place this endpoint's contract
+ * differs from IdempotencyStore's generic "persist and replay whatever
+ * the callback returns" behavior (never persisting the one-time secret)
+ * is reconciled without forking the shared class.
  */
 class WebcastController extends Controller
 {
-    public function __construct(private readonly IdempotencyGuard $idempotency) {}
+    private const ROUTE_CREDENTIALS = 'POST /api/frontend/webcast/credentials';
 
     public function index(Request $request): JsonResponse
     {
@@ -106,7 +117,26 @@ class WebcastController extends Controller
         // effectively empty label slip past `required`.
         $request->merge(['label' => trim((string) $request->input('label', ''))]);
 
-        return $this->idempotency->handle($request, function () use ($request) {
+        // IdempotencyStore::handle() persists AND replays exactly
+        // $callback's returned JsonResponse body -- by design, so a retry
+        // gets the exact same response as the original call. That's
+        // wrong for this one endpoint: the raw secret must never be
+        // persisted anywhere (spec: "nunca armazenar token em claro
+        // indefinidamente"), even though it must still reach the caller
+        // that actually triggered creation.
+        //
+        // Resolved by keeping the secret out of the response IdempotencyStore
+        // ever sees entirely: the callback below always returns secret:null,
+        // which is what gets both persisted and replayed. $issuedSecret is a
+        // side channel, set only when THIS process is the one that actually
+        // ran WebcastCredential::issue() (i.e. a fresh claim, not a replay
+        // of someone else's completed or in-flight row) -- IdempotencyStore
+        // has already persisted the redacted response by the time control
+        // returns here, so overlaying the real secret afterwards, only for
+        // the winning caller, never touches what's stored.
+        $issuedSecret = null;
+
+        $response = IdempotencyStore::handle($request, self::ROUTE_CREDENTIALS, function () use ($request, &$issuedSecret) {
             $maxDays = (int) config('webcast.max_credential_lifetime_days', 30);
 
             $validator = Validator::make($request->all(), [
@@ -141,33 +171,23 @@ class WebcastController extends Controller
                 auth()->id()
             );
 
-            $publicBody = ['data' => ['id' => $credential->id, 'secret' => $secret]];
+            $issuedSecret = $secret;
 
-            // Reconciliation policy for a same-key/same-payload replay
-            // (spec: "reconciliar metadados sem reexibir segredo ja
-            // entregue"): the secret is never persisted anywhere, even
-            // encrypted -- the record kept for idempotent replay carries
-            // only metadata, with secret explicitly null. A client that
-            // truly never received the secret (e.g. the response was lost
-            // in flight) cannot recover it via retry; it must revoke and
-            // reissue, which is the safer of the two policies the spec
-            // explicitly allows here.
-            //
-            // The stored/replayed shape is deliberately identical to the
-            // public one -- {id, secret} -- so a client retrying under the
-            // same Idempotency-Key always gets the same response shape,
-            // just with secret null instead of a value. It previously also
-            // carried label/status/expires_at, which no other response
-            // from this endpoint ever included.
-            $storedBody = ['data' => ['id' => $credential->id, 'secret' => null]];
-
-            return [201, $publicBody, $storedBody];
+            return response()->json(['data' => ['id' => $credential->id, 'secret' => null]], 201);
         });
+
+        if ($issuedSecret !== null) {
+            $body = $response->getData(true);
+            $body['data']['secret'] = $issuedSecret;
+            $response->setData($body);
+        }
+
+        return $response;
     }
 
     public function revokeCredential(Request $request, int $id): JsonResponse
     {
-        return $this->idempotency->handle($request, function () use ($id) {
+        return IdempotencyStore::handle($request, 'DELETE /api/frontend/webcast/credentials/'.$id, function () use ($id) {
             $credential = WebcastCredential::find($id);
 
             if (! $credential) {
@@ -175,7 +195,7 @@ class WebcastController extends Controller
                 // credential that no longer exists (already revoked and
                 // since deleted, or never existed) still reports success
                 // rather than exposing whether an id ever existed.
-                return [200, ['data' => ['id' => $id, 'revoked' => true]]];
+                return response()->json(['data' => ['id' => $id, 'revoked' => true]]);
             }
 
             $this->authorizeScopedAccess(
@@ -190,7 +210,7 @@ class WebcastController extends Controller
             // AuthenticateWebcastCredential middleware always reads the
             // database directly), so revocation is effective for the very
             // next request with no separate invalidation step needed.
-            return [200, ['data' => ['id' => $credential->id, 'revoked' => true]]];
+            return response()->json(['data' => ['id' => $credential->id, 'revoked' => true]]);
         });
     }
 

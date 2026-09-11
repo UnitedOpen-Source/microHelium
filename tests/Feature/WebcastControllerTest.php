@@ -3,11 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Contest;
-use App\Models\IdempotencyKey;
 use App\Models\WebcastCredential;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class WebcastControllerTest extends TestCase
@@ -104,6 +101,27 @@ class WebcastControllerTest extends TestCase
         $this->assertCount(5, $page2->json('data.items'));
     }
 
+    public function test_post_and_delete_without_idempotency_key_header_are_rejected(): void
+    {
+        // App\Support\IdempotencyStore::handle() requires the header
+        // unconditionally (shared contract established by issue #47's
+        // managed-accounts create endpoint) -- the real frontend always
+        // sends one (resources/js/features/useFeature.js's act()), so
+        // this only matters for a malformed/non-browser client.
+        $admin = $this->createAdminUser();
+        $this->actingAs($admin);
+        $contest = Contest::factory()->create();
+        [$credential] = WebcastCredential::issue($contest, 'X', now()->addDay(), $admin->user_id);
+
+        $this->postJson('/api/frontend/webcast/credentials', [
+            'contest_id' => $contest->id,
+            'label' => 'Sem chave',
+            'expires_at' => now()->addHour()->toISOString(),
+        ])->assertStatus(400);
+
+        $this->deleteJson("/api/frontend/webcast/credentials/{$credential->id}")->assertStatus(400);
+    }
+
     public function test_create_credential_returns_secret_once_and_validates_fields(): void
     {
         $admin = $this->createAdminUser();
@@ -114,7 +132,7 @@ class WebcastControllerTest extends TestCase
             'contest_id' => $contest->id,
             'label' => 'Computador da cerimonia',
             'expires_at' => now()->addHour()->toISOString(),
-        ])->assertStatus(201);
+        ], ['Idempotency-Key' => 'create-1'])->assertStatus(201);
 
         $id = $response->json('data.id');
         $secret = $response->json('data.secret');
@@ -140,31 +158,31 @@ class WebcastControllerTest extends TestCase
             'contest_id' => $contest->id,
             'label' => '',
             'expires_at' => now()->addHour()->toISOString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('label');
+        ], ['Idempotency-Key' => 'invalid-1'])->assertStatus(422)->assertJsonValidationErrors('label');
 
         $this->postJson('/api/frontend/webcast/credentials', [
             'contest_id' => $contest->id,
             'label' => str_repeat('a', 81),
             'expires_at' => now()->addHour()->toISOString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('label');
+        ], ['Idempotency-Key' => 'invalid-2'])->assertStatus(422)->assertJsonValidationErrors('label');
 
         $this->postJson('/api/frontend/webcast/credentials', [
             'contest_id' => $contest->id,
             'label' => 'Valido',
             'expires_at' => now()->subHour()->toISOString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('expires_at');
+        ], ['Idempotency-Key' => 'invalid-3'])->assertStatus(422)->assertJsonValidationErrors('expires_at');
 
         $this->postJson('/api/frontend/webcast/credentials', [
             'contest_id' => $contest->id,
             'label' => 'Valido',
             'expires_at' => now()->addYears(5)->toISOString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('expires_at');
+        ], ['Idempotency-Key' => 'invalid-4'])->assertStatus(422)->assertJsonValidationErrors('expires_at');
 
         $this->postJson('/api/frontend/webcast/credentials', [
             'contest_id' => 999999,
             'label' => 'Valido',
             'expires_at' => now()->addHour()->toISOString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('contest_id');
+        ], ['Idempotency-Key' => 'invalid-5'])->assertStatus(422)->assertJsonValidationErrors('contest_id');
     }
 
     public function test_idempotency_key_replay_with_same_payload_never_repeats_the_secret(): void
@@ -209,7 +227,7 @@ class WebcastControllerTest extends TestCase
             'contest_id' => $contest->id,
             'label' => '   ',
             'expires_at' => now()->addHour()->toISOString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('label');
+        ], ['Idempotency-Key' => 'whitespace-1'])->assertStatus(422)->assertJsonValidationErrors('label');
 
         $this->assertSame(0, WebcastCredential::where('contest_id', $contest->id)->count());
     }
@@ -256,56 +274,11 @@ class WebcastControllerTest extends TestCase
         ], ['Idempotency-Key' => 'k-3'])->assertStatus(201);
     }
 
-    public function test_concurrent_create_race_on_same_key_falls_back_to_replay_instead_of_crashing(): void
-    {
-        // Simulates two requests both reaching IdempotencyGuard::handle()'s
-        // "does a row exist?" check before either has inserted: the second
-        // one's IdempotencyKey::create() call collides with the unique
-        // index (idempotency_actor_route_key_unique) instead of finding an
-        // existing row up front. That must fall back to a normal replay,
-        // not bubble up as an unhandled QueryException/500.
-        $admin = $this->createAdminUser();
-        $this->actingAs($admin);
-        $contest = Contest::factory()->create();
-        $key = 'race-key';
-
-        $winnerInserted = false;
-        IdempotencyKey::creating(function ($model) use (&$winnerInserted) {
-            if ($winnerInserted) {
-                return;
-            }
-            $winnerInserted = true;
-
-            DB::table('idempotency_keys')->insert([
-                'actor' => $model->actor,
-                'route' => $model->route,
-                'idempotency_key' => $model->idempotency_key,
-                'payload_hash' => $model->payload_hash,
-                'status' => 'completed',
-                'response_status' => 201,
-                'response_body' => Crypt::encryptString(json_encode(['data' => ['id' => 999999, 'secret' => null]])),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        });
-
-        try {
-            $response = $this->postJson('/api/frontend/webcast/credentials', [
-                'contest_id' => $contest->id,
-                'label' => 'Corrida',
-                'expires_at' => now()->addHour()->toISOString(),
-            ], ['Idempotency-Key' => $key]);
-        } finally {
-            IdempotencyKey::flushEventListeners();
-        }
-
-        $response->assertStatus(201);
-        $this->assertSame(999999, $response->json('data.id'));
-        $this->assertNull($response->json('data.secret'));
-        // The request that lost the race never actually created its own
-        // credential row.
-        $this->assertSame(0, WebcastCredential::where('contest_id', $contest->id)->count());
-    }
+    // Concurrent-claim-race handling (two requests racing the same
+    // Idempotency-Key) is generic behavior owned and tested by
+    // App\Support\IdempotencyStore itself -- see
+    // tests/Feature/ManagedAccountsApiTest.php -- rather than re-tested
+    // per-endpoint here.
 
     public function test_revoke_is_idempotent_and_hides_the_credential_going_forward(): void
     {
@@ -314,14 +287,16 @@ class WebcastControllerTest extends TestCase
         $contest = Contest::factory()->create();
         [$credential] = WebcastCredential::issue($contest, 'A revogar', now()->addDay(), $admin->user_id);
 
-        $this->deleteJson("/api/frontend/webcast/credentials/{$credential->id}")
+        $this->deleteJson("/api/frontend/webcast/credentials/{$credential->id}", [], ['Idempotency-Key' => 'revoke-1'])
             ->assertStatus(200)
             ->assertJson(['data' => ['id' => $credential->id, 'revoked' => true]]);
 
         $this->assertSame('revoked', $credential->fresh()->status());
 
-        // Repeating the revoke is safe.
-        $this->deleteJson("/api/frontend/webcast/credentials/{$credential->id}")
+        // Repeating the revoke (a different Idempotency-Key this time, so
+        // this exercises the underlying domain-level idempotency of
+        // revoke() itself, not just IdempotencyStore's replay) is safe.
+        $this->deleteJson("/api/frontend/webcast/credentials/{$credential->id}", [], ['Idempotency-Key' => 'revoke-2'])
             ->assertStatus(200)
             ->assertJson(['data' => ['id' => $credential->id, 'revoked' => true]]);
     }
@@ -330,7 +305,7 @@ class WebcastControllerTest extends TestCase
     {
         $this->actingAs($this->createAdminUser());
 
-        $this->deleteJson('/api/frontend/webcast/credentials/999999')
+        $this->deleteJson('/api/frontend/webcast/credentials/999999', [], ['Idempotency-Key' => 'revoke-missing'])
             ->assertStatus(200)
             ->assertJson(['data' => ['id' => 999999, 'revoked' => true]]);
     }

@@ -20,6 +20,17 @@ class OpenApiSpecTest extends TestCase
      */
     private const EXCLUDED_PATHS = ['/openapi.yaml'];
 
+    /**
+     * Path prefixes that intentionally have no OpenAPI entry: the
+     * /api/frontend/* endpoints (see routes/frontend_api_bank_governance.php)
+     * are registered on the web session guard + CSRF for the app's own
+     * Vue features, not routes/api.php's auth:sanctum contract this spec
+     * documents (see the file header above). They share the literal "api/"
+     * URI prefix only incidentally; their contract is documented in
+     * docs/specs/README.md instead.
+     */
+    private const EXCLUDED_PREFIXES = ['/frontend/'];
+
     public function test_spec_file_is_valid_yaml_with_a_paths_section()
     {
         $spec = Yaml::parseFile(base_path('docs/api/openapi.yaml'));
@@ -36,9 +47,10 @@ class OpenApiSpecTest extends TestCase
 
         $registeredPaths = collect(Route::getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/'))
-            ->map(fn ($route) => '/' . substr($route->uri(), strlen('api/')))
+            ->map(fn ($route) => '/'.substr($route->uri(), strlen('api/')))
             ->unique()
             ->reject(fn ($path) => in_array($path, self::EXCLUDED_PATHS, true))
+            ->reject(fn ($path) => collect(self::EXCLUDED_PREFIXES)->contains(fn ($prefix) => str_starts_with($path, $prefix)))
             ->values()
             ->all();
 
@@ -46,7 +58,7 @@ class OpenApiSpecTest extends TestCase
 
         $this->assertEmpty(
             $undocumented,
-            'These API routes have no matching path in docs/api/openapi.yaml: ' . implode(', ', $undocumented)
+            'These API routes have no matching path in docs/api/openapi.yaml: '.implode(', ', $undocumented)
         );
     }
 
@@ -57,7 +69,7 @@ class OpenApiSpecTest extends TestCase
 
         $registeredPaths = collect(Route::getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/'))
-            ->map(fn ($route) => '/' . substr($route->uri(), strlen('api/')))
+            ->map(fn ($route) => '/'.substr($route->uri(), strlen('api/')))
             ->unique()
             ->values()
             ->all();
@@ -66,7 +78,7 @@ class OpenApiSpecTest extends TestCase
 
         $this->assertEmpty(
             $stale,
-            'docs/api/openapi.yaml documents paths that no longer have a matching route: ' . implode(', ', $stale)
+            'docs/api/openapi.yaml documents paths that no longer have a matching route: '.implode(', ', $stale)
         );
     }
 

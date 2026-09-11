@@ -1,9 +1,29 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Backend\ConfigurationController;
+use App\Http\Controllers\Backend\ContestWizardController;
+use App\Http\Controllers\Backend\ProblemBankController;
+use App\Http\Controllers\Backend\ProblemManagementController;
+use App\Http\Controllers\Backend\TeamController;
+use App\Http\Controllers\Backend\UserController;
+use App\Http\Controllers\ClarificationController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\JudgeController;
+use App\Http\Controllers\ProblemController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ScoreboardController;
+use App\Http\Controllers\SiteController;
+use App\Http\Controllers\StaffController;
+use App\Http\Controllers\SubmissionController;
+use App\Http\Controllers\SubmitController;
+use App\Models\ContestLog;
+use App\Models\ProblemBank;
+use App\Services\BocaImporterService;
+use Helium\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
@@ -12,42 +32,42 @@ use Illuminate\Support\Str;
 */
 
 // Home with statistics
-Route::get('/', [\App\Http\Controllers\HomeController::class, 'index']);
+Route::get('/', [HomeController::class, 'index']);
 
-Route::get('/home', [\App\Http\Controllers\HomeController::class, 'index'])->middleware('auth')->name('home');
+Route::get('/home', [HomeController::class, 'index'])->middleware('auth')->name('home');
 
 // Profile (own account, any authenticated role)
-Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'edit'])->middleware('auth')->name('profile.edit');
-Route::put('/profile', [\App\Http\Controllers\ProfileController::class, 'update'])->middleware('auth')->name('profile.update');
+Route::get('/profile', [ProfileController::class, 'edit'])->middleware('auth')->name('profile.edit');
+Route::put('/profile', [ProfileController::class, 'update'])->middleware('auth')->name('profile.update');
 
 // Problems (real BOCA-schema Problem model, scoped to the user's contest)
-Route::get('/exercises', [\App\Http\Controllers\ProblemController::class, 'index'])->name('exercises');
+Route::get('/exercises', [ProblemController::class, 'index'])->name('exercises');
 
-Route::get('/exercise/{problem}', [\App\Http\Controllers\ProblemController::class, 'show'])->name('exercise.show');
+Route::get('/exercise/{problem}', [ProblemController::class, 'show'])->name('exercise.show');
 
 // Scoreboard
-Route::get('/scoreboard', [\App\Http\Controllers\ScoreboardController::class, 'index'])->name('scoreboard');
+Route::get('/scoreboard', [ScoreboardController::class, 'index'])->name('scoreboard');
 
 // Scoreboard Export (CSV)
-Route::get('/scoreboard/export', [\App\Http\Controllers\ScoreboardController::class, 'export'])->name('scoreboard.export');
+Route::get('/scoreboard/export', [ScoreboardController::class, 'export'])->name('scoreboard.export');
 
 // Clarifications
-Route::get('/clarifications', [\App\Http\Controllers\ClarificationController::class, 'index'])->name('clarifications');
+Route::get('/clarifications', [ClarificationController::class, 'index'])->name('clarifications');
 
-Route::post('/clarifications', [\App\Http\Controllers\ClarificationController::class, 'store'])->middleware('auth');
+Route::post('/clarifications', [ClarificationController::class, 'store'])->middleware('auth');
 
 // Submissions
-Route::get('/submissions', [\App\Http\Controllers\SubmissionController::class, 'index'])->middleware('auth')->name('submissions');
+Route::get('/submissions', [SubmissionController::class, 'index'])->middleware('auth')->name('submissions');
 
-Route::get('/submission/{run}', [\App\Http\Controllers\SubmissionController::class, 'show'])->middleware('auth')->name('submission.show');
+Route::get('/submission/{run}', [SubmissionController::class, 'show'])->middleware('auth')->name('submission.show');
 
 // Submit solution -- creates a real Run and dispatches it to the auto-judge
 // queue (see App\Http\Controllers\SubmitController). Previously this was a
 // stub that wrote a 'pending' row to the legacy exercise_team table and
 // never actually judged anything.
-Route::get('/submit/{problem}', [\App\Http\Controllers\SubmitController::class, 'create'])->name('exercise.submit');
+Route::get('/submit/{problem}', [SubmitController::class, 'create'])->name('exercise.submit');
 
-Route::post('/submit/{problem}', [\App\Http\Controllers\SubmitController::class, 'store']);
+Route::post('/submit/{problem}', [SubmitController::class, 'store']);
 
 // Help page
 Route::get('/ajuda', function () {
@@ -89,7 +109,7 @@ Route::post('/login', function () {
     // persistent session, so every new browser session re-checks the IP.
     $remember = request()->filled('remember');
     if ($remember) {
-        $candidate = \Helium\User::where('email', $credentials['email'] ?? null)->first();
+        $candidate = User::where('email', $credentials['email'] ?? null)->first();
         if ($candidate?->site?->ip_address) {
             $remember = false;
         }
@@ -103,12 +123,12 @@ Route::post('/login', function () {
         // configured ip_address must be connecting from an allowed
         // address/range -- checked here, not on a later page, so a
         // wrong-network login never gets a live session in the first place.
-        if ($user->site && !$user->site->isIpAllowed($clientIp)) {
+        if ($user->site && ! $user->site->isIpAllowed($clientIp)) {
             auth()->logout();
             request()->session()->invalidate();
             request()->session()->regenerateToken();
 
-            \App\Models\ContestLog::warning(
+            ContestLog::warning(
                 $user->contest_id ?? $user->site->contest_id,
                 "Login bloqueado: IP fora da rede configurada para o site \"{$user->site->name}\"",
                 ['user_id' => $user->user_id, 'site_id' => $user->site_id, 'ip' => $clientIp]
@@ -120,6 +140,7 @@ Route::post('/login', function () {
         }
 
         request()->session()->regenerate();
+
         return redirect()->intended('/home');
     }
 
@@ -160,6 +181,7 @@ Route::post('/logout', function () {
     auth()->logout();
     request()->session()->invalidate();
     request()->session()->regenerateToken();
+
     return redirect('/');
 })->name('logout');
 
@@ -179,8 +201,8 @@ Route::post('/password/email', function () {
 |--------------------------------------------------------------------------
 */
 
-Route::get('/judge/runs', [\App\Http\Controllers\JudgeController::class, 'index'])->name('judge.runs');
-Route::post('/judge/runs/{run}', [\App\Http\Controllers\JudgeController::class, 'judge'])->name('judge.runs.judge');
+Route::get('/judge/runs', [JudgeController::class, 'index'])->name('judge.runs');
+Route::post('/judge/runs/{run}', [JudgeController::class, 'judge'])->name('judge.runs.judge');
 
 /*
 |--------------------------------------------------------------------------
@@ -188,8 +210,8 @@ Route::post('/judge/runs/{run}', [\App\Http\Controllers\JudgeController::class, 
 |--------------------------------------------------------------------------
 */
 
-Route::get('/staff/tasks', [\App\Http\Controllers\StaffController::class, 'tasks'])->name('staff.tasks');
-Route::post('/staff/tasks/{task}/complete', [\App\Http\Controllers\StaffController::class, 'complete'])->name('staff.tasks.complete');
+Route::get('/staff/tasks', [StaffController::class, 'tasks'])->name('staff.tasks');
+Route::post('/staff/tasks/{task}/complete', [StaffController::class, 'complete'])->name('staff.tasks.complete');
 
 /*
 |--------------------------------------------------------------------------
@@ -197,13 +219,13 @@ Route::post('/staff/tasks/{task}/complete', [\App\Http\Controllers\StaffControll
 |--------------------------------------------------------------------------
 */
 
-Route::get('/site/dashboard', [\App\Http\Controllers\SiteController::class, 'dashboard'])->name('site.dashboard');
-Route::get('/site/tasks', [\App\Http\Controllers\SiteController::class, 'tasks'])->name('site.tasks');
-Route::post('/site/tasks/{task}/complete', [\App\Http\Controllers\SiteController::class, 'completeTask'])->name('site.tasks.complete');
-Route::get('/site/teams', [\App\Http\Controllers\SiteController::class, 'teams'])->name('site.teams');
-Route::post('/site/teams', [\App\Http\Controllers\SiteController::class, 'storeTeam'])->name('site.teams.store');
-Route::get('/site/clarifications', [\App\Http\Controllers\SiteController::class, 'clarifications'])->name('site.clarifications');
-Route::post('/site/clarifications/{clarification}/answer', [\App\Http\Controllers\SiteController::class, 'answerClarification'])->name('site.clarifications.answer');
+Route::get('/site/dashboard', [SiteController::class, 'dashboard'])->name('site.dashboard');
+Route::get('/site/tasks', [SiteController::class, 'tasks'])->name('site.tasks');
+Route::post('/site/tasks/{task}/complete', [SiteController::class, 'completeTask'])->name('site.tasks.complete');
+Route::get('/site/teams', [SiteController::class, 'teams'])->name('site.teams');
+Route::post('/site/teams', [SiteController::class, 'storeTeam'])->name('site.teams.store');
+Route::get('/site/clarifications', [SiteController::class, 'clarifications'])->name('site.clarifications');
+Route::post('/site/clarifications/{clarification}/answer', [SiteController::class, 'answerClarification'])->name('site.clarifications.answer');
 
 /*
 |--------------------------------------------------------------------------
@@ -216,32 +238,32 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     // Problem Management (real Problem/TestCase rows -- see issue #34;
     // replaces the old "Exercises Management" that targeted the legacy,
     // disconnected `exercises` table)
-    Route::get('/exercises', [\App\Http\Controllers\Backend\ProblemManagementController::class, 'index'])->name('backend.exercises');
-    Route::post('/exercises', [\App\Http\Controllers\Backend\ProblemManagementController::class, 'store']);
+    Route::get('/exercises', [ProblemManagementController::class, 'index'])->name('backend.exercises');
+    Route::post('/exercises', [ProblemManagementController::class, 'store']);
 
     // Users Management
-    Route::get('/users', [\App\Http\Controllers\Backend\UserController::class, 'index'])->name('backend.users');
-    Route::post('/users', [\App\Http\Controllers\Backend\UserController::class, 'store']);
-    Route::delete('/users/{id}', [\App\Http\Controllers\Backend\UserController::class, 'destroy'])->name('backend.users.destroy');
+    Route::get('/users', [UserController::class, 'index'])->name('backend.users');
+    Route::post('/users', [UserController::class, 'store']);
+    Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('backend.users.destroy');
 
     // Teams Management
-    Route::get('/teams', [\App\Http\Controllers\Backend\TeamController::class, 'index'])->name('backend.teams');
-    Route::post('/teams', [\App\Http\Controllers\Backend\TeamController::class, 'store']);
-    Route::delete('/teams/{id}', [\App\Http\Controllers\Backend\TeamController::class, 'destroy'])->name('backend.teams.destroy');
+    Route::get('/teams', [TeamController::class, 'index'])->name('backend.teams');
+    Route::post('/teams', [TeamController::class, 'store']);
+    Route::delete('/teams/{id}', [TeamController::class, 'destroy'])->name('backend.teams.destroy');
 
     // Site Management (multi-site coordination -- see issue #18)
-    Route::get('/sites', [\App\Http\Controllers\Backend\SiteController::class, 'index'])->name('backend.sites');
-    Route::post('/sites', [\App\Http\Controllers\Backend\SiteController::class, 'store'])->name('backend.sites.store');
-    Route::put('/sites/{site}', [\App\Http\Controllers\Backend\SiteController::class, 'update'])->name('backend.sites.update');
-    Route::delete('/sites/{site}', [\App\Http\Controllers\Backend\SiteController::class, 'destroy'])->name('backend.sites.destroy');
+    Route::get('/sites', [App\Http\Controllers\Backend\SiteController::class, 'index'])->name('backend.sites');
+    Route::post('/sites', [App\Http\Controllers\Backend\SiteController::class, 'store'])->name('backend.sites.store');
+    Route::put('/sites/{site}', [App\Http\Controllers\Backend\SiteController::class, 'update'])->name('backend.sites.update');
+    Route::delete('/sites/{site}', [App\Http\Controllers\Backend\SiteController::class, 'destroy'])->name('backend.sites.destroy');
 
     // Configurations/Hackathons Management
-    Route::get('/configurations', [\App\Http\Controllers\Backend\ConfigurationController::class, 'index'])->name('backend.configurations');
-    Route::post('/configurations', [\App\Http\Controllers\Backend\ConfigurationController::class, 'store']);
+    Route::get('/configurations', [ConfigurationController::class, 'index'])->name('backend.configurations');
+    Route::post('/configurations', [ConfigurationController::class, 'store']);
 
     // Contest Wizard
-    Route::get('/contest-wizard', [\App\Http\Controllers\Backend\ContestWizardController::class, 'index'])->name('backend.contest-wizard');
-    Route::post('/contest-wizard', [\App\Http\Controllers\Backend\ContestWizardController::class, 'store']);
+    Route::get('/contest-wizard', [ContestWizardController::class, 'index'])->name('backend.contest-wizard');
+    Route::post('/contest-wizard', [ContestWizardController::class, 'store']);
 
     // Clarifications Management (Admin)
     Route::get('/clarifications', function () {
@@ -253,9 +275,11 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             ->get()
             ->map(function ($item) {
                 $item->answered = $item->status === 'answered';
-                $item->problem = $item->problem_id ? 'Problema #' . $item->problem_id : null;
+                $item->problem = $item->problem_id ? 'Problema #'.$item->problem_id : null;
+
                 return $item;
             });
+
         return view('backend.clarifications', compact('clarifications'));
     })->name('backend.clarifications');
 
@@ -266,6 +290,7 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             'answered_time' => 0,
             'updated_at' => now(),
         ]);
+
         return redirect()->route('backend.clarifications')->with('success', 'Resposta enviada!');
     });
 
@@ -280,7 +305,7 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
                 ->leftJoin('answers', 'runs.answer_id', '=', 'answers.id')
                 ->leftJoin('languages', 'runs.language_id', '=', 'languages.id')
                 ->select('runs.*', 'users.fullname as team_name', 'problems.name as problem_name',
-                         'answers.short_name as result', 'languages.name as language')
+                    'answers.short_name as result', 'languages.name as language')
                 ->orderBy('runs.created_at', 'desc')
                 ->get();
         }
@@ -294,19 +319,21 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
         DB::table('contests')->update(['is_active' => false]);
         // Activate the selected one
         DB::table('contests')->where('id', $id)->update(['is_active' => true]);
+
         return redirect()->route('backend.configurations')->with('success', 'Maratona ativada com sucesso!');
     });
 
     Route::get('/contest/{id}/edit', function ($id) {
         $hackathon = DB::table('hackathons')->where('hackathon_id', $id)->first();
         $contest = DB::table('contests')->where('id', $id)->first();
-        if (!$hackathon) {
+        if (! $hackathon) {
             return redirect()->route('backend.configurations')->with('error', 'Maratona nao encontrada');
         }
+
         return view('backend.contest-edit', compact('hackathon', 'contest'));
     })->name('backend.contest.edit');
 
-    Route::put('/contest/{id}/update', function ($id, \Illuminate\Http\Request $request) {
+    Route::put('/contest/{id}/update', function ($id, Request $request) {
         $validated = $request->validate([
             'name' => 'required|string|max:100',
             'description' => 'nullable|string',
@@ -318,9 +345,9 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             'unlock_key' => 'nullable|string|max:100',
         ]);
 
-        $startTime = new \DateTime($validated['start_time']);
+        $startTime = new DateTime($validated['start_time']);
         $endTime = clone $startTime;
-        $endTime->modify('+' . $validated['duration'] . ' minutes');
+        $endTime->modify('+'.$validated['duration'].' minutes');
 
         // Check for duplicate name (excluding current hackathon)
         $existing = DB::table('hackathons')
@@ -364,6 +391,7 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
         DB::table('languages')->where('contest_id', $id)->delete();
         DB::table('answers')->where('contest_id', $id)->delete();
         DB::table('sites')->where('contest_id', $id)->delete();
+
         return redirect()->route('backend.configurations')->with('success', 'Maratona excluida com sucesso!');
     });
 
@@ -374,8 +402,10 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
                 'freeze_time' => 0, // Freeze immediately
                 'updated_at' => now(),
             ]);
+
             return redirect()->route('backend.configurations')->with('success', 'Placar congelado!');
         }
+
         return redirect()->route('backend.configurations')->with('error', 'Nenhuma maratona ativa');
     });
 
@@ -386,15 +416,17 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
                 'is_active' => false,
                 'updated_at' => now(),
             ]);
+
             return redirect()->route('backend.configurations')->with('success', 'Competicao encerrada!');
         }
+
         return redirect()->route('backend.configurations')->with('error', 'Nenhuma maratona ativa');
     });
 
     // Problem Bank Management
-    Route::get('/problem-bank', [\App\Http\Controllers\Backend\ProblemBankController::class, 'index'])->name('backend.problem-bank');
-    Route::delete('/problem-bank/{id}', [\App\Http\Controllers\Backend\ProblemBankController::class, 'destroy'])->name('backend.problem-bank.destroy');
-    Route::post('/problem-bank/{id}/toggle', [\App\Http\Controllers\Backend\ProblemBankController::class, 'toggle'])->name('backend.problem-bank.toggle');
+    Route::get('/problem-bank', [ProblemBankController::class, 'index'])->name('backend.problem-bank');
+    Route::delete('/problem-bank/{id}', [ProblemBankController::class, 'destroy'])->name('backend.problem-bank.destroy');
+    Route::post('/problem-bank/{id}/toggle', [ProblemBankController::class, 'toggle'])->name('backend.problem-bank.toggle');
 
     // BOCA Import Routes
     Route::get('/import-boca', function () {
@@ -402,18 +434,27 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     })->name('backend.import-boca');
 
     Route::post('/import-boca/upload', function () {
+        // Issue #46 (docs/specs/46-bank-ownership.md) calls out this route
+        // by name: it creates new problem_bank rows, so it must reapply the
+        // same ownership policy as the new bank-governance screen. This
+        // route also sits behind the `admin` middleware today, so the
+        // check below is currently unreachable for non-admins -- it's
+        // defense-in-depth so import stays admin-only even if this route's
+        // gate is ever loosened.
+        abort_unless(auth()->user()->can('create', ProblemBank::class), 403);
+
         $file = request()->file('boca_zip');
 
-        if (!$file || !$file->isValid()) {
+        if (! $file || ! $file->isValid()) {
             return redirect()->route('backend.import-boca')->with('error', 'Arquivo invalido');
         }
 
         // Store temporarily
         $path = $file->store('temp/boca');
-        $fullPath = storage_path('app/' . $path);
+        $fullPath = storage_path('app/'.$path);
 
         // Import
-        $importer = new \App\Services\BocaImporterService();
+        $importer = new BocaImporterService;
         $result = $importer->importFromZip($fullPath);
 
         // Cleanup
@@ -421,7 +462,7 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 
         if ($result['success']) {
             return redirect()->route('backend.problem-bank')
-                ->with('success', 'Importados ' . $result['count'] . ' problema(s) do BOCA!');
+                ->with('success', 'Importados '.$result['count'].' problema(s) do BOCA!');
         }
 
         return redirect()->route('backend.import-boca')
@@ -429,14 +470,19 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     });
 
     Route::post('/import-boca/github', function () {
-        $importer = new \App\Services\BocaImporterService();
+        // Issue #46: same reasoning as /import-boca/upload above (also
+        // currently unreachable for non-admins, kept as defense-in-depth).
+        abort_unless(auth()->user()->can('create', ProblemBank::class), 403);
+
+        $importer = new BocaImporterService;
         $result = $importer->importFromBocaGitHub();
 
         if ($result['success'] || $result['count'] > 0) {
-            $message = 'Importados ' . $result['count'] . ' problema(s) do BOCA GitHub!';
-            if (!empty($result['errors'])) {
-                $message .= ' (Alguns erros: ' . implode(', ', array_slice($result['errors'], 0, 3)) . ')';
+            $message = 'Importados '.$result['count'].' problema(s) do BOCA GitHub!';
+            if (! empty($result['errors'])) {
+                $message .= ' (Alguns erros: '.implode(', ', array_slice($result['errors'], 0, 3)).')';
             }
+
             return redirect()->route('backend.problem-bank')->with('success', $message);
         }
 
@@ -447,3 +493,5 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 
 require __DIR__.'/frontend.php';
 require __DIR__.'/frontend_api_webcast.php';
+require __DIR__.'/frontend_api_bank_governance.php';
+require __DIR__.'/frontend_api_managed_accounts.php';
