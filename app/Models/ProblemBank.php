@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProblemBank extends Model
 {
@@ -27,12 +29,29 @@ class ProblemBank extends Model
         'difficulty',
         'tags',
         'is_active',
+        'owning_org_id',
+        'version',
     ];
 
     protected $casts = [
         'tags' => 'array',
         'is_active' => 'boolean',
+        'version' => 'integer',
     ];
+
+    /**
+     * Issue #46: nullable owning organization. Null means "legacy" --
+     * administrable only by admin (docs/specs/46-bank-ownership.md).
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class, 'owning_org_id');
+    }
+
+    public function ownershipTransfers(): HasMany
+    {
+        return $this->hasMany(ProblemBankOwnershipTransfer::class);
+    }
 
     public function scopeActive($query)
     {
@@ -46,7 +65,7 @@ class ProblemBank extends Model
 
     public function getDifficultyBadgeAttribute(): string
     {
-        return match($this->difficulty) {
+        return match ($this->difficulty) {
             'easy' => 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
             'medium' => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
             'hard' => 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
@@ -56,7 +75,7 @@ class ProblemBank extends Model
 
     public function getDifficultyLabelAttribute(): string
     {
-        return match($this->difficulty) {
+        return match ($this->difficulty) {
             'easy' => 'Facil',
             'medium' => 'Medio',
             'hard' => 'Dificil',
