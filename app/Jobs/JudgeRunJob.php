@@ -5,12 +5,19 @@ namespace App\Jobs;
 use App\Models\Run;
 use App\Services\AutoJudgeService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class JudgeRunJob implements ShouldQueue
+/**
+ * ShouldBeUnique (keyed on the run id, held for $uniqueFor) so
+ * runs:reconcile-stuck's watchdog (issue #45) re-dispatching a run whose
+ * original job just hasn't been picked up yet (queue backlog, not a lost
+ * job) can't result in two workers judging the same run concurrently.
+ */
+class JudgeRunJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -18,9 +25,17 @@ class JudgeRunJob implements ShouldQueue
     public int $timeout = 300;
     public int $backoff = 10;
 
+    /** Matches $timeout -- the lock can't outlive the longest a legitimate judge attempt should take. */
+    public int $uniqueFor = 300;
+
     public function __construct(
         public Run $run
     ) {}
+
+    public function uniqueId(): string
+    {
+        return (string) $this->run->id;
+    }
 
     public function handle(AutoJudgeService $judgeService): void
     {

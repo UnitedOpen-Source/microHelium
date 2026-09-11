@@ -52,8 +52,7 @@ class JudgeController extends Controller
             $runs = $query->get();
 
             $pendingRuns = $runs->whereIn('status', ['pending', 'judging'])->map(function (Run $run) {
-                $waitLimit = $run->site->max_judge_wait_time ?? 900;
-                $run->is_overdue = $run->created_at->diffInSeconds(now()) > $waitLimit;
+                $run->is_overdue = $run->isOverdue();
 
                 return $run;
             });
