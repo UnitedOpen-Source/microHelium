@@ -286,6 +286,37 @@ descfile=problem.pdf
 - **Code Style**: Laravel Pint
 - **CI/CD**: GitHub Actions
 
+## Deployment & Rollback
+
+Production images are built and tagged with the git sha that produced them, so rolling back is re-pointing a tag and restarting -- no rebuild, no migration replay. (See issue #54.)
+
+### Deploying
+
+```bash
+make deploy
+```
+
+This builds `microhelium-app`/`microhelium-judge` images tagged with the current git sha, promotes that sha to the `:prod` tag the containers actually run, restarts the stack, runs pending migrations, and then runs `make smoke` as a gate -- if the smoke checks fail, the deploy is reported as failed (the new containers are left running for inspection; roll back explicitly if needed).
+
+### Rolling back
+
+List what's available to roll back to, then re-point `:prod` at a previous build (no rebuild):
+
+```bash
+docker images microhelium-app   # find a previous <tag>
+make rollback PREV=<tag>
+```
+
+`make rollback` re-tags `microhelium-app:<tag>` and `microhelium-judge:<tag>` as `:prod`, restarts the stack with `--no-build`, and runs the smoke gate again to confirm the rollback is healthy.
+
+### Smoke checks
+
+```bash
+make smoke
+```
+
+Runs two layers of checks against the live stack: the PHPUnit `Smoke` suite (`tests/Smoke/RouteHealthSmokeTest.php`) inside the running `app` container (safe against production data -- it uses `phpunit.xml`'s in-memory sqlite), and plain `curl` checks against `/up`, `/api/health`, and `/login` through the real webserver/nginx path. `make deploy` and `make rollback` both run this automatically as a gate; run it manually any time to verify the currently-running stack is healthy.
+
 ## Contributing
 
 1. Fork the repository

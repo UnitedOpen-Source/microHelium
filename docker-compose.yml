@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: microhelium-app:${IMAGE_TAG:-latest}
     container_name: microhelium-app
     restart: unless-stopped
     working_dir: /var/www/html
@@ -81,7 +82,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: microhelium-queue
+    image: microhelium-app:${IMAGE_TAG:-latest}
+    # No container_name: docker-compose.prod.yml scales this service to
+    # multiple replicas, which Compose rejects when a fixed name is set
+    # ("container name must be unique") -- previously invalid and never
+    # exercised, since nothing had run `docker compose -f ... -f
+    # docker-compose.prod.yml config` against it before issue #54.
     restart: unless-stopped
     working_dir: /var/www/html
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
@@ -99,6 +105,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: microhelium-app:${IMAGE_TAG:-latest}
     container_name: microhelium-scheduler
     restart: unless-stopped
     working_dir: /var/www/html
@@ -116,6 +123,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.judge
+    image: microhelium-judge:${IMAGE_TAG:-latest}
     container_name: microhelium-autojudge
     restart: unless-stopped
     working_dir: /var/www/html

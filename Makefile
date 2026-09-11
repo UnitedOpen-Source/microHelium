@@ -1,7 +1,7 @@
 # MicroHelium Makefile
 # Docker commands for development and production
 
-.PHONY: help build up down restart logs shell migrate seed fresh test lint format
+.PHONY: help build up down restart logs shell migrate seed fresh test lint format deploy rollback smoke
 
 # Default target
 help:
@@ -41,6 +41,9 @@ help:
 	@echo "Production:"
 	@echo "  make prod        - Build for production"
 	@echo "  make prod-up     - Start production containers"
+	@echo "  make deploy      - Build+tag a new image, roll it out, run smoke tests"
+	@echo "  make rollback PREV=<tag> - Re-point :prod at a previously built image, no rebuild"
+	@echo "  make smoke       - Run post-deploy smoke checks against the live stack"
 
 # =============================================================================
 # Setup
@@ -192,6 +195,46 @@ prod-up:
 
 prod-down:
 	@docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+# =============================================================================
+# Deploy / Rollback (issue #54)
+#
+# Every build is tagged with the git sha that produced it (microhelium-app,
+# microhelium-judge), so a rollback is just re-pointing the ":prod" tag at a
+# previously built image and restarting -- no rebuild, no migration replay.
+# `docker images microhelium-app` / `microhelium-judge` lists what's
+# available to roll back to.
+# =============================================================================
+
+DEPLOY_TAG ?= $(shell git rev-parse --short HEAD)
+PROD_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.prod.yml
+
+deploy:
+	@echo "Building images tagged $(DEPLOY_TAG)..."
+	@IMAGE_TAG=$(DEPLOY_TAG) $(PROD_COMPOSE) build
+	@echo "Promoting $(DEPLOY_TAG) to :prod..."
+	@docker tag microhelium-app:$(DEPLOY_TAG) microhelium-app:prod
+	@docker tag microhelium-judge:$(DEPLOY_TAG) microhelium-judge:prod
+	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d
+	@docker compose exec -T app php artisan migrate --force
+	@echo "Deployed $(DEPLOY_TAG). Running smoke tests..."
+	@$(MAKE) smoke || (echo "" && echo "Smoke tests FAILED after deploying $(DEPLOY_TAG)." && echo "Roll back with: make rollback PREV=<previous-tag>" && exit 1)
+	@echo "Deploy of $(DEPLOY_TAG) verified healthy."
+
+rollback:
+ifndef PREV
+	$(error Usage: make rollback PREV=<git-sha-tag>. List available tags with: docker images microhelium-app)
+endif
+	@echo "Rolling back :prod to $(PREV) (no rebuild)..."
+	@docker tag microhelium-app:$(PREV) microhelium-app:prod
+	@docker tag microhelium-judge:$(PREV) microhelium-judge:prod
+	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d --no-build
+	@echo "Rolled back to $(PREV). Running smoke tests..."
+	@$(MAKE) smoke
+	@echo "Rollback to $(PREV) verified healthy."
+
+smoke:
+	@./scripts/smoke.sh
 
 # =============================================================================
 # Cleanup
