@@ -187,14 +187,24 @@ npm-build:
 # Production
 # =============================================================================
 
+# IMAGE_TAG defaults to :prod here (not :latest) so `make prod`/`prod-up`
+# share the same tag universe as `make deploy`/`rollback` below -- otherwise
+# `prod-up` would run :latest while `rollback` only knows about :prod/sha
+# tags, and a rollback after a plain `prod-up` would silently swap in
+# whatever :prod last happened to reference instead of anything related to
+# what's actually running. Override with `make prod-up IMAGE_TAG=<tag>` if
+# you need a specific tag.
+IMAGE_TAG ?= prod
+PROD_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.prod.yml
+
 prod:
-	@docker compose -f docker-compose.yml -f docker-compose.prod.yml build
+	@IMAGE_TAG=$(IMAGE_TAG) $(PROD_COMPOSE) build
 
 prod-up:
-	@docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+	@IMAGE_TAG=$(IMAGE_TAG) $(PROD_COMPOSE) up -d
 
 prod-down:
-	@docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+	@$(PROD_COMPOSE) down
 
 # =============================================================================
 # Deploy / Rollback (issue #54)
@@ -206,8 +216,9 @@ prod-down:
 # available to roll back to.
 # =============================================================================
 
-DEPLOY_TAG ?= $(shell git rev-parse --short HEAD)
-PROD_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.prod.yml
+# := (not ?=/lazy) so this is computed once per `make` invocation instead of
+# re-running `git rev-parse` on every one of the several references below.
+DEPLOY_TAG := $(shell git rev-parse --short HEAD)
 
 deploy:
 	@echo "Building images tagged $(DEPLOY_TAG)..."
@@ -215,10 +226,11 @@ deploy:
 	@echo "Promoting $(DEPLOY_TAG) to :prod..."
 	@docker tag microhelium-app:$(DEPLOY_TAG) microhelium-app:prod
 	@docker tag microhelium-judge:$(DEPLOY_TAG) microhelium-judge:prod
-	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d
-	@echo "Waiting for the database to be healthy..."
-	@until [ "$$(docker inspect -f '{{.State.Health.Status}}' microhelium-db 2>/dev/null)" = "healthy" ]; do sleep 2; done
+	@echo "Starting db/redis/app/webserver and running migrations before touching background workers..."
+	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d --wait --wait-timeout 120 db redis app webserver
 	@$(PROD_COMPOSE) exec -T app php artisan migrate --force
+	@echo "Migrations applied. Starting queue/scheduler/autojudge on the new image..."
+	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d --wait --wait-timeout 120 queue scheduler autojudge
 	@echo "Deployed $(DEPLOY_TAG). Running smoke tests..."
 	@$(MAKE) smoke || (echo "" && echo "Smoke tests FAILED after deploying $(DEPLOY_TAG)." && echo "Roll back with: make rollback PREV=<previous-tag>" && exit 1)
 	@echo "Deploy of $(DEPLOY_TAG) verified healthy."
@@ -235,7 +247,7 @@ endif
 	@echo "Rolling back :prod to $(PREV) (no rebuild, migrations NOT reverted -- see Makefile comment)..."
 	@docker tag microhelium-app:$(PREV) microhelium-app:prod
 	@docker tag microhelium-judge:$(PREV) microhelium-judge:prod
-	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d --no-build
+	@IMAGE_TAG=prod $(PROD_COMPOSE) up -d --no-build --wait --wait-timeout 120
 	@echo "Rolled back to $(PREV). Running smoke tests..."
 	@$(MAKE) smoke
 	@echo "Rollback to $(PREV) verified healthy."
