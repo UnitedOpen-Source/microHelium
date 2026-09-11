@@ -21,7 +21,14 @@ class ClarificationController extends Controller
             ->when(!$user->isAdmin() && !$user->isJudge(), function ($q) use ($user) {
                 $q->where(function ($q) use ($user) {
                     $q->where('user_id', $user->user_id)
-                        ->orWhereIn('status', ['broadcast_site', 'broadcast_all']);
+                        ->orWhere('status', 'broadcast_all')
+                        // broadcast_site is scoped to the clarification's
+                        // own site (where the judge answered), not the
+                        // viewer's -- a team at another site must not see it.
+                        ->orWhere(function ($q) use ($user) {
+                            $q->where('status', 'broadcast_site')
+                                ->where('site_id', $user->site_id);
+                        });
                 });
             })
             ->with(['problem:id,short_name,name', 'user:user_id,fullname', 'judge:user_id,fullname'])
