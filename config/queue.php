@@ -69,7 +69,14 @@ return [
             // guard (issue #45) exists to prevent. This was never
             // reachable while config/queue.php silently defaulted to the
             // 'sync' driver (see issue #61) -- worth fixing now, together.
-            'retry_after' => 360,
+            //
+            // Laravel enforces the job timeout with a hard SIGALRM kill of
+            // the whole worker process rather than a graceful release, so
+            // the margin here also has to absorb that process's exit,
+            // supervisor/`queue:work` restart, and reconnect to Redis
+            // before the retry_after window lapses. 60s was too thin for
+            // that; doubling the timeout leaves a comfortable cushion.
+            'retry_after' => 600,
         ],
 
     ],

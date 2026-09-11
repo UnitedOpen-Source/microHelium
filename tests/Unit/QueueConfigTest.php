@@ -24,10 +24,15 @@ class QueueConfigTest extends TestCase
         $this->setEnv('QUEUE_CONNECTION', 'redis');
         $this->setEnv('QUEUE_DRIVER', 'beanstalkd');
 
-        $config = require base_path('config/queue.php');
-
-        $this->setEnv('QUEUE_CONNECTION', null);
-        $this->setEnv('QUEUE_DRIVER', null);
+        try {
+            $config = require base_path('config/queue.php');
+        } finally {
+            // Guaranteed even if require() throws, so a failure here can't
+            // leak QUEUE_CONNECTION/QUEUE_DRIVER into the rest of this
+            // single-process PHPUnit run.
+            $this->setEnv('QUEUE_CONNECTION', null);
+            $this->setEnv('QUEUE_DRIVER', null);
+        }
 
         $this->assertSame('redis', $config['default']);
     }
