@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Support\IdempotencyStore;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @see IdempotencyStore
+ */
 class IdempotencyKey extends Model
 {
-    protected $table = 'idempotency_keys';
-
     protected $fillable = [
         'user_id',
         'route',
@@ -18,7 +20,7 @@ class IdempotencyKey extends Model
     ];
 
     protected $casts = [
-        'response_status' => 'integer',
         'response_body' => 'array',
+        'response_status' => 'integer',
     ];
 }

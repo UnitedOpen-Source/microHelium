@@ -10,11 +10,11 @@ use App\Models\Run;
 use App\Models\SimilarityCheck;
 use App\Services\Similarity\EligibleRunFinder;
 use App\Services\Similarity\SimilarityLanguageMap;
-use App\Support\HandlesIdempotency;
-use Illuminate\Contracts\Cache\LockTimeoutException;
+use App\Support\IdempotencyStore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -27,8 +27,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class SimilarityController extends Controller
 {
-    use HandlesIdempotency;
-
+    private const ROUTE = 'POST /api/frontend/similarity/checks';
     private const PER_PAGE = 20;
 
     public function index(Request $request): JsonResponse
@@ -57,8 +56,18 @@ class SimilarityController extends Controller
 
         $totalChecks = SimilarityCheck::query()->count();
         $checks = SimilarityCheck::query()
-            ->with(['problem:id,name', 'language:id,name', 'pairs' => fn ($q) => $q->orderByDesc('similarity_score')->orderByDesc('id')])
-            ->with(['pairs.runA.user:user_id,fullname', 'pairs.runB.user:user_id,fullname'])
+            // A single ->with() call: Builder::with() merges eager-load
+            // specs by array_merge(), so a second call adding
+            // 'pairs.runA.user'/'pairs.runB.user' would silently overwrite
+            // this call's ordering closure for the ancestor 'pairs' key
+            // with a plain (unordered) load -- pairs would come back in
+            // insertion order instead of sorted by similarity_score desc.
+            ->with([
+                'problem:id,name',
+                'language:id,name',
+                'pairs' => fn ($q) => $q->orderByDesc('similarity_score')->orderByDesc('id')
+                    ->with(['runA.user:user_id,fullname', 'runB.user:user_id,fullname']),
+            ])
             ->orderByDesc('id')
             ->forPage($page, self::PER_PAGE)
             ->get();
@@ -79,7 +88,7 @@ class SimilarityController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        return $this->idempotent($request, 'POST /api/frontend/similarity/checks', function () use ($request) {
+        return IdempotencyStore::handle($request, self::ROUTE, function () use ($request) {
             $validated = $request->validate([
                 'problem_id' => ['required', 'integer', 'exists:problems,id'],
                 'language_id' => ['required', 'integer', 'exists:languages,id'],
@@ -92,6 +101,16 @@ class SimilarityController extends Controller
             if ((int) $language->contest_id !== (int) $problem->contest_id) {
                 throw ValidationException::withMessages([
                     'language_id' => ['Essa linguagem não pertence ao concurso deste problema.'],
+                ]);
+            }
+
+            // index() only ever lists active+supported languages in its
+            // dropdown -- without this check, a direct API call bypassing
+            // the UI could start an analysis against a language the UI
+            // has intentionally hidden as retired.
+            if (!$language->is_active) {
+                throw ValidationException::withMessages([
+                    'language_id' => ['Esta linguagem não está mais ativa.'],
                 ]);
             }
 
@@ -128,66 +147,87 @@ class SimilarityController extends Controller
 
             // The concurrency count, the duplicate-snapshot lookup, and the
             // SimilarityCheck::create() below all have to be atomic
-            // together: without a lock, two concurrent requests for the
-            // same contest (e.g. two admin tabs, no Idempotency-Key) could
-            // both read zero conflicting rows and both insert, since
-            // nothing here is a DB-level unique constraint that could
-            // catch a genuine INSERT/INSERT race. Scoped per contest_id --
-            // the same granularity as the concurrency cap itself.
-            try {
-                $response = Cache::lock("similarity-check-create:contest:{$problem->contest_id}", 30)
-                    ->block((int) config('similarity.lock_wait_seconds', 5), function () use ($problem, $language, $eligible, $excluded, $validated, $runIds, $snapshot) {
-                        $maxConcurrent = (int) config('similarity.max_concurrent_per_contest');
-                        $runningForContest = SimilarityCheck::query()
-                            ->where('contest_id', $problem->contest_id)
-                            ->whereIn('status', ['queued', 'running'])
-                            ->count();
-                        if ($runningForContest >= $maxConcurrent) {
-                            return response()->json([
-                                'message' => 'Já existem análises em andamento para este concurso. Aguarde a conclusão antes de solicitar outra.',
-                            ], 409);
-                        }
+            // together. Follows this codebase's own established pattern
+            // for exactly this "check-then-insert must be atomic" shape
+            // (see SubmitController::store()'s duplicate-submission lock):
+            // DB::transaction() + ->lockForUpdate() on the rows that
+            // matter, not an application-level cache lock whose
+            // correctness would depend on the cache driver actually being
+            // cross-process-safe (this repo has a documented history of
+            // CACHE_STORE/env mismatches -- see fix/issue-59). Locking
+            // every queued/running row for this contest_id (an indexed
+            // column, see the migration's ['contest_id','status'] index)
+            // takes an InnoDB gap lock on that range in production
+            // (MySQL), so a concurrent transaction can't insert a new
+            // queued/running row for the same contest until this one
+            // commits -- closing the INSERT/INSERT race a plain SELECT
+            // can't.
+            $outcome = DB::transaction(function () use ($problem, $language, $eligible, $excluded, $validated, $runIds, $snapshot) {
+                $lockedChecks = SimilarityCheck::query()
+                    ->where('contest_id', $problem->contest_id)
+                    ->whereIn('status', ['queued', 'running'])
+                    ->lockForUpdate()
+                    ->get();
 
-                        $duplicate = SimilarityCheck::query()
-                            ->where('problem_id', $problem->id)
-                            ->where('language_id', $language->id)
-                            ->whereIn('status', ['queued', 'running'])
-                            ->get()
-                            ->first(fn (SimilarityCheck $check) => ($check->snapshot['run_ids'] ?? null) === $runIds);
-                        if ($duplicate) {
-                            return response()->json([
-                                'message' => 'Já existe uma análise em andamento para este mesmo conjunto de equipes.',
-                                'data' => ['id' => $duplicate->id],
-                            ], 409);
-                        }
+                $maxConcurrent = (int) config('similarity.max_concurrent_per_contest');
+                if ($lockedChecks->count() >= $maxConcurrent) {
+                    return ['response' => response()->json([
+                        'message' => 'Já existem análises em andamento para este concurso. Aguarde a conclusão antes de solicitar outra.',
+                    ], 409)];
+                }
 
-                        $check = SimilarityCheck::create([
-                            'user_id' => auth()->id(),
-                            'contest_id' => $problem->contest_id,
-                            'problem_id' => $problem->id,
-                            'language_id' => $language->id,
-                            'status' => 'queued',
-                            'threshold' => $validated['threshold'],
-                            'team_count' => $eligible->count(),
-                            'snapshot' => $snapshot,
-                            'options' => [
-                                'jplag_version' => config('similarity.jplag.version'),
-                                'max_pairs' => config('similarity.max_pairs_per_report'),
-                                'base_code' => (bool) config('similarity.base_code_path'),
-                            ],
-                        ]);
+                $duplicate = $lockedChecks
+                    ->where('problem_id', $problem->id)
+                    ->where('language_id', $language->id)
+                    ->first(fn (SimilarityCheck $check) => ($check->snapshot['run_ids'] ?? null) === $runIds);
+                if ($duplicate) {
+                    return ['response' => response()->json([
+                        'message' => 'Já existe uma análise em andamento para este mesmo conjunto de equipes.',
+                        'data' => ['id' => $duplicate->id],
+                    ], 409)];
+                }
 
-                        RunSimilarityCheckJob::dispatch($check);
+                $check = SimilarityCheck::create([
+                    'user_id' => auth()->id(),
+                    'contest_id' => $problem->contest_id,
+                    'problem_id' => $problem->id,
+                    'language_id' => $language->id,
+                    'status' => 'queued',
+                    'threshold' => $validated['threshold'],
+                    'team_count' => $eligible->count(),
+                    'snapshot' => $snapshot,
+                    'options' => [
+                        'jplag_version' => config('similarity.jplag.version'),
+                        'max_pairs' => config('similarity.max_pairs_per_report'),
+                        'base_code' => (bool) config('similarity.base_code_path'),
+                    ],
+                ]);
 
-                        return response()->json(['data' => ['id' => $check->id, 'status' => 'queued']], 202);
-                    });
-            } catch (LockTimeoutException) {
-                return response()->json([
-                    'message' => 'Há muitas solicitações simultâneas para este concurso. Tente novamente em instantes.',
-                ], 409);
+                return ['check' => $check];
+            });
+
+            if (isset($outcome['response'])) {
+                return $outcome['response'];
             }
 
-            return $response;
+            $check = $outcome['check'];
+
+            try {
+                RunSimilarityCheckJob::dispatch($check);
+            } catch (\Throwable $e) {
+                // The row already committed (outside this catch, the
+                // transaction above is done) -- if enqueueing itself
+                // throws (e.g. the queue backend is briefly unreachable),
+                // nothing will ever run handle() or failed() for this
+                // check, so without this it would stay stuck at 'queued'
+                // forever instead of surfacing a clear failure.
+                Log::error('Failed to dispatch RunSimilarityCheckJob', ['check_id' => $check->id, 'error' => $e->getMessage()]);
+                $check->update(['status' => 'failed', 'safe_error_code' => 'dispatch_failed']);
+
+                return response()->json(['data' => ['id' => $check->id, 'status' => 'failed']], 202);
+            }
+
+            return response()->json(['data' => ['id' => $check->id, 'status' => 'queued']], 202);
         });
     }
 
@@ -216,6 +256,8 @@ class SimilarityController extends Controller
 
     private function serializeCheck(SimilarityCheck $check): array
     {
+        $excluded = $check->snapshot['excluded'] ?? [];
+
         return [
             'id' => $check->id,
             'problem_name' => $check->problem->name ?? '',
@@ -225,6 +267,14 @@ class SimilarityController extends Controller
             'created_at' => $check->created_at->toISOString(),
             'threshold' => $check->threshold,
             'error_message' => $check->safeErrorMessage(),
+            // Additive fields (not in the original Check contract in
+            // docs/specs/42-similarity.md) -- Similarity.vue ignores
+            // unknown fields, and the spec itself requires this: "Relatório
+            // deve guardar contagens de elegíveis/excluídos... para não
+            // sugerir cobertura completa". Only aggregate counts per safe
+            // reason code are exposed, never a bare list of user ids.
+            'excluded_count' => count($excluded),
+            'excluded_reasons' => (object) collect($excluded)->countBy('reason')->all(),
             'pairs' => $check->pairs->map(fn ($pair) => [
                 'id' => $pair->id,
                 'team_a' => $pair->runA?->user?->fullname ?? 'Equipe removida',

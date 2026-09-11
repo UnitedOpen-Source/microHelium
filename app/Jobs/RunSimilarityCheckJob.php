@@ -11,6 +11,7 @@ use App\Services\Similarity\SimilarityEngineOptions;
 use App\Services\Similarity\SimilarityEngineSubmission;
 use App\Services\Similarity\SimilarityLanguageMap;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -29,17 +30,34 @@ use Illuminate\Support\Facades\Log;
  * the queue worker is killed mid-run (OOM, deploy) without handle()'s own
  * catch block running, failed() still flips the check out of "running" so
  * it never stays stuck indefinitely.
+ *
+ * ShouldBeUnique (keyed on the check id, held for $uniqueFor), same as
+ * JudgeRunJob in this codebase: without it, a queue redelivery (e.g. a
+ * Redis visibility-timeout retry firing while the first worker is still
+ * mid-JPlag-run) could have two workers both pass handle()'s
+ * "status !== 'queued' -> return" guard before either commits the
+ * queued->running write, running JPlag twice concurrently for the same
+ * check and racing their result writes.
  */
-class RunSimilarityCheckJob implements ShouldQueue
+class RunSimilarityCheckJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
     public int $timeout;
 
+    /** Matches $timeout, same reasoning as JudgeRunJob::$uniqueFor. */
+    public int $uniqueFor;
+
     public function __construct(public SimilarityCheck $check)
     {
         $this->timeout = (int) config('similarity.timeout_seconds', 240) + 60;
+        $this->uniqueFor = $this->timeout;
+    }
+
+    public function uniqueId(): string
+    {
+        return (string) $this->check->id;
     }
 
     public function handle(SimilarityEngineInterface $engine): void
@@ -109,7 +127,7 @@ class RunSimilarityCheckJob implements ShouldQueue
             return;
         }
 
-        DB::transaction(function () use ($result) {
+        DB::transaction(function () use ($result, $runs) {
             foreach ($result->pairs as $pair) {
                 // Normalize JPlag's 0.0-1.0 fraction to the 0-100 scale
                 // exactly once, here.
@@ -131,9 +149,29 @@ class RunSimilarityCheckJob implements ShouldQueue
                 );
             }
 
+            // Submissions the engine couldn't parse at all (obfuscated/
+            // corrupted source) are exactly the ones most worth flagging --
+            // silently dropping them from every comparison with no trace
+            // would defeat the point. Folded into the same excluded-teams
+            // list EligibleRunFinder already populates, so a single place
+            // in the API response (serializeCheck()) surfaces both kinds
+            // of "this team isn't actually compared, and here's why".
+            $snapshot = $this->check->snapshot;
+            if (!empty($result->unparseableRunIds)) {
+                $unparseable = collect($result->unparseableRunIds)
+                    ->map(fn ($runId) => [
+                        'run_id' => (int) $runId,
+                        'user_id' => $runs->get((int) $runId)?->user_id,
+                        'reason' => 'unparseable_source',
+                    ])
+                    ->all();
+                $snapshot['excluded'] = array_merge($snapshot['excluded'] ?? [], $unparseable);
+            }
+
             $this->check->update([
                 'status' => 'completed',
                 'engine_version' => $result->engineVersion,
+                'snapshot' => $snapshot,
             ]);
         });
     }

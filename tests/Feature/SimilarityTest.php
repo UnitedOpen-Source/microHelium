@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RunSimilarityCheckJob;
 use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\Language;
@@ -9,10 +10,11 @@ use App\Models\Problem;
 use App\Models\Run;
 use App\Models\SimilarityCheck;
 use App\Models\SimilarityPair;
+use App\Services\Similarity\SimilarityEngineException;
 use App\Services\Similarity\SimilarityEngineInterface;
-use App\Jobs\RunSimilarityCheckJob;
+use App\Services\Similarity\SimilarityEngineResult;
 use Helium\User;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\Similarity\FakeSimilarityEngine;
 use Tests\TestCase;
@@ -71,6 +73,17 @@ class SimilarityTest extends TestCase
         return $fake;
     }
 
+    /**
+     * IdempotencyStore::handle() requires this header on every mutating
+     * call (400 without it) -- a fresh UUID-ish string per call keeps
+     * tests that post more than once from accidentally colliding on the
+     * same key.
+     */
+    private function idempotencyHeader(): array
+    {
+        return ['Idempotency-Key' => (string) \Illuminate\Support\Str::uuid()];
+    }
+
     public function test_participant_gets_403_from_every_similarity_endpoint(): void
     {
         [$contest, $problem, $language] = $this->makeContestProblemLanguage();
@@ -82,7 +95,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 80,
-        ])->assertForbidden();
+        ], $this->idempotencyHeader())->assertForbidden();
         $this->getJson("/api/frontend/similarity/runs/{$run->id}/source")->assertForbidden();
     }
 
@@ -106,6 +119,18 @@ class SimilarityTest extends TestCase
         $this->assertSame($language->id, $problems[0]['languages'][0]['id']);
     }
 
+    public function test_store_requires_idempotency_key_header(): void
+    {
+        [, $problem, $language] = $this->makeContestProblemLanguage();
+
+        $this->actingAs($this->createAdminUser());
+        $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ])->assertStatus(400);
+    }
+
     public function test_store_rejects_unsupported_language_with_422_on_language_field(): void
     {
         [$contest, $problem] = $this->makeContestProblemLanguage();
@@ -116,7 +141,24 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $unsupported->id,
             'threshold' => 80,
-        ])->assertStatus(422)->assertJsonValidationErrors('language_id');
+        ], $this->idempotencyHeader())->assertStatus(422)->assertJsonValidationErrors('language_id');
+
+        $this->assertSame(0, SimilarityCheck::count());
+    }
+
+    public function test_store_rejects_inactive_language_even_though_it_is_jplag_supported(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $language->update(['is_active' => false]);
+        $this->acceptedRun($contest, $problem, $language, 'a');
+        $this->acceptedRun($contest, $problem, $language, 'b');
+
+        $this->actingAs($this->createAdminUser());
+        $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(422)->assertJsonValidationErrors('language_id');
 
         $this->assertSame(0, SimilarityCheck::count());
     }
@@ -130,7 +172,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 101,
-        ])->assertStatus(422)->assertJsonValidationErrors('threshold');
+        ], $this->idempotencyHeader())->assertStatus(422)->assertJsonValidationErrors('threshold');
     }
 
     public function test_store_rejects_fewer_than_two_eligible_teams(): void
@@ -143,7 +185,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 80,
-        ])->assertStatus(422)->assertJsonValidationErrors('language_id');
+        ], $this->idempotencyHeader())->assertStatus(422)->assertJsonValidationErrors('language_id');
 
         $this->assertSame(0, SimilarityCheck::count());
     }
@@ -193,7 +235,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 80,
-        ])->assertStatus(202);
+        ], $this->idempotencyHeader())->assertStatus(202);
 
         $checkId = $response->json('data.id');
         $check = SimilarityCheck::findOrFail($checkId);
@@ -214,7 +256,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 80,
-        ])->assertStatus(202);
+        ], $this->idempotencyHeader())->assertStatus(202);
 
         $response->assertJsonPath('data.status', 'queued');
         $checkId = $response->json('data.id');
@@ -238,6 +280,44 @@ class SimilarityTest extends TestCase
             [$runA->user->fullname, $runB->user->fullname],
             [$items[0]['pairs'][0]['team_a'], $items[0]['pairs'][0]['team_b']]
         );
+        // Pairs must come back sorted by similarity_score desc -- assert
+        // this with a second, lower-scoring pair below; here with only one
+        // pair we just confirm the ordering keys are present and correct.
+        $this->assertArrayHasKey('excluded_count', $items[0]);
+        $this->assertSame(0, $items[0]['excluded_count']);
+    }
+
+    public function test_pairs_are_ordered_by_similarity_score_descending(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $fake = $this->bindFakeEngine();
+
+        $runA = $this->acceptedRun($contest, $problem, $language, 'source-a');
+        $runB = $this->acceptedRun($contest, $problem, $language, 'source-b');
+        $runC = $this->acceptedRun($contest, $problem, $language, 'source-c');
+
+        // Deterministic scores instead of the default identical-content
+        // fake behavior, specifically to prove index() doesn't silently
+        // fall back to insertion order (see the eager-load ordering fix in
+        // SimilarityController::index()).
+        $fake->behavior = function ($submissions) use ($runA, $runB, $runC) {
+            return new SimilarityEngineResult([
+                ['run_id_a' => $runA->id, 'run_id_b' => $runB->id, 'score' => 0.81],
+                ['run_id_a' => $runA->id, 'run_id_b' => $runC->id, 'score' => 0.97],
+                ['run_id_a' => $runB->id, 'run_id_b' => $runC->id, 'score' => 0.85],
+            ], 'fake-1.0.0');
+        };
+
+        $this->actingAs($this->createAdminUser());
+        $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(202);
+
+        $index = $this->getJson('/api/frontend/similarity')->assertOk();
+        $scores = collect($index->json('data.items.0.pairs'))->pluck('similarity_score')->all();
+        $this->assertEquals([97, 85, 81], $scores);
     }
 
     public function test_zero_pairs_above_threshold_is_a_successful_completed_check(): void
@@ -253,7 +333,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 80,
-        ])->assertStatus(202);
+        ], $this->idempotencyHeader())->assertStatus(202);
 
         $check = SimilarityCheck::findOrFail($response->json('data.id'));
         $this->assertSame('completed', $check->status);
@@ -267,7 +347,7 @@ class SimilarityTest extends TestCase
     {
         [$contest, $problem, $language] = $this->makeContestProblemLanguage();
         $fake = $this->bindFakeEngine();
-        $fake->throws = new \App\Services\Similarity\SimilarityEngineException('engine_timeout', 'boom');
+        $fake->throws = new SimilarityEngineException('engine_timeout', 'boom');
 
         $this->acceptedRun($contest, $problem, $language, 'a');
         $this->acceptedRun($contest, $problem, $language, 'b');
@@ -277,7 +357,7 @@ class SimilarityTest extends TestCase
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'threshold' => 80,
-        ])->assertStatus(202);
+        ], $this->idempotencyHeader())->assertStatus(202);
 
         $check = SimilarityCheck::findOrFail($response->json('data.id'));
         $this->assertSame('failed', $check->status);
@@ -289,6 +369,42 @@ class SimilarityTest extends TestCase
         $this->assertIsString($item['error_message']);
     }
 
+    /**
+     * A team whose source JPlag itself couldn't parse (distinct from a
+     * missing file, which EligibleRunFinder already catches) must still
+     * be visible in the report's excluded-teams accounting -- silently
+     * dropping it would defeat the point for exactly the kind of
+     * submission most worth flagging.
+     */
+    public function test_unparseable_submission_is_recorded_as_excluded_not_silently_dropped(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $fake = $this->bindFakeEngine();
+
+        $runA = $this->acceptedRun($contest, $problem, $language, 'a');
+        $runB = $this->acceptedRun($contest, $problem, $language, 'b');
+
+        $fake->behavior = fn () => new SimilarityEngineResult([], 'fake-1.0.0', [$runB->id]);
+
+        $this->actingAs($this->createAdminUser());
+        $response = $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(202);
+
+        $check = SimilarityCheck::findOrFail($response->json('data.id'));
+        $this->assertSame('completed', $check->status);
+        $excludedReasons = collect($check->snapshot['excluded'])->pluck('reason')->all();
+        $this->assertContains('unparseable_source', $excludedReasons);
+
+        $index = $this->getJson('/api/frontend/similarity')->assertOk();
+        $item = $index->json('data.items.0');
+        $this->assertSame(1, $item['excluded_count']);
+        $this->assertSame(['unparseable_source' => 1], $item['excluded_reasons']);
+        $this->assertNotNull($runA);
+    }
+
     public function test_repeating_the_same_idempotency_key_and_payload_does_not_duplicate_the_job(): void
     {
         [$contest, $problem, $language] = $this->makeContestProblemLanguage();
@@ -298,7 +414,7 @@ class SimilarityTest extends TestCase
 
         $this->actingAs($this->createAdminUser());
         $payload = ['problem_id' => $problem->id, 'language_id' => $language->id, 'threshold' => 80];
-        $headers = ['Idempotency-Key' => 'fixed-key-123'];
+        $headers = $this->idempotencyHeader();
 
         $first = $this->postJson('/api/frontend/similarity/checks', $payload, $headers)->assertStatus(202);
         $second = $this->postJson('/api/frontend/similarity/checks', $payload, $headers)->assertStatus(202);
@@ -315,7 +431,7 @@ class SimilarityTest extends TestCase
         $this->acceptedRun($contest, $problem, $language, 'b');
 
         $this->actingAs($this->createAdminUser());
-        $headers = ['Idempotency-Key' => 'reused-key'];
+        $headers = $this->idempotencyHeader();
 
         $this->postJson('/api/frontend/similarity/checks', [
             'problem_id' => $problem->id, 'language_id' => $language->id, 'threshold' => 80,
@@ -334,17 +450,7 @@ class SimilarityTest extends TestCase
         $this->acceptedRun($contest, $problem, $language, 'a');
         $this->acceptedRun($contest, $problem, $language, 'b');
 
-        // Bind an engine that never resolves during this request so the
-        // check stays "running" long enough to attempt a duplicate.
-        $fake = new FakeSimilarityEngine();
-        $fake->behavior = function () {
-            // Simulate a check that is still mid-flight: leave the row in
-            // `running`, without throwing or returning, by directly
-            // manipulating nothing here -- instead we pre-seed a running
-            // check below and never dispatch a real second job.
-            return new \App\Services\Similarity\SimilarityEngineResult([], 'fake-1.0.0');
-        };
-        $this->app->instance(SimilarityEngineInterface::class, $fake);
+        $this->bindFakeEngine();
 
         $this->actingAs($this->createAdminUser());
         $payload = ['problem_id' => $problem->id, 'language_id' => $language->id, 'threshold' => 80];
@@ -361,9 +467,43 @@ class SimilarityTest extends TestCase
             'snapshot' => ['run_ids' => Run::where('problem_id', $problem->id)->pluck('id')->sort()->values()->all(), 'source_hashes' => [], 'excluded' => []],
         ]);
 
-        $response = $this->postJson('/api/frontend/similarity/checks', $payload)->assertStatus(409);
+        $response = $this->postJson('/api/frontend/similarity/checks', $payload, $this->idempotencyHeader())->assertStatus(409);
         $response->assertJsonPath('data.id', $existing->id);
         $this->assertSame(1, SimilarityCheck::count());
+    }
+
+    public function test_concurrency_cap_per_contest_is_enforced(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $this->acceptedRun($contest, $problem, $language, 'a');
+        $this->acceptedRun($contest, $problem, $language, 'b');
+        $admin = $this->createAdminUser();
+
+        // Fill the default cap (2, see config/similarity.php) with unrelated
+        // in-flight checks for the SAME contest so the next request must be
+        // rejected purely on the concurrency count, independent of the
+        // duplicate-snapshot check.
+        for ($i = 0; $i < 2; $i++) {
+            SimilarityCheck::create([
+                'user_id' => $admin->user_id,
+                'contest_id' => $contest->id,
+                'problem_id' => $problem->id,
+                'language_id' => $language->id,
+                'status' => 'running',
+                'threshold' => 80,
+                'team_count' => 2,
+                'snapshot' => ['run_ids' => [], 'source_hashes' => [], 'excluded' => []],
+            ]);
+        }
+
+        $this->actingAs($admin);
+        $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(409);
+
+        $this->assertSame(2, SimilarityCheck::count());
     }
 
     public function test_admin_can_download_source_but_participant_cannot_guess_the_url(): void
@@ -379,38 +519,69 @@ class SimilarityTest extends TestCase
     }
 
     /**
-     * Without the per-contest creation lock in SimilarityController::store(),
-     * two concurrent requests (no Idempotency-Key, e.g. two admin tabs)
-     * could both read zero conflicting rows before either INSERT commits
-     * and both create a SimilarityCheck for the same team set -- there is
-     * no DB-level unique constraint on similarity_checks to catch that.
-     * A real race can't be forced deterministically in a single-threaded
-     * test, so this holds the exact lock the controller uses before
-     * calling it, proving the request actually waits on it instead of
-     * sailing through.
+     * If enqueueing itself throws (e.g. the queue backend is briefly
+     * unreachable) after the SimilarityCheck row already committed, the
+     * check must not be left stuck at 'queued' forever with no job ever
+     * having been attempted.
      */
-    public function test_concurrent_requests_for_the_same_contest_are_serialized_not_duplicated(): void
+    public function test_dispatch_failure_marks_the_check_failed_instead_of_leaving_it_stuck_queued(): void
     {
-        config(['similarity.lock_wait_seconds' => 1]);
         [$contest, $problem, $language] = $this->makeContestProblemLanguage();
         $this->acceptedRun($contest, $problem, $language, 'a');
         $this->acceptedRun($contest, $problem, $language, 'b');
 
-        $lock = Cache::lock("similarity-check-create:contest:{$contest->id}", 30);
-        $this->assertTrue($lock->get());
+        $this->app->bind(BusDispatcher::class, fn () => new class implements BusDispatcher {
+            public function dispatch($command)
+            {
+                throw new \RuntimeException('queue unreachable');
+            }
 
-        try {
-            $this->actingAs($this->createAdminUser());
-            $this->postJson('/api/frontend/similarity/checks', [
-                'problem_id' => $problem->id,
-                'language_id' => $language->id,
-                'threshold' => 80,
-            ])->assertStatus(409);
-        } finally {
-            $lock->release();
-        }
+            public function dispatchSync($command, $handler = null)
+            {
+                throw new \RuntimeException('queue unreachable');
+            }
 
-        $this->assertSame(0, SimilarityCheck::count());
+            public function dispatchNow($command, $handler = null)
+            {
+                throw new \RuntimeException('queue unreachable');
+            }
+
+            public function dispatchAfterResponse($command, $handler = null) {}
+
+            public function chain($jobs = null) {}
+
+            public function hasCommandHandler($command)
+            {
+                return false;
+            }
+
+            public function getCommandHandler($command)
+            {
+                return false;
+            }
+
+            public function pipeThrough(array $pipes)
+            {
+                return $this;
+            }
+
+            public function map(array $map)
+            {
+                return $this;
+            }
+        });
+
+        $this->actingAs($this->createAdminUser());
+        $response = $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(202);
+
+        $response->assertJsonPath('data.status', 'failed');
+        $check = SimilarityCheck::findOrFail($response->json('data.id'));
+        $this->assertSame('failed', $check->status);
+        $this->assertSame('dispatch_failed', $check->safe_error_code);
     }
 
     /**

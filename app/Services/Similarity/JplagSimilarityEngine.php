@@ -54,7 +54,11 @@ class JplagSimilarityEngine implements SimilarityEngineInterface
                     '-m', number_format($options->thresholdFraction, 4, '.', ''),
                     '-n', (string) $options->maxPairs,
                 ],
-                $options->minimumTokenMatch ? ['-t', (string) $options->minimumTokenMatch] : [],
+                // A truthy check here would silently drop an explicit
+                // minimumTokenMatch=0 (a valid, intentional "most
+                // sensitive" setting, distinct from "unset") and fall back
+                // to JPlag's own default instead.
+                $options->minimumTokenMatch !== null ? ['-t', (string) $options->minimumTokenMatch] : [],
                 $baseCodeArgs,
                 ['subs']
             );

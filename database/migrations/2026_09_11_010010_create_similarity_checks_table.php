@@ -38,7 +38,7 @@ return new class extends Migration
             $table->string('safe_error_code')->nullable();
             $table->timestamps();
 
-            $table->foreign('user_id')->references('user_id')->on('users')->cascadeOnDelete();
+            $table->foreign('user_id')->references('user_id')->on('users')->nullOnDelete();
             $table->index(['problem_id', 'language_id']);
             $table->index(['contest_id', 'status']);
         });

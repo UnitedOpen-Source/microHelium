@@ -59,12 +59,6 @@ return [
     'max_pairs_per_report' => (int) env('SIMILARITY_MAX_PAIRS', 300),
     'max_concurrent_per_contest' => (int) env('SIMILARITY_MAX_CONCURRENT_PER_CONTEST', 2),
 
-    // How long a POST /checks request waits for the per-contest creation
-    // lock (see SimilarityController::store()) before giving up with a
-    // 409. Overridden to a much smaller value in tests exercising lock
-    // contention, so that scenario doesn't cost real wall-clock seconds.
-    'lock_wait_seconds' => (int) env('SIMILARITY_LOCK_WAIT_SECONDS', 5),
-
     /*
     |--------------------------------------------------------------------------
     | Process limits
