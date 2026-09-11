@@ -113,6 +113,18 @@ class Contest extends Model
         if (!$this->start_time || now()->lt($this->start_time)) {
             return 0;
         }
-        return (int) now()->diffInSeconds($this->start_time);
+        // $a->diffInSeconds($b) returns $b's timestamp minus $a's (signed,
+        // not absolute, as of Carbon 3 -- this app's pinned version). Elapsed
+        // time since start is "now minus start", so start_time must be the
+        // receiver and now() the argument, not the other way around; the
+        // previous now()->diffInSeconds($this->start_time) returned a
+        // NEGATIVE value for the entire duration a contest is running,
+        // silently corrupting every Run/Task/Clarification's stored
+        // contest_time/judged_time/completed_time/answered_time and, via
+        // Score::updateScore()'s solved_time = floor(contest_time / 60),
+        // inverting the scoreboard's ranking (Leaderboard::getScoreboard()
+        // sorts by total_time ascending, so a more-negative -- i.e. later
+        // -- solve time ranked BETTER).
+        return (int) $this->start_time->diffInSeconds(now());
     }
 }
