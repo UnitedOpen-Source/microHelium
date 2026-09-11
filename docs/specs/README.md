@@ -1,6 +1,6 @@
-# Frontend e contratos de integração — issues #42 a #48
+# Frontend e contratos de integração — issues #42–48, #49, #53 e #54
 
-Status: frontend implementado; endpoints e regras de domínio propostos para o time de backend. As issues permanecem abertas até a entrega integrada. Escopo anunciado em cada issue antes da implementação. Base: `06960b4` (inclui PRs #35, #40 e #41).
+Status: frontend implementado; endpoints e regras de domínio propostos para o time de backend. As issues de funcionalidades permanecem abertas até a entrega integrada; #45 e #48 foram encerradas pelo backend durante este trabalho. Escopo anunciado em cada issue antes da implementação. Base inicial: `06960b4`; branch atualizada com `91821f2`, incluindo watchdog #56, autorização #57 e correções de API/filas até #67.
 
 ## Mapa de entrega
 
@@ -15,6 +15,18 @@ Status: frontend implementado; endpoints e regras de domínio propostos para o t
 | [#48](https://github.com/UnitedOpen-Source/microHelium/issues/48) | Estado 403 compartilhado; nenhuma regra alterada | [Autorização](48-authorization.md) |
 
 `/backend/tools` reúne as ferramentas. Os links também partem das páginas existentes de usuários, banco e julgamento. As rotas GET de apresentação ficam em `routes/frontend.php`. Não há migrations, jobs ou endpoints de dados implementados neste PR.
+
+## Atualização durante a implementação
+
+Novas issues abertas foram revisadas antes da entrega, com comentário de escopo antes de escrever as specs:
+
+| Issue | Entrega/impacto |
+| --- | --- |
+| [#49](https://github.com/UnitedOpen-Source/microHelium/issues/49) | [Isolamento obrigatório do executor](49-judge-isolation.md): dependência para habilitar envio; sem alteração de runtime neste PR |
+| [#53](https://github.com/UnitedOpen-Source/microHelium/issues/53) | [Julgamento distribuído](53-distributed-judging.md): ADR/fases e contratos; sem infraestrutura ou tela fictícia de agentes |
+| [#54](https://github.com/UnitedOpen-Source/microHelium/issues/54) | [Rollback e smoke](54-deployment-verification.md): spec de release incluindo assets; nenhum deploy realizado |
+
+#45 já tem `reconcile_attempts`, comando e job único; faltam o endpoint de health e dados de atividade/recuperação deste contrato. #48 já tem helper compartilhado; sua spec registra regressão e requisitos adicionais propostos, sem afirmar que todos estejam implementados.
 
 ## Contrato comum proposto v1
 
@@ -33,7 +45,7 @@ Status: frontend implementado; endpoints e regras de domínio propostos para o t
 
 [Fixtures executáveis](../../tests/Frontend/fixtures/features.json) contêm respostas GET completas para todas as telas, **exclusivamente para testes/prévia local**. Os schemas descritos nas specs são o contrato proposto; fixtures não são dados nem autorização de produção. Tipos/campos novos precisam ser implementados pelo backend antes da ativação.
 
-Ordem sugerida: #48 (preservar autorização) → #46 e #47 → #43; #42, #44 e #45 são independentes entre si. #43 depende da privacidade de #47 antes de expor estatísticas por pessoa. #44 depende da confirmação de versão do consumidor Animeitor.
+Ordem sugerida: preservar #48 já integrada → #46 e #47 → #43, com isolamento #49 como gate de ativação de envios; #42, #44 e #45 são independentes entre si. #43 depende da privacidade de #47 antes de expor estatísticas por pessoa. #44 depende da confirmação de versão do consumidor Animeitor.
 
 ## Aceite transversal
 

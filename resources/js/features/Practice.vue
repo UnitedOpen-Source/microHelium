@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useFeature } from './useFeature.js';
 import { dateTime, localUrl } from './api.js';
 import FeatureState from './FeatureState.vue';
@@ -16,6 +16,7 @@ async function submit(event) {
     }
     await act(`${endpoint}/runs`, { language_id: language.value, source: source.value }, 'Solução recebida. Consulte o histórico para acompanhar o julgamento.', 'POST', event.target);
 }
+watch(() => query.q, value => { search.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack">

@@ -1,1 +1,0 @@
-import{S as e,g as t,u as n}from"./app-BwHEAyWB.js";var r=[`hidden`,`id`],i={__name:`FieldError`,props:{error:Object,name:String},setup(i){return(a,o)=>(t(),n(`p`,{hidden:!i.error?.errors?.[i.name],id:`${i.name}-error`,class:`field-error`},e(i.error?.errors?.[i.name]?.join(` `)),9,r))}};export{i as t};

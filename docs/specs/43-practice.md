@@ -10,6 +10,7 @@
 - Não reutilizar diretamente `SubmitController` sem adaptar suas regras de horário e escopo. `canSubmit` para prática independe da associação do usuário a um evento ao vivo. Reusar avaliação, validação de linguagem/fonte e isolamento do juiz por serviço compartilhado com contexto explícito.
 - Admin publica **snapshot versionado** de `ProblemBank` (enunciado, limites, testes e linguagens) para prática. Editar o banco depois não altera desafios ou resultados existentes. Retirar da biblioteca bloqueia novos envios, preservando histórico privado. Republicação usa versão publicada explícita e não reavalia silenciosamente envios anteriores.
 - Biblioteca contém apenas publicados. Enunciado é texto simples com quebras de linha e exemplos estruturados; converter documentos/PDF no backend ou definir futuro contrato de download, sem enviar HTML bruto ao componente.
+- Habilitar envio somente com executor isolado e saudável conforme [#49](49-judge-isolation.md); can_submit=false e503 em mutação quando indisponível.
 - Fonte pelo editor, sem upload de arquivo nesta fase. Resultado vai para histórico; cliente não finge AC. Usuário sem login pode ler e recebe convite para entrar; envio exige conta habilitada e política de rate limit.
 - Estatísticas opcionais: participantes distintos que tentaram e participantes distintos com AC. Não dividir AC por total de runs e rotular como taxa de pessoas. `stats:null` quando não implementado ou suprimido por privacidade/baixa amostragem. Sem percentil de dificuldade nesta fase.
 

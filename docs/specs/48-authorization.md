@@ -2,7 +2,9 @@
 
 ## Contexto e objetivo
 
-Judge, Staff e Site repetem bypass de admin seguido de comparação de escopo. Centralizar a regra mecânica preservando as restrições específicas já existentes. Nenhuma mudança de controller/model foi feita na entrega de frontend. Estados403 das novas interfaces já estão implementados.
+Judge, Staff e Site repetem bypass de admin seguido de comparação de escopo. Centralizar a regra mecânica preservando as restrições específicas já existentes. O PR #57 já integrou `Controller::authorizeScopedAccess(userScope, resourceScope, message)` e call sites durante este trabalho. Nenhuma mudança de controller/model foi feita pela entrega de frontend. Estados403 das novas interfaces já estão implementados.
+
+O helper atual compara valores com `!==` e permite igualdade null/null. Negar escopo nulo, sugerido abaixo, é hardening adicional a validar separadamente, não descrição do comportamento entregue pela #57.
 
 ## Escopo funcional e fronteiras
 

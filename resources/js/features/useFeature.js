@@ -1,11 +1,11 @@
-import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, reactive, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { request } from './api.js';
 
 export function useFeature(endpoint) {
     const data = ref(null), loading = ref(false), error = ref(null), busy = ref(false), notice = ref(''), actionError = ref(null);
     let controller, alive = true, pendingAction;
     const params = new URLSearchParams(location.search);
-    const query = Object.fromEntries([...params].filter(([key]) => ['q', 'page', 'contest_id', 'organization_id', 'status'].includes(key)));
+    const query = reactive(Object.fromEntries([...params].filter(([key]) => ['q', 'page', 'contest_id', 'organization_id', 'status'].includes(key))));
     async function load(filters = query) {
         controller?.abort(); const active = controller = new AbortController();
         loading.value = true; error.value = null;

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useFeature } from './useFeature.js';
 import { dateTime, localUrl } from './api.js';
 import FeatureState from './FeatureState.vue';
@@ -17,6 +17,7 @@ async function revoke(id) {
     const result = await act(`/api/frontend/webcast/credentials/${encodeURIComponent(id)}`, undefined, 'Credencial revogada. Ela não permite mais acessar a transmissão.', 'DELETE');
     if (result) { revoking.value = null; secret.value = null; await load(); }
 }
+watch(() => query.contest_id, value => { contest.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack">

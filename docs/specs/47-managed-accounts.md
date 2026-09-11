@@ -2,14 +2,14 @@
 
 ## Contexto e objetivo
 
-Permitir cadastro pela organização sem identidade externa e aplicar privacidade por política etária. Interface administrativa `/backend/managed-accounts`. A idade de18 é requisito de produto proposto pela issue; este documento não afirma que ela esgota obrigações legais ou de consentimento.
+Permitir cadastro pela organização sem identidade externa e aplicar privacidade por política etária. Interface administrativa `/backend/managed-accounts`. A idade de 18 é requisito de produto proposto pela issue; este documento não afirma que ela esgota obrigações legais ou de consentimento.
 
 ## Regras e decisão pendente
 
 - Cadastro gerenciado começa privado, incluindo nascimento não informado. Não solicitar nascimento no registro público existente nesta fase.
-- birthdate é DATE nullable, sem timezone e sem derivar idade no cliente. Servidor calcula aniversário conforme calendário/timezone do produto; escolher e testar política para29/02 em ano não bissexto. Rejeitar futuro/datas impossíveis. Não mostrar nascimento em listagem, placar, biblioteca ou perfil público.
-- Menor de18: perfil/histórico privado e vinculação externa bloqueada. Data desconhecida: conservar restrição até revisão. UI exibe `privacy_locked` e motivo retornados pelo servidor, não deduz a partir do nome/data.
-- **Proposta aguardando decisão do mantenedor:** aos18, remover restrição etária e liberar opção de publicação, mantendo visibilidade private até escolha explícita. Não publicar histórico automaticamente. Pergunta foi enviada; ausência de resposta não aprova uma transição pública. Exceção “admin torna menor público” da issue precisa de política explícita antes de ser habilitada; não existe botão de override nesta entrega.
+- birthdate é DATE nullable, sem timezone e sem derivar idade no cliente. Servidor calcula aniversário conforme calendário/timezone do produto; escolher e testar política para 29/02 em ano não bissexto. Rejeitar futuro/datas impossíveis. Não mostrar nascimento em listagem, placar, biblioteca ou perfil público.
+- Menor de 18: perfil/histórico privado e vinculação externa bloqueada. Data desconhecida: conservar restrição até revisão. UI exibe `privacy_locked` e motivo retornados pelo servidor, não deduz a partir do nome/data.
+- **Proposta aguardando decisão do mantenedor:** aos 18, remover restrição etária e liberar opção de publicação, mantendo visibilidade private até escolha explícita. Não publicar histórico automaticamente. Pergunta foi enviada; ausência de resposta não aprova uma transição pública. Exceção “admin torna menor público” da issue precisa de política explícita antes de ser habilitada; não existe botão de override nesta entrega.
 - Regras de visibilidade e elegibilidade são campos/conceitos separados: adulto pode continuar privado. Aniversário não exige edição manual e não gera anúncio público.
 
 ## API e dados
@@ -32,11 +32,11 @@ Campos propostos em users: birthdate DATE nullable, managed_by nullable FK, prof
 ## Critérios de aceite
 
 1. Conta criada começa privada e sem vinculação externa enquanto protegida; uma requisição manipulada com visibility public não contorna a regra.
-2. Aniversário de18 libera apenas as capacidades aprovadas; testes imediatamente antes/depois e29/02; desconhecido permanece restrito.
+2. Aniversário de 18 libera apenas as capacidades aprovadas; testes imediatamente antes/depois e 29/02; desconhecido permanece restrito.
 3. Participante/juiz/site recebem403 na listagem administrativa; API pública não expõe birthdate nem histórico de outro usuário protegido.
 4. Site de outro concurso é422; username duplicado preserva formulário e foca erro.
 5. Token de ativação expira, é de uso único e não concede privilégio administrativo. Repetição da mesma chave não cria usuário extra.
 
 ## Perguntas para decisão
 
-Confirmar comportamento aos18, exceção administrativa de publicação de menores, tratamento de nascimento desconhecido/29/02, prazo do token e procedimento institucional de entrega. Até definição, manter privado e capacidades públicas desabilitadas.
+Confirmar comportamento aos 18, exceção administrativa de publicação de menores, tratamento de nascimento desconhecido/29/02, prazo do token e procedimento institucional de entrega. Até definição, manter privado e capacidades públicas desabilitadas.

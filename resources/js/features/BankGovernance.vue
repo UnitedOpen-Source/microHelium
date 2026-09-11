@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, watch } from 'vue';
 import { useFeature } from './useFeature.js';
 import FeatureState from './FeatureState.vue';
 import FeaturePager from './FeaturePager.vue';
@@ -16,6 +16,8 @@ async function publish(item) {
     const result = await act(`/api/frontend/bank-governance/${encodeURIComponent(item.id)}/practice`, { published: item.practice_status !== 'published', version: item.version }, item.practice_status === 'published' ? 'Problema retirado da biblioteca. O histórico foi preservado.' : 'Problema publicado no Treino Livre.');
     if (result) { publication.value = null; await load(); }
 }
+watch(() => query.organization_id, value => { organization.value = value || ''; });
+watch(() => query.q, value => { search.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack"><div class="feature-message"><strong>Responsabilidade e assunto são informações diferentes.</strong> A organização proprietária define quem pode editar. Etiquetas ajudam a encontrar problemas e não concedem acesso.</div>

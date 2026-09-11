@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { localUrl } from './api.js';
 import { useFeature } from './useFeature.js';
 import FeatureState from './FeatureState.vue';
@@ -13,6 +13,7 @@ async function create(event) {
     const result = await act('/api/frontend/managed-accounts', { fullname: fullname.value, username: username.value, birthdate: birthdate.value || null, contest_id: contest.value, site_id: site.value }, 'Conta gerenciada criada. A organização deve entregar o acesso pelo canal institucional.', 'POST', event.target);
     if (result) { activation.value = localUrl(result.activation_url) ? new URL(result.activation_url, location.origin).href : null; fullname.value = ''; username.value = ''; birthdate.value = ''; await load(); }
 }
+watch(() => query.q, value => { search.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack"><div class="feature-message"><strong>Privacidade desde o cadastro.</strong> Contas gerenciadas começam privadas. Datas de nascimento ficam restritas à administração; não aparecem na biblioteca nem no histórico público.</div>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useFeature } from './useFeature.js';
 import { dateTime, localUrl } from './api.js';
 import FeatureState from './FeatureState.vue';
@@ -7,6 +7,7 @@ import FeaturePager from './FeaturePager.vue';
 const { data, loading, error, query, load, filter } = useFeature('/api/frontend/judging-health');
 const status = ref(query.status || '');
 const statuses = { overdue: 'Atrasada', retrying: 'Retentativa em andamento', recovered: 'Recuperada', failed: 'Erro no julgamento', pending: 'Aguardando', judging: 'Em avaliação' };
+watch(() => query.status, value => { status.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack"><FeatureState :loading="loading" :error="error" @retry="load()" />
