@@ -105,6 +105,23 @@ class Run extends Model
         return $this->isJudged() && $this->answer?->is_accepted;
     }
 
+    /**
+     * Shared by JudgeController's "Atrasado" badge and the
+     * runs:reconcile-stuck watchdog (issue #45) -- previously duplicated
+     * inline in both places, which had already drifted once (the badge
+     * covered pending+judging, the watchdog only pending).
+     */
+    public function isOverdue(): bool
+    {
+        if (!in_array($this->status, ['pending', 'judging'], true)) {
+            return false;
+        }
+
+        $waitLimit = $this->site->max_judge_wait_time ?? 900;
+
+        return $this->created_at->diffInSeconds(now()) > $waitLimit;
+    }
+
     public function getContestTimeFormatted(): string
     {
         $hours = floor($this->contest_time / 3600);

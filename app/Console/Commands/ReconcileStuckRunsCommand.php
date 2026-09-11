@@ -28,14 +28,15 @@ class ReconcileStuckRunsCommand extends Command
 
     public function handle(): int
     {
-        $stuckRuns = Run::where('status', 'pending')
+        // Must match JudgeController::index()'s pending+judging scope for
+        // the "Atrasado" badge, or a run stuck in 'judging' (a worker died
+        // mid-judge, after AutoJudgeService::judge() already flipped the
+        // status) shows the overdue badge forever without this watchdog
+        // ever touching it.
+        $stuckRuns = Run::whereIn('status', ['pending', 'judging'])
             ->with('site:id,max_judge_wait_time')
             ->get()
-            ->filter(function (Run $run) {
-                $waitLimit = $run->site->max_judge_wait_time ?? 900;
-
-                return $run->created_at->diffInSeconds(now()) > $waitLimit;
-            });
+            ->filter(fn (Run $run) => $run->isOverdue());
 
         foreach ($stuckRuns as $run) {
             if ($run->reconcile_attempts >= 1) {
@@ -59,9 +60,18 @@ class ReconcileStuckRunsCommand extends Command
         $run->update([
             'status' => 'judged',
             'answer_id' => $answer?->id,
+            // Set like every other finalization path (AutoJudgeService::
+            // updateRunWithResult()/handleJudgingError()) so judged_time
+            // isn't left null on a row that says status = 'judged'.
+            'judged_time' => $run->contest?->getContestTime() ?? 0,
             'auto_judge_result' => 'Reconciler: run stayed pending after a re-dispatch attempt, marked as judge error.',
         ]);
 
+        // Deliberately NOT calling Score::updateScore() here, matching
+        // AutoJudgeService::handleJudgingError()'s existing precedent: a CS
+        // verdict caused by our own infrastructure failing to judge in time
+        // is not the team's fault and shouldn't count against their
+        // attempts for this problem.
         ContestLog::error($run->contest_id, "Run #{$run->run_number} auto-marked as judge error by the stuck-run reconciler", [
             'run_id' => $run->id,
         ]);

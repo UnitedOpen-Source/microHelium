@@ -59,7 +59,44 @@ class ReconcileStuckRunsCommandTest extends TestCase
         $this->assertSame('CS', $run->answer->short_name);
     }
 
-    private function makeStuckRun(int $waitLimit, int $ageInSeconds, int $reconcileAttempts = 0): Run
+    /**
+     * A worker that dies mid-judge (after AutoJudgeService::judge() already
+     * flipped the status to 'judging', before finishing) previously left
+     * the run stuck showing the overdue badge forever -- the reconciler
+     * only queried status='pending'.
+     */
+    public function test_a_run_stuck_in_judging_status_is_also_reconciled()
+    {
+        Bus::fake();
+        $run = $this->makeStuckRun(waitLimit: 60, ageInSeconds: 600, status: 'judging');
+
+        $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
+
+        Bus::assertDispatched(\App\Jobs\JudgeRunJob::class, fn ($job) => $job->run->is($run));
+        $this->assertSame(1, $run->fresh()->reconcile_attempts);
+    }
+
+    public function test_giving_up_sets_judged_time_but_does_not_count_as_a_scored_attempt()
+    {
+        Bus::fake();
+        $run = $this->makeStuckRun(waitLimit: 60, ageInSeconds: 600, reconcileAttempts: 1);
+
+        $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
+
+        $run->refresh();
+        $this->assertNotNull($run->judged_time, 'judged_time must be set whenever status becomes judged');
+        // The judge-error verdict is our infrastructure's fault, not the
+        // team's -- it must not create/increment a Score row for this
+        // problem (see AutoJudgeService::handleJudgingError()'s identical
+        // precedent).
+        $this->assertDatabaseMissing('scores', [
+            'contest_id' => $run->contest_id,
+            'user_id' => $run->user_id,
+            'problem_id' => $run->problem_id,
+        ]);
+    }
+
+    private function makeStuckRun(int $waitLimit, int $ageInSeconds, int $reconcileAttempts = 0, string $status = 'pending'): Run
     {
         $contest = Contest::factory()->create();
         $site = Site::factory()->create(['contest_id' => $contest->id, 'max_judge_wait_time' => $waitLimit]);
@@ -74,7 +111,7 @@ class ReconcileStuckRunsCommandTest extends TestCase
             'user_id' => $team->user_id,
             'problem_id' => $problem->id,
             'language_id' => $language->id,
-            'status' => 'pending',
+            'status' => $status,
             'reconcile_attempts' => $reconcileAttempts,
         ]);
         $run->forceFill(['created_at' => now()->subSeconds($ageInSeconds)])->save();
