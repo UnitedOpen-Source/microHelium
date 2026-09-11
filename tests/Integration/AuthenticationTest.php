@@ -62,6 +62,38 @@ class AuthenticationTest extends TestCase
     }
 
     /**
+     * The /login POST route previously had no throttling at all -- issue
+     * #51. The dead app/Http/Kernel.php's throttle:60,1 entry never actually
+     * applied (Laravel 11+ uses bootstrap/app.php here, which doesn't load
+     * Kernel.php), so unlimited login attempts were allowed.
+     */
+    public function testLoginIsRateLimitedAfterRepeatedFailedAttempts()
+    {
+        $this->createTestUser([
+            'email' => 'ratelimited@example.com',
+            'password' => Hash::make('password123'),
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $response = $this->post('/login', [
+                'email' => 'ratelimited@example.com',
+                'password' => 'wrong-password',
+            ]);
+            $response->assertStatus(302);
+        }
+
+        // The 6th attempt within the same minute must be throttled, even
+        // with the correct password this time.
+        $response = $this->post('/login', [
+            'email' => 'ratelimited@example.com',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(429);
+        $this->assertGuest();
+    }
+
+    /**
      * Test that a user can login with valid credentials and remember me
      *
      * @return void
