@@ -25,6 +25,7 @@ class Run extends Model
         'contest_time',
         'judged_time',
         'status',
+        'reconcile_attempts',
         'judge_id',
         'judge_site_id',
         'answer1_id',
