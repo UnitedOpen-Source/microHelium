@@ -72,6 +72,29 @@ Route::post('/login', function () {
     $credentials = request()->only('email', 'password');
 
     if (auth()->attempt($credentials, request()->filled('remember'))) {
+        $user = auth()->user();
+
+        // Issue #50: Site::ip_address was collected via the admin UI but
+        // never enforced. A user whose account belongs to a site with a
+        // configured ip_address must be connecting from an allowed
+        // address/range -- checked here, not on a later page, so a
+        // wrong-network login never gets a live session in the first place.
+        if ($user->site && !$user->site->isIpAllowed(request()->ip())) {
+            auth()->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            \App\Models\ContestLog::warning(
+                $user->contest_id ?? 0,
+                "Login bloqueado: IP fora da rede configurada para o site \"{$user->site->name}\"",
+                ['user_id' => $user->user_id, 'site_id' => $user->site_id, 'ip' => request()->ip()]
+            );
+
+            return back()->withErrors([
+                'email' => 'Acesso bloqueado: fora da rede autorizada para o seu site.',
+            ])->withInput(request()->only('email'));
+        }
+
         request()->session()->regenerate();
         return redirect()->intended('/home');
     }

@@ -8,7 +8,8 @@
     </div>
     <div>
         <label for="{{ $idPrefix }}_ip_address" class="block text-sm font-medium text-foreground mb-1">IP / rede (opcional)</label>
-        <input id="{{ $idPrefix }}_ip_address" type="text" name="ip_address" value="{{ old('ip_address', $site->ip_address ?? '') }}" maxlength="200" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+        <input id="{{ $idPrefix }}_ip_address" type="text" name="ip_address" value="{{ old('ip_address', $site->ip_address ?? '') }}" maxlength="200" aria-describedby="{{ $idPrefix }}_ip_address_hint" placeholder="Ex: 192.168.1.10, 10.0.0.0/24" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+        <p id="{{ $idPrefix }}_ip_address_hint" class="text-sm text-muted-foreground mt-1">Restringe o login de usuarios deste site a este(s) IP(s)/rede(s). Aceita uma lista separada por virgula e notacao CIDR. Deixe em branco para nao restringir.</p>
     </div>
     <div>
         <label for="{{ $idPrefix }}_chief_judge_name" class="block text-sm font-medium text-foreground mb-1">Juiz responsavel (opcional)</label>
