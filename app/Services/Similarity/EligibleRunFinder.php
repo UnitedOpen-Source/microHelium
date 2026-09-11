@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Storage;
 class EligibleRunFinder
 {
     /**
-     * @return array{eligible: Collection<int, Run>, excluded: array<int, array{user_id:int, reason:string}>}
+     * @return array{eligible: Collection<int, Run>, excluded: array<int, array{user_id:int, run_id:int, reason:string}>}
      */
     public function find(Problem $problem, Language $language): array
     {
@@ -60,7 +60,7 @@ class EligibleRunFinder
             }
 
             if (!$run->source_file || !Storage::disk('local')->exists($run->source_file)) {
-                $excluded[] = ['user_id' => $run->user_id, 'reason' => 'source_missing'];
+                $excluded[] = ['user_id' => $run->user_id, 'run_id' => $run->id, 'reason' => 'source_missing'];
                 continue;
             }
 

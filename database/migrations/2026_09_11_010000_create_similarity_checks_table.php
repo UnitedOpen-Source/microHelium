@@ -10,8 +10,13 @@ return new class extends Migration
     {
         Schema::create('similarity_checks', function (Blueprint $table) {
             $table->id();
-            // Actor who requested the run (issue #42's "ator").
-            $table->unsignedInteger('user_id');
+            // Actor who requested the run (issue #42's "ator"). Nullable +
+            // nullOnDelete rather than cascading: this row (and its
+            // similarity_pairs evidence) must survive the requesting
+            // admin's account later being deleted -- an offboarded admin
+            // shouldn't silently erase completed plagiarism-detection
+            // reports as a side effect.
+            $table->unsignedInteger('user_id')->nullable();
             $table->foreignId('contest_id')->constrained()->cascadeOnDelete();
             $table->foreignId('problem_id')->constrained()->cascadeOnDelete();
             $table->foreignId('language_id')->constrained()->cascadeOnDelete();
