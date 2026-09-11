@@ -27,7 +27,8 @@ return new class extends Migration
             $table->timestamp('expires_at');
             $table->timestamp('revoked_at')->nullable();
             $table->timestamp('last_used_at')->nullable();
-            $table->foreignId('created_by')->nullable()->constrained('users', 'user_id')->nullOnDelete();
+            $table->unsignedInteger('created_by')->nullable();
+            $table->foreign('created_by')->references('user_id')->on('users')->nullOnDelete();
             $table->timestamps();
 
             $table->index(['contest_id', 'created_at']);
