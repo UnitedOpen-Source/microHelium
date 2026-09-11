@@ -109,7 +109,9 @@ class ClarificationController extends Controller
         $clarification->update([
             'answer' => $validated['answer'],
             'status' => $status,
-            'answered_time' => $clarification->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Clarification can outlive its
+            // contest being soft-deleted, so ->contest can resolve to null.
+            'answered_time' => $clarification->contest?->getContestTime() ?? 0,
             'judge_id' => auth()->id(),
             'judge_site_id' => auth()->user()->site_id,
         ]);

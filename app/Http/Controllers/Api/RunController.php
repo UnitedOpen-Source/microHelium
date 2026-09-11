@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\JudgeRunJob;
+use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\ContestLog;
 use App\Models\Language;
@@ -160,7 +161,7 @@ class RunController extends Controller
             'auto_judge_stderr' => null,
         ]);
 
-        if ($run->problem->isAutoJudgeEnabledFor($run->language)) {
+        if ($run->problem && $run->language && $run->problem->isAutoJudgeEnabledFor($run->language)) {
             JudgeRunJob::dispatch($run);
         }
 
@@ -180,12 +181,19 @@ class RunController extends Controller
             'answer_id' => 'required|exists:answers,id',
         ]);
 
+        $answer = Answer::findOrFail($validated['answer_id']);
+        if ($answer->contest_id !== $run->contest_id) {
+            abort(422, 'Essa resposta nao pertence ao contest desta submissao.');
+        }
+
         $run->update([
             'status' => 'judged',
-            'answer_id' => $validated['answer_id'],
+            'answer_id' => $answer->id,
             'judge_id' => auth()->id(),
             'judge_site_id' => auth()->user()->site_id,
-            'judged_time' => $run->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Run can outlive its contest
+            // being soft-deleted, so ->contest can resolve to null here.
+            'judged_time' => $run->contest?->getContestTime() ?? 0,
         ]);
 
         // Update score
