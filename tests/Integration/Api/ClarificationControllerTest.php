@@ -38,6 +38,52 @@ class ClarificationControllerTest extends TestCase
         $response->assertStatus(200)->assertJsonCount(5, 'data'); // 3 own + 2 broadcast
     }
 
+    /**
+     * Issue #65: despite the name, broadcast_site was visible contest-wide,
+     * identical to broadcast_all -- it must only be visible to teams at the
+     * same site the clarification was answered for.
+     */
+    public function test_broadcast_site_clarification_is_only_visible_to_teams_at_the_same_site()
+    {
+        $contest = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contest->id]);
+        $teamAtSiteA = User::factory()->create(['site_id' => $siteA->id]);
+        $teamAtSiteB = User::factory()->create(['site_id' => $siteB->id]);
+
+        Clarification::factory()->create([
+            'contest_id' => $contest->id,
+            'site_id' => $siteA->id,
+            'status' => 'broadcast_site',
+        ]);
+
+        Sanctum::actingAs($teamAtSiteA);
+        $this->getJson("/api/clarifications?contest_id={$contest->id}")
+            ->assertStatus(200)->assertJsonCount(1, 'data');
+
+        Sanctum::actingAs($teamAtSiteB);
+        $this->getJson("/api/clarifications?contest_id={$contest->id}")
+            ->assertStatus(200)->assertJsonCount(0, 'data');
+    }
+
+    public function test_broadcast_all_clarification_is_visible_regardless_of_site()
+    {
+        $contest = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contest->id]);
+        $teamAtSiteB = User::factory()->create(['site_id' => $siteB->id]);
+
+        Clarification::factory()->create([
+            'contest_id' => $contest->id,
+            'site_id' => $siteA->id,
+            'status' => 'broadcast_all',
+        ]);
+
+        Sanctum::actingAs($teamAtSiteB);
+        $this->getJson("/api/clarifications?contest_id={$contest->id}")
+            ->assertStatus(200)->assertJsonCount(1, 'data');
+    }
+
     public function test_store_clarification()
     {
         $contest = Contest::factory()->has(Site::factory())->create(['is_active' => true, 'start_time' => now()]);
