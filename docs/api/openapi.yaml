@@ -179,7 +179,17 @@ paths:
                   end_time: { type: string, format: date-time, nullable: true }
                   contest_time: { type: integer }
                   duration: { type: integer }
-                  freeze_time: { type: integer }
+                  freeze_time:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: >
+                      The scoreboard freeze cutoff timestamp
+                      (end_time - freeze_time minutes), NOT the raw
+                      freeze-time-in-minutes value -- Contest::freeze_time
+                      is overridden by an accessor
+                      (app/Models/Contest.php's getFreezeTimeAttribute()).
+                      Null until the contest has a start_time.
 
   /clarifications/pending:
     get:
@@ -202,8 +212,12 @@ paths:
       tags: [Clarifications]
       summary: List clarifications
       description: >
-        Teams only see their own clarifications plus anything broadcast to
-        their site or the whole contest; admins/judges see everything.
+        Teams only see their own clarifications plus anything with status
+        broadcast_site or broadcast_all; admins/judges see everything.
+        Despite the name, broadcast_site is currently NOT filtered to the
+        answering judge's site -- it is visible contest-wide, same as
+        broadcast_all (see app/Http/Controllers/Api/ClarificationController.php
+        ::index(), tracked as a known inaccuracy vs. the status name).
       parameters:
         - $ref: "#/components/parameters/ContestIdQuery"
       responses:
@@ -267,7 +281,12 @@ paths:
       - $ref: "#/components/parameters/ClarificationId"
     put:
       tags: [Clarifications]
-      summary: Answer a clarification (judge/admin)
+      summary: Answer a clarification
+      description: >
+        Intended for judges/admins, but ClarificationController::answer()
+        currently enforces no such check beyond auth:sanctum -- any
+        authenticated user, including a team, can answer any clarification.
+        Tracked as a known authorization gap, not a documentation error.
       requestBody:
         required: true
         content:
@@ -492,7 +511,12 @@ paths:
       - $ref: "#/components/parameters/RunId"
     post:
       tags: [Runs]
-      summary: Reset a run to pending and re-dispatch auto-judging (judge/admin)
+      summary: Reset a run to pending and re-dispatch auto-judging
+      description: >
+        Intended for judges/admins, but RunController::rejudge() currently
+        enforces no such check beyond auth:sanctum -- any authenticated
+        user, including the submitting team, can call this. Tracked as a
+        known authorization gap, not a documentation error.
       responses:
         "200":
           description: Run re-queued
@@ -509,7 +533,13 @@ paths:
       - $ref: "#/components/parameters/RunId"
     put:
       tags: [Runs]
-      summary: Manually judge a run (judge/admin)
+      summary: Manually judge a run
+      description: >
+        Intended for judges/admins, but RunController::judge() currently
+        enforces no such check beyond auth:sanctum -- any authenticated
+        user, including the submitting team, can set the verdict and
+        trigger a score update. Tracked as a known authorization gap, not
+        a documentation error.
       requestBody:
         required: true
         content:
@@ -725,7 +755,7 @@ components:
         user_id: { type: integer }
         fullname: { type: string }
         email: { type: string }
-        user_type: { type: string, enum: [admin, judge, team, staff, score, site] }
+        user_type: { type: string, enum: [admin, judge, team, staff, score, site, system] }
         site_id: { type: integer, nullable: true }
 
     Contest:
@@ -747,7 +777,7 @@ components:
 
     ContestCreate:
       type: object
-      required: [duration, freeze_time, penalty, max_file_size]
+      required: [name, duration, freeze_time, penalty, max_file_size]
       properties:
         name: { type: string, maxLength: 100 }
         description: { type: string, nullable: true }
@@ -813,7 +843,7 @@ components:
         run_number: { type: integer }
         filename: { type: string }
         contest_time: { type: integer }
-        status: { type: string, enum: [pending, judging, judged] }
+        status: { type: string, enum: [pending, judging, judged, rejudging, deleted] }
         judge_id: { type: integer, nullable: true }
         judged_time: { type: integer, nullable: true }
         auto_judge_result: { type: string, nullable: true }
