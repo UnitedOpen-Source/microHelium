@@ -8,6 +8,7 @@ use App\Models\SimilarityPair;
 use App\Services\Similarity\SimilarityEngineException;
 use App\Services\Similarity\SimilarityEngineInterface;
 use App\Services\Similarity\SimilarityEngineOptions;
+use App\Services\Similarity\SimilarityEngineResult;
 use App\Services\Similarity\SimilarityEngineSubmission;
 use App\Services\Similarity\SimilarityLanguageMap;
 use Illuminate\Bus\Queueable;
@@ -16,6 +17,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -127,6 +129,23 @@ class RunSimilarityCheckJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        try {
+            $this->persistResult($result, $runs);
+        } catch (\Throwable $e) {
+            // Distinct from an engine failure above: the JPlag run itself
+            // succeeded, but writing its result failed (e.g. a referenced
+            // run was deleted between the snapshot being taken and this
+            // write, tripping the similarity_pairs FK). Without this catch,
+            // it would fall through to the generic failed() handler and
+            // get mislabeled "worker_interrupted" instead of pointing at
+            // what actually broke.
+            Log::error('Similarity check result could not be persisted', ['check_id' => $this->check->id, 'detail' => $e->getMessage()]);
+            $this->failSafely('result_persist_failed');
+        }
+    }
+
+    private function persistResult(SimilarityEngineResult $result, Collection $runs): void
+    {
         DB::transaction(function () use ($result, $runs) {
             foreach ($result->pairs as $pair) {
                 // Normalize JPlag's 0.0-1.0 fraction to the 0-100 scale

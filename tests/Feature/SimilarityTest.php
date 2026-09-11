@@ -320,6 +320,58 @@ class SimilarityTest extends TestCase
         $this->assertEquals([97, 85, 81], $scores);
     }
 
+    /**
+     * A report whose returned pair count reaches the configured cap
+     * (JPlag's own -n flag) can't be told apart, from stored data alone,
+     * from "there were exactly that many". pairs_truncated flags that
+     * ambiguity instead of a report that looks complete either way.
+     */
+    public function test_pairs_truncated_flag_is_set_when_the_returned_count_reaches_the_configured_cap(): void
+    {
+        config(['similarity.max_pairs_per_report' => 2]);
+
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $fake = $this->bindFakeEngine();
+
+        $runA = $this->acceptedRun($contest, $problem, $language, 'a');
+        $runB = $this->acceptedRun($contest, $problem, $language, 'b');
+        $runC = $this->acceptedRun($contest, $problem, $language, 'c');
+
+        $fake->behavior = fn () => new SimilarityEngineResult([
+            ['run_id_a' => $runA->id, 'run_id_b' => $runB->id, 'score' => 0.90],
+            ['run_id_a' => $runA->id, 'run_id_b' => $runC->id, 'score' => 0.85],
+        ], 'fake-1.0.0');
+
+        $this->actingAs($this->createAdminUser());
+        $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(202);
+
+        $index = $this->getJson('/api/frontend/similarity')->assertOk();
+        $this->assertTrue($index->json('data.items.0.pairs_truncated'));
+    }
+
+    public function test_pairs_truncated_flag_is_false_when_under_the_cap(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $this->bindFakeEngine();
+
+        $this->acceptedRun($contest, $problem, $language, 'identical');
+        $this->acceptedRun($contest, $problem, $language, 'identical');
+
+        $this->actingAs($this->createAdminUser());
+        $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(202);
+
+        $index = $this->getJson('/api/frontend/similarity')->assertOk();
+        $this->assertFalse($index->json('data.items.0.pairs_truncated'));
+    }
+
     public function test_zero_pairs_above_threshold_is_a_successful_completed_check(): void
     {
         [$contest, $problem, $language] = $this->makeContestProblemLanguage();
@@ -367,6 +419,50 @@ class SimilarityTest extends TestCase
         $item = $index->json('data.items.0');
         $this->assertSame('failed', $item['status']);
         $this->assertIsString($item['error_message']);
+    }
+
+    /**
+     * Distinct from an engine failure: JPlag itself succeeds, but writing
+     * its result fails (e.g. a referenced run deleted between the snapshot
+     * and this write would trip the similarity_pairs FK in production) --
+     * this must get a specific safe error code, not the generic
+     * "worker_interrupted" the top-level failed() callback would apply.
+     *
+     * A real FK violation isn't reliably reproducible here: this app's
+     * sqlite test connection (config/database.php) doesn't enable
+     * 'foreign_key_constraints', and RefreshDatabase already has a
+     * transaction open by the time a test body runs, so a mid-test
+     * `PRAGMA foreign_keys = ON` is a silent no-op (SQLite doesn't allow
+     * toggling it inside a transaction). Instead this exercises the same
+     * try/catch with a deterministic, connection-independent failure: a
+     * non-numeric score makes `$pair['score'] * 100` throw a TypeError
+     * before any query even runs, which is enough to prove
+     * RunSimilarityCheckJob::persistResult()'s own catch block -- not
+     * SQLite's constraint enforcement -- is what maps the failure to
+     * 'result_persist_failed'.
+     */
+    public function test_result_persist_failure_gets_a_specific_safe_error_code(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $fake = $this->bindFakeEngine();
+
+        $runA = $this->acceptedRun($contest, $problem, $language, 'a');
+        $runB = $this->acceptedRun($contest, $problem, $language, 'b');
+
+        $fake->behavior = fn () => new SimilarityEngineResult([
+            ['run_id_a' => $runA->id, 'run_id_b' => $runB->id, 'score' => 'not-a-number'],
+        ], 'fake-1.0.0');
+
+        $this->actingAs($this->createAdminUser());
+        $response = $this->postJson('/api/frontend/similarity/checks', [
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'threshold' => 80,
+        ], $this->idempotencyHeader())->assertStatus(202);
+
+        $check = SimilarityCheck::findOrFail($response->json('data.id'));
+        $this->assertSame('failed', $check->status);
+        $this->assertSame('result_persist_failed', $check->safe_error_code);
     }
 
     /**
@@ -504,6 +600,39 @@ class SimilarityTest extends TestCase
         ], $this->idempotencyHeader())->assertStatus(409);
 
         $this->assertSame(2, SimilarityCheck::count());
+    }
+
+    /**
+     * capabilities.can_start must reflect the same concurrency condition
+     * store() actually enforces -- otherwise the UI offers a submit that
+     * predictably 409s instead of disabling it up front.
+     */
+    public function test_index_reports_can_start_false_when_every_contest_is_at_the_concurrency_cap(): void
+    {
+        [$contest, $problem, $language] = $this->makeContestProblemLanguage();
+        $admin = $this->createAdminUser();
+
+        for ($i = 0; $i < 2; $i++) {
+            SimilarityCheck::create([
+                'user_id' => $admin->user_id,
+                'contest_id' => $contest->id,
+                'problem_id' => $problem->id,
+                'language_id' => $language->id,
+                'status' => 'running',
+                'threshold' => 80,
+                'team_count' => 2,
+                'snapshot' => ['run_ids' => [], 'source_hashes' => [], 'excluded' => []],
+            ]);
+        }
+
+        $this->actingAs($admin);
+        $this->getJson('/api/frontend/similarity')->assertOk()->assertJsonPath('data.capabilities.can_start', false);
+
+        // A second, unrelated contest with room under the cap flips it back to true.
+        [$otherContest, $otherProblem, $otherLanguage] = $this->makeContestProblemLanguage();
+        $this->getJson('/api/frontend/similarity')->assertOk()->assertJsonPath('data.capabilities.can_start', true);
+        $this->assertNotNull($otherProblem);
+        $this->assertNotNull($otherLanguage);
     }
 
     public function test_admin_can_download_source_but_participant_cannot_guess_the_url(): void

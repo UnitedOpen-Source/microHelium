@@ -34,17 +34,40 @@ class SimilarityController extends Controller
     {
         $page = max(1, (int) $request->query('page', 1));
 
+        // Same concurrency condition store() enforces (queued/running count
+        // for a contest < the cap), grouped once for every contest instead
+        // of re-querying per problem. can_start reflects whether starting a
+        // NEW check is actually possible right now for at least one
+        // contest -- without this it stayed hardcoded true even while every
+        // contest sat at its concurrency cap, letting the UI offer a submit
+        // that would predictably 409.
+        $maxConcurrent = (int) config('similarity.max_concurrent_per_contest');
+        $runningByContest = SimilarityCheck::query()
+            ->whereIn('status', ['queued', 'running'])
+            ->selectRaw('contest_id, COUNT(*) as running_count')
+            ->groupBy('contest_id')
+            ->pluck('running_count', 'contest_id');
+
+        $canStart = false;
         $problems = Problem::query()
             ->with(['contest:id,name', 'contest.languages'])
             ->orderBy('id')
             ->get()
-            ->map(function (Problem $problem) {
+            ->map(function (Problem $problem) use ($runningByContest, $maxConcurrent, &$canStart) {
                 $languages = $problem->contest->languages
                     ->filter(fn (Language $language) => $language->is_active && SimilarityLanguageMap::isSupported($language))
                     ->values()
                     ->map(fn (Language $language) => ['id' => $language->id, 'name' => $language->name]);
 
-                return $languages->isEmpty() ? null : [
+                if ($languages->isEmpty()) {
+                    return null;
+                }
+
+                if (($runningByContest->get($problem->contest_id) ?? 0) < $maxConcurrent) {
+                    $canStart = true;
+                }
+
+                return [
                     'id' => $problem->id,
                     'name' => $problem->name,
                     'contest_name' => $problem->contest->name,
@@ -80,7 +103,7 @@ class SimilarityController extends Controller
                     'last_page' => max(1, (int) ceil($totalChecks / self::PER_PAGE)),
                     'total' => $totalChecks,
                 ],
-                'capabilities' => ['can_start' => true],
+                'capabilities' => ['can_start' => $canStart],
                 'problems' => $problems->all(),
             ],
         ]);
@@ -232,20 +255,17 @@ class SimilarityController extends Controller
     }
 
     /**
-     * Mirrors Api\RunController::downloadSource()'s exact authorization
-     * check (admin/judge or the run's own owner). The route this hangs off
-     * is already ['auth','admin']-gated, so the judge/owner branches are
-     * currently unreachable in practice -- kept for parity so this stays
-     * correct if that gate is ever loosened, per the spec's "participante
-     * ... não consegue baixar a fonte pelo URL adivinhado".
+     * Uses Controller::authorizeSourceAccess() -- the same check
+     * Api\RunController::downloadSource() uses (admin/judge or the run's
+     * own owner). The route this hangs off is already ['auth','admin']-
+     * gated, so the judge/owner branches are currently unreachable in
+     * practice -- kept for parity so this stays correct if that gate is
+     * ever loosened, per the spec's "participante ... não consegue baixar
+     * a fonte pelo URL adivinhado".
      */
     public function downloadSource(Run $run): StreamedResponse
     {
-        $user = auth()->user();
-
-        if (!$user->isAdmin() && !$user->isJudge() && $run->user_id !== $user->user_id) {
-            abort(403, 'Você não tem permissão para baixar este código-fonte.');
-        }
+        $this->authorizeSourceAccess($run, 'Você não tem permissão para baixar este código-fonte.');
 
         if (!$run->source_file || !Storage::disk('local')->exists($run->source_file)) {
             abort(404, 'Arquivo de código-fonte não encontrado.');
@@ -275,6 +295,16 @@ class SimilarityController extends Controller
             // reason code are exposed, never a bare list of user ids.
             'excluded_count' => count($excluded),
             'excluded_reasons' => (object) collect($excluded)->countBy('reason')->all(),
+            // JPlag's own -n flag (config('similarity.max_pairs_per_report'),
+            // snapshotted per-check in `options.max_pairs`) caps how many
+            // qualifying pairs the report can contain. A returned count
+            // that reaches that cap can't be told apart from "there were
+            // exactly that many" vs "there were more, and the rest were
+            // cut" from stored data alone -- flagging it as possibly
+            // truncated is more honest than a report that looks complete
+            // either way (spec: "nunca truncar silenciosamente").
+            'pairs_truncated' => isset($check->options['max_pairs'])
+                && $check->pairs->count() >= (int) $check->options['max_pairs'],
             'pairs' => $check->pairs->map(fn ($pair) => [
                 'id' => $pair->id,
                 'team_a' => $pair->runA?->user?->fullname ?? 'Equipe removida',

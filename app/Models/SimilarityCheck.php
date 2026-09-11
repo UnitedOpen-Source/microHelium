@@ -41,6 +41,8 @@ class SimilarityCheck extends Model
         'engine_failed' => 'Não foi possível concluir a análise deste conjunto de submissões.',
         'insufficient_sources' => 'Menos de duas equipes com código-fonte disponível restaram para comparar.',
         'worker_interrupted' => 'A análise foi interrompida antes de concluir. Solicite uma nova.',
+        'dispatch_failed' => 'Não foi possível iniciar a análise em segundo plano. Solicite uma nova.',
+        'result_persist_failed' => 'A análise foi concluída, mas o resultado não pôde ser salvo. Solicite uma nova.',
     ];
 
     public function user(): BelongsTo

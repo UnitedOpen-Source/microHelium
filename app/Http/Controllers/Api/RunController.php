@@ -128,12 +128,7 @@ class RunController extends Controller
 
     public function downloadSource(Run $run): StreamedResponse
     {
-        $user = auth()->user();
-
-        // Check permissions
-        if (!$user->isAdmin() && !$user->isJudge() && $run->user_id !== $user->user_id) {
-            abort(403, 'Unauthorized');
-        }
+        $this->authorizeSourceAccess($run);
 
         $path = $run->source_file;
 
