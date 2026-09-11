@@ -74,7 +74,10 @@ class BankGovernanceController extends Controller
             }
         }
 
-        $paginated = $query->paginate(self::PER_PAGE)->withQueryString();
+        // No withQueryString(): the JSON response never exposes paginator
+        // link URLs (only current_page/last_page/total in `meta`), so
+        // there are no links for it to affect.
+        $paginated = $query->paginate(self::PER_PAGE);
 
         return response()->json([
             'data' => [
@@ -233,6 +236,8 @@ class BankGovernanceController extends Controller
         // Laravel's ConvertEmptyStringsToNull middleware turns any blank
         // tag the client sent ("") into null before it reaches here --
         // that's a blank entry to skip, not an invalid type.
+        $seen = [];
+        $normalized = [];
         $totalLength = 0;
         foreach ($rawTags as $tag) {
             if ($tag === null) {
@@ -241,18 +246,18 @@ class BankGovernanceController extends Controller
             if (! is_string($tag)) {
                 $this->fail('tags', 'Etiquetas inválidas.');
             }
-            $totalLength += mb_strlen($tag);
-        }
-        if ($totalLength > 500) {
-            $this->fail('tags', 'O texto das etiquetas excede o tamanho máximo permitido.');
-        }
-
-        $seen = [];
-        $normalized = [];
-        foreach ($rawTags as $tag) {
-            if ($tag === null) {
-                continue;
+            if (! mb_check_encoding($tag, 'UTF-8')) {
+                // preg_replace('/\s+/u', ...) below returns null on
+                // malformed UTF-8 input (PREG_BAD_UTF8_ERROR), and
+                // trim(null) would silently become "" -- i.e. a byte
+                // sequence that isn't valid text must be rejected here
+                // like every other invalid tag, not quietly dropped as if
+                // it were blank.
+                $this->fail('tags', 'Etiquetas inválidas.');
             }
+
+            $totalLength += mb_strlen($tag);
+
             $trimmed = trim(preg_replace('/\s+/u', ' ', $tag));
             if ($trimmed === '') {
                 continue;
@@ -266,6 +271,9 @@ class BankGovernanceController extends Controller
             }
             $seen[$key] = true;
             $normalized[] = $trimmed;
+        }
+        if ($totalLength > 500) {
+            $this->fail('tags', 'O texto das etiquetas excede o tamanho máximo permitido.');
         }
 
         return $normalized;
