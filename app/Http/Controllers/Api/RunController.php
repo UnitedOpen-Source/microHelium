@@ -145,6 +145,8 @@ class RunController extends Controller
 
     public function rejudge(Run $run): JsonResponse
     {
+        $this->authorizeRunContestAccess($run);
+
         $run->update([
             'status' => 'pending',
             'answer_id' => null,
@@ -172,6 +174,8 @@ class RunController extends Controller
 
     public function judge(Request $request, Run $run): JsonResponse
     {
+        $this->authorizeRunContestAccess($run);
+
         $validated = $request->validate([
             'answer_id' => 'required|exists:answers,id',
         ]);
@@ -193,5 +197,20 @@ class RunController extends Controller
         ]);
 
         return response()->json($run->load('answer'));
+    }
+
+    /**
+     * role:judge,admin alone only checks the caller's user type, not which
+     * contest the run belongs to -- without this, a judge from contest A
+     * could judge/rejudge a run in contest B just by guessing/incrementing
+     * its id (see Controller::authorizeScopedAccess()).
+     */
+    private function authorizeRunContestAccess(Run $run): void
+    {
+        $this->authorizeScopedAccess(
+            auth()->user()->contest_id,
+            $run->contest_id,
+            'Voce nao pode julgar submissoes de outro contest.'
+        );
     }
 }

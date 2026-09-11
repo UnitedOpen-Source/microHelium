@@ -87,6 +87,12 @@ class ClarificationController extends Controller
 
     public function answer(Request $request, Clarification $clarification): JsonResponse
     {
+        $this->authorizeScopedAccess(
+            auth()->user()->contest_id,
+            $clarification->contest_id,
+            'Voce nao pode responder clarificacoes de outro contest.'
+        );
+
         $validated = $request->validate([
             'answer' => 'required|string|max:2000',
             'broadcast' => 'nullable|in:none,site,all',
