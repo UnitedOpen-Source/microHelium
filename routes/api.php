@@ -50,6 +50,13 @@ Route::get('/health', function () {
     return response()->json(['status' => 'ok']);
 });
 
+// OpenAPI spec (see docs/api/openapi.yaml -- issue #52)
+Route::get('/openapi.yaml', function () {
+    return response(file_get_contents(base_path('docs/api/openapi.yaml')), 200, [
+        'Content-Type' => 'application/yaml',
+    ]);
+});
+
 // Current active contest for timer
 Route::get('/contest/current', function () {
     $contest = Contest::where('is_active', true)->first();

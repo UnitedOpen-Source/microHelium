@@ -1,0 +1,1003 @@
+openapi: 3.0.3
+info:
+  title: microHelium API
+  description: >
+    HTTP API for microHelium, a Laravel-based ICPC-style contest judge.
+    Covers every route currently registered in routes/api.php. This spec is
+    hand-maintained against the Api\* controllers under
+    app/Http/Controllers/Api -- tests/Feature/Api/OpenApiSpecTest.php checks
+    every registered API route has a matching path documented here, so a new
+    endpoint without a spec entry fails the suite.
+  version: "1.0.0"
+servers:
+  - url: /api
+security:
+  - sanctum: []
+tags:
+  - name: Contests
+  - name: Clarifications
+  - name: Problems
+  - name: Runs
+  - name: Scoreboard
+  - name: Misc
+
+paths:
+  /user:
+    get:
+      tags: [Misc]
+      summary: Get the authenticated user
+      responses:
+        "200":
+          description: The authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /contests:
+    get:
+      tags: [Contests]
+      summary: List contests
+      description: Non-admins only see contests where is_public is true.
+      responses:
+        "200":
+          description: Paginated list of contests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedContests"
+    post:
+      tags: [Contests]
+      summary: Create a contest
+      description: >
+        Also creates a default "Main Site", the contest's default languages,
+        and default answers (accepted/wrong-answer/etc.).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContestCreate"
+      responses:
+        "201":
+          description: Contest created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contest"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /contests/{contest}:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    get:
+      tags: [Contests]
+      summary: Get a contest
+      responses:
+        "200":
+          description: The contest, with sites/languages/answers/problems loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Contests]
+      summary: Update a contest
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContestUpdate"
+      responses:
+        "200":
+          description: Updated contest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contest"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    patch:
+      tags: [Contests]
+      summary: Partially update a contest
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContestUpdate"
+      responses:
+        "200":
+          description: Updated contest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contest"
+    delete:
+      tags: [Contests]
+      summary: Delete a contest
+      responses:
+        "204":
+          description: Deleted
+
+  /contests/{contest}/activate:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    post:
+      tags: [Contests]
+      summary: Activate a contest
+      responses:
+        "200":
+          description: Contest activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  contest: { $ref: "#/components/schemas/Contest" }
+
+  /contests/{contest}/deactivate:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    post:
+      tags: [Contests]
+      summary: Deactivate a contest
+      responses:
+        "200":
+          description: Contest deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  contest: { $ref: "#/components/schemas/Contest" }
+
+  /contests/{contest}/status:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    get:
+      tags: [Contests]
+      summary: Get contest run/freeze status
+      responses:
+        "200":
+          description: Contest status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  is_active: { type: boolean }
+                  is_running: { type: boolean }
+                  is_frozen: { type: boolean }
+                  start_time: { type: string, format: date-time, nullable: true }
+                  end_time: { type: string, format: date-time, nullable: true }
+                  contest_time: { type: integer }
+                  duration: { type: integer }
+                  freeze_time:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: >
+                      The scoreboard freeze cutoff timestamp
+                      (end_time - freeze_time minutes), NOT the raw
+                      freeze-time-in-minutes value -- Contest::freeze_time
+                      is overridden by an accessor
+                      (app/Models/Contest.php's getFreezeTimeAttribute()).
+                      Null until the contest has a start_time.
+
+  /clarifications/pending:
+    get:
+      tags: [Clarifications]
+      summary: List pending clarifications
+      parameters:
+        - $ref: "#/components/parameters/ContestIdQuery"
+      responses:
+        "200":
+          description: Pending clarifications, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Clarification"
+
+  /clarifications:
+    get:
+      tags: [Clarifications]
+      summary: List clarifications
+      description: >
+        Teams only see their own clarifications plus anything with status
+        broadcast_site or broadcast_all; admins/judges see everything.
+        Despite the name, broadcast_site is currently NOT filtered to the
+        answering judge's site -- it is visible contest-wide, same as
+        broadcast_all (see app/Http/Controllers/Api/ClarificationController.php
+        ::index(), tracked as a known inaccuracy vs. the status name).
+      parameters:
+        - $ref: "#/components/parameters/ContestIdQuery"
+      responses:
+        "200":
+          description: Paginated list of clarifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedClarifications"
+    post:
+      tags: [Clarifications]
+      summary: Ask a clarification question
+      description: Fails with 422 if the contest is not currently running.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contest_id, question]
+              properties:
+                contest_id: { type: integer }
+                problem_id: { type: integer, nullable: true }
+                question: { type: string, maxLength: 2000 }
+      responses:
+        "201":
+          description: Clarification submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clarification"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /clarifications/{clarification}:
+    parameters:
+      - $ref: "#/components/parameters/ClarificationId"
+    get:
+      tags: [Clarifications]
+      summary: Get a clarification
+      description: 403 for a team's clarification that isn't theirs and isn't broadcast.
+      responses:
+        "200":
+          description: The clarification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clarification"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags: [Clarifications]
+      summary: Soft-delete a clarification
+      description: Marks status "deleted" then removes the row.
+      responses:
+        "204":
+          description: Deleted
+
+  /clarifications/{clarification}/answer:
+    parameters:
+      - $ref: "#/components/parameters/ClarificationId"
+    put:
+      tags: [Clarifications]
+      summary: Answer a clarification
+      description: >
+        Intended for judges/admins, but ClarificationController::answer()
+        currently enforces no such check beyond auth:sanctum -- any
+        authenticated user, including a team, can answer any clarification.
+        Tracked as a known authorization gap, not a documentation error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              properties:
+                answer: { type: string, maxLength: 2000 }
+                broadcast:
+                  type: string
+                  enum: [none, site, all]
+                  nullable: true
+      responses:
+        "200":
+          description: Answered clarification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clarification"
+
+  /problems:
+    get:
+      tags: [Problems]
+      summary: List problems
+      parameters:
+        - $ref: "#/components/parameters/ContestIdQuery"
+      responses:
+        "200":
+          description: Paginated list of problems (excludes fake/placeholder problems)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProblems"
+    post:
+      tags: [Problems]
+      summary: Import a problem package
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [contest_id, package]
+              properties:
+                contest_id: { type: integer }
+                package: { type: string, format: binary, description: "A .zip problem package" }
+                short_name: { type: string, maxLength: 10, nullable: true }
+                color_name: { type: string, maxLength: 50, nullable: true }
+                color_hex: { type: string, pattern: "^#[0-9A-Fa-f]{6}$", nullable: true }
+                time_limit: { type: integer, minimum: 1, maximum: 60, nullable: true }
+                memory_limit: { type: integer, minimum: 16, maximum: 2048, nullable: true }
+      responses:
+        "201":
+          description: Imported problem
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /problems/{problem}:
+    parameters:
+      - $ref: "#/components/parameters/ProblemId"
+    get:
+      tags: [Problems]
+      summary: Get a problem
+      responses:
+        "200":
+          description: The problem, with test cases loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      tags: [Problems]
+      summary: Update a problem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProblemUpdate"
+      responses:
+        "200":
+          description: Updated problem
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    patch:
+      tags: [Problems]
+      summary: Partially update a problem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProblemUpdate"
+      responses:
+        "200":
+          description: Updated problem
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      tags: [Problems]
+      summary: Delete a problem
+      responses:
+        "204":
+          description: Deleted
+
+  /problems/{problem}/download:
+    parameters:
+      - $ref: "#/components/parameters/ProblemId"
+    get:
+      tags: [Problems]
+      summary: Download the problem's statement file
+      responses:
+        "200":
+          description: The statement file (PDF/HTML/etc, as stored)
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /problems/{problem}/export:
+    parameters:
+      - $ref: "#/components/parameters/ProblemId"
+    get:
+      tags: [Problems]
+      summary: Export the full problem package as a zip
+      responses:
+        "200":
+          description: A zip archive of the problem package
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+
+  /runs:
+    get:
+      tags: [Runs]
+      summary: List runs
+      description: Teams only see their own runs; admins/judges see everything.
+      parameters:
+        - $ref: "#/components/parameters/ContestIdQuery"
+      responses:
+        "200":
+          description: Paginated list of runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedRuns"
+    post:
+      tags: [Runs]
+      summary: Submit a run
+      description: >
+        Rejects submissions to a non-running contest, to a problem/language
+        outside the contest, or a byte-identical resubmission (matched by
+        SHA-256 of the source file) with 422. Dispatches JudgeRunJob when
+        auto-judging is enabled for the problem/language.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [contest_id, problem_id, language_id, source_file]
+              properties:
+                contest_id: { type: integer }
+                problem_id: { type: integer }
+                language_id: { type: integer }
+                source_file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Run submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /runs/{run}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Runs]
+      summary: Get a run
+      description: 403 for another team's run.
+      responses:
+        "200":
+          description: The run, with problem/language/answer/user/judge loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /runs/{run}/source:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Runs]
+      summary: Download a run's submitted source file
+      description: 403 for another team's run.
+      responses:
+        "200":
+          description: The source file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /runs/{run}/rejudge:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      summary: Reset a run to pending and re-dispatch auto-judging
+      description: >
+        Intended for judges/admins, but RunController::rejudge() currently
+        enforces no such check beyond auth:sanctum -- any authenticated
+        user, including the submitting team, can call this. Tracked as a
+        known authorization gap, not a documentation error.
+      responses:
+        "200":
+          description: Run re-queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  run: { $ref: "#/components/schemas/Run" }
+
+  /runs/{run}/judge:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    put:
+      tags: [Runs]
+      summary: Manually judge a run
+      description: >
+        Intended for judges/admins, but RunController::judge() currently
+        enforces no such check beyond auth:sanctum -- any authenticated
+        user, including the submitting team, can set the verdict and
+        trigger a score update. Tracked as a known authorization gap, not
+        a documentation error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer_id]
+              properties:
+                answer_id: { type: integer }
+      responses:
+        "200":
+          description: Judged run, with score updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /contests/{contest}/scoreboard:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    get:
+      tags: [Scoreboard]
+      summary: Get the contest scoreboard
+      description: Frozen (last freeze_time minutes hidden) for non-admins while the contest is frozen.
+      responses:
+        "200":
+          description: Scoreboard snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreboardResponse"
+
+  /contests/{contest}/my-score:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    get:
+      tags: [Scoreboard]
+      summary: Get the authenticated user's own score breakdown
+      responses:
+        "200":
+          description: The caller's per-problem score breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyScoreResponse"
+
+  /contests/{contest}/scoreboard/export:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    get:
+      tags: [Scoreboard]
+      summary: Export the scoreboard
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, icpc], default: json }
+      responses:
+        "200":
+          description: >
+            The scoreboard export. Shape depends on `format`: the default
+            `json` shape mirrors the live scoreboard; `icpc` returns a
+            simplified rank/team/solved/time list.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ScoreboardExportJson"
+                  - $ref: "#/components/schemas/ScoreboardExportIcpc"
+
+  /contests/{contest}/statistics:
+    parameters:
+      - $ref: "#/components/parameters/ContestId"
+    get:
+      tags: [Scoreboard]
+      summary: Get per-problem submission statistics
+      responses:
+        "200":
+          description: Per-problem attempt/solve statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contest_id: { type: integer }
+                  problems:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        problem_id: { type: integer }
+                        short_name: { type: string }
+                        name: { type: string }
+                        color_hex: { type: string, nullable: true }
+                        total_attempts: { type: integer }
+                        solved_count: { type: integer }
+                        attempted_count: { type: integer }
+                        success_rate: { type: number }
+                        first_solver: { type: integer, nullable: true }
+
+  /health:
+    get:
+      tags: [Misc]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /contest/current:
+    get:
+      tags: [Misc]
+      summary: Get the currently active contest (for the countdown timer)
+      security: []
+      responses:
+        "200":
+          description: The active contest, or null if none is active
+          content:
+            application/json:
+              schema:
+                nullable: true
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  start_time: { type: string, format: date-time, nullable: true }
+                  duration: { type: integer }
+                  freeze_time: { type: integer }
+                  is_running: { type: boolean }
+                  is_frozen: { type: boolean }
+
+components:
+  securitySchemes:
+    sanctum:
+      type: http
+      scheme: bearer
+      description: "Laravel Sanctum personal-access token, sent as `Authorization: Bearer <token>`."
+
+  parameters:
+    ContestId:
+      name: contest
+      in: path
+      required: true
+      schema: { type: integer }
+    ContestIdQuery:
+      name: contest_id
+      in: query
+      required: false
+      schema: { type: integer }
+    ProblemId:
+      name: problem
+      in: path
+      required: true
+      schema: { type: integer }
+    RunId:
+      name: run
+      in: path
+      required: true
+      schema: { type: integer }
+    ClarificationId:
+      name: clarification
+      in: path
+      required: true
+      schema: { type: integer }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorMessage" }
+    Forbidden:
+      description: Authenticated, but not allowed to access this resource
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorMessage" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorMessage" }
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: { type: string }
+
+  schemas:
+    ErrorMessage:
+      type: object
+      properties:
+        message: { type: string }
+        error: { type: string }
+
+    User:
+      type: object
+      properties:
+        user_id: { type: integer }
+        fullname: { type: string }
+        email: { type: string }
+        user_type: { type: string, enum: [admin, judge, team, staff, score, site, system] }
+        site_id: { type: integer, nullable: true }
+
+    Contest:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        start_time: { type: string, format: date-time, nullable: true }
+        end_time: { type: string, format: date-time, nullable: true }
+        duration: { type: integer, description: Minutes }
+        freeze_time: { type: integer, description: Minutes before end that the scoreboard freezes }
+        penalty: { type: integer, description: Minutes penalty per wrong attempt }
+        max_file_size: { type: integer, description: KB }
+        is_public: { type: boolean }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ContestCreate:
+      type: object
+      required: [name, duration, freeze_time, penalty, max_file_size]
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, nullable: true }
+        start_time: { type: string, format: date-time, nullable: true }
+        duration: { type: integer, minimum: 1, maximum: 10080 }
+        freeze_time: { type: integer, minimum: 0 }
+        penalty: { type: integer, minimum: 0, maximum: 120 }
+        max_file_size: { type: integer, minimum: 1, maximum: 10240 }
+        is_public: { type: boolean }
+
+    ContestUpdate:
+      type: object
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, nullable: true }
+        start_time: { type: string, format: date-time, nullable: true }
+        duration: { type: integer, minimum: 1, maximum: 10080 }
+        freeze_time: { type: integer, minimum: 0 }
+        penalty: { type: integer, minimum: 0, maximum: 120 }
+        max_file_size: { type: integer, minimum: 1, maximum: 10240 }
+        is_active: { type: boolean }
+        is_public: { type: boolean }
+
+    Problem:
+      type: object
+      properties:
+        id: { type: integer }
+        contest_id: { type: integer }
+        short_name: { type: string }
+        name: { type: string }
+        color_name: { type: string, nullable: true }
+        color_hex: { type: string, nullable: true }
+        time_limit: { type: integer, description: Seconds }
+        memory_limit: { type: integer, description: MB }
+        output_limit: { type: integer, description: KB }
+        auto_judge: { type: boolean }
+        sort_order: { type: integer }
+        is_fake: { type: boolean }
+
+    ProblemUpdate:
+      type: object
+      properties:
+        short_name: { type: string, maxLength: 10 }
+        name: { type: string, maxLength: 200 }
+        color_name: { type: string, maxLength: 50, nullable: true }
+        color_hex: { type: string, pattern: "^#[0-9A-Fa-f]{6}$", nullable: true }
+        time_limit: { type: integer, minimum: 1, maximum: 60 }
+        memory_limit: { type: integer, minimum: 16, maximum: 2048 }
+        output_limit: { type: integer, minimum: 1, maximum: 65536 }
+        auto_judge: { type: boolean }
+        sort_order: { type: integer, minimum: 0 }
+
+    Run:
+      type: object
+      properties:
+        id: { type: integer }
+        contest_id: { type: integer }
+        site_id: { type: integer }
+        user_id: { type: integer }
+        problem_id: { type: integer }
+        language_id: { type: integer }
+        answer_id: { type: integer, nullable: true }
+        run_number: { type: integer }
+        filename: { type: string }
+        contest_time: { type: integer }
+        status: { type: string, enum: [pending, judging, judged, rejudging, deleted] }
+        judge_id: { type: integer, nullable: true }
+        judged_time: { type: integer, nullable: true }
+        auto_judge_result: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Clarification:
+      type: object
+      properties:
+        id: { type: integer }
+        contest_id: { type: integer }
+        site_id: { type: integer }
+        user_id: { type: integer }
+        problem_id: { type: integer, nullable: true }
+        clarification_number: { type: integer }
+        question: { type: string }
+        answer: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [pending, answered, broadcast_site, broadcast_all, deleted]
+        contest_time: { type: integer }
+        answered_time: { type: integer, nullable: true }
+        judge_id: { type: integer, nullable: true }
+
+    ScoreboardEntry:
+      type: object
+      properties:
+        rank: { type: integer }
+        user: { $ref: "#/components/schemas/User" }
+        problems_solved: { type: integer }
+        total_time: { type: integer }
+
+    ScoreboardResponse:
+      type: object
+      properties:
+        contest:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            is_running: { type: boolean }
+            is_frozen: { type: boolean }
+            start_time: { type: string, format: date-time, nullable: true }
+            duration: { type: integer }
+            penalty: { type: integer }
+        problems:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              short_name: { type: string }
+              name: { type: string }
+              color_name: { type: string, nullable: true }
+              color_hex: { type: string, nullable: true }
+        scoreboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreboardEntry"
+        updated_at: { type: string, format: date-time }
+
+    MyScoreResponse:
+      type: object
+      properties:
+        rank: { type: integer, nullable: true }
+        problems_solved: { type: integer }
+        total_time: { type: integer }
+        problems:
+          type: array
+          items:
+            type: object
+            properties:
+              problem_id: { type: integer }
+              short_name: { type: string }
+              name: { type: string }
+              attempts: { type: integer }
+              is_solved: { type: boolean }
+              is_first_solver: { type: boolean }
+              solved_time: { type: integer, nullable: true }
+              penalty_time: { type: integer }
+              total_time: { type: integer }
+
+    ScoreboardExportJson:
+      type: object
+      properties:
+        contest:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            start_time: { type: string, format: date-time, nullable: true }
+            duration: { type: integer }
+            penalty: { type: integer }
+        scoreboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreboardEntry"
+        exported_at: { type: string, format: date-time }
+
+    ScoreboardExportIcpc:
+      type: object
+      properties:
+        contest_id: { type: integer }
+        contest_name: { type: string }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              rank: { type: integer }
+              team_id: { type: integer }
+              team_name: { type: string }
+              solved: { type: integer }
+              time: { type: integer }
+
+    PaginatedContests:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Contest" }
+
+    PaginatedProblems:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Problem" }
+
+    PaginatedRuns:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Run" }
+
+    PaginatedClarifications:
+      allOf:
+        - $ref: "#/components/schemas/PaginationMeta"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Clarification" }
+
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        last_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
