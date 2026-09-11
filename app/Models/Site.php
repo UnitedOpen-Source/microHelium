@@ -86,4 +86,27 @@ class Site extends Model
     {
         return $this->freeze_time ?? $this->contest->getAttributes()['freeze_time'];
     }
+
+    /**
+     * Enforces the ip_address field (issue #50) -- it was collected via the
+     * admin Sites CRUD (#40) and validated, but nothing anywhere actually
+     * read it. Supports a comma-separated list of exact IPs and/or CIDR
+     * ranges (the field's label already says "IP / rede"). No value
+     * configured means unrestricted.
+     */
+    public function isIpAllowed(string $ip): bool
+    {
+        if (!$this->ip_address) {
+            return true;
+        }
+
+        foreach (explode(',', $this->ip_address) as $rule) {
+            $rule = trim($rule);
+            if ($rule !== '' && \App\Support\NetworkMatcher::matches($ip, $rule)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

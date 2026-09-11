@@ -228,11 +228,106 @@ class RunControllerTest extends TestCase
 
     public function test_judge_run()
     {
-        $run = Run::factory()->create(['status' => 'pending']);
-        $answer = Answer::factory()->create();
+        $contest = Contest::factory()->create();
+        $run = Run::factory()->create(['status' => 'pending', 'contest_id' => $contest->id]);
+        $answer = Answer::factory()->create(['contest_id' => $contest->id]);
         $admin = User::factory()->create(['user_type' => 'admin']);
         Sanctum::actingAs($admin);
         $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
         $response->assertStatus(200)->assertJsonPath('status', 'judged');
+    }
+
+    /**
+     * Issue #66 review: judge() had no guard against re-judging a run that
+     * is already status='judged' -- unlike the web JudgeController::judge()
+     * this endpoint mirrors, which rejects it to avoid double-counting the
+     * attempt in Score::updateScore().
+     */
+    public function test_judge_run_rejects_an_already_judged_run()
+    {
+        $contest = Contest::factory()->create();
+        $accepted = Answer::factory()->create(['contest_id' => $contest->id]);
+        $wrong = Answer::factory()->create(['contest_id' => $contest->id]);
+        $run = Run::factory()->create([
+            'contest_id' => $contest->id,
+            'status' => 'judged',
+            'answer_id' => $accepted->id,
+        ]);
+        $admin = User::factory()->create(['user_type' => 'admin']);
+        Sanctum::actingAs($admin);
+
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $wrong->id]);
+
+        $response->assertStatus(422);
+        $this->assertDatabaseHas('runs', ['id' => $run->id, 'answer_id' => $accepted->id]);
+    }
+
+    /**
+     * Issue #66 review: judge() validated answer_id only with
+     * exists:answers,id, letting a run be judged with a verdict that
+     * belongs to a different contest's answer set entirely.
+     */
+    public function test_judge_run_rejects_answer_from_a_different_contest()
+    {
+        $run = Run::factory()->create(['status' => 'pending']);
+        $answer = Answer::factory()->create(); // different, unrelated contest
+        $admin = User::factory()->create(['user_type' => 'admin']);
+        Sanctum::actingAs($admin);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response->assertStatus(422);
+    }
+
+    /**
+     * Issue #66 review: role:judge,admin alone doesn't check which contest
+     * the run belongs to -- a judge scoped to contest A could still judge
+     * or rejudge a run in contest B by guessing/incrementing its id.
+     */
+    public function test_judge_run_forbidden_for_judge_in_another_contest()
+    {
+        $run = Run::factory()->create(['status' => 'pending']);
+        $answer = Answer::factory()->create(['contest_id' => $run->contest_id]);
+        $judge = User::factory()->create(['user_type' => 'judge', 'contest_id' => Contest::factory()]);
+        Sanctum::actingAs($judge);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response->assertStatus(403);
+    }
+
+    public function test_rejudge_run_forbidden_for_judge_in_another_contest()
+    {
+        Queue::fake();
+        $problem = Problem::factory()->create(['auto_judge' => true]);
+        $run = Run::factory()->create(['status' => 'judged', 'problem_id' => $problem->id]);
+        $judge = User::factory()->create(['user_type' => 'judge', 'contest_id' => Contest::factory()]);
+        Sanctum::actingAs($judge);
+        $response = $this->postJson("/api/runs/{$run->id}/rejudge");
+        $response->assertStatus(403);
+        Queue::assertNotPushed(JudgeRunJob::class);
+    }
+
+    /**
+     * Issue #64: judge()/rejudge() previously enforced no role check beyond
+     * auth:sanctum, so any authenticated team could self-award a verdict or
+     * force a re-judge on any run, including their own.
+     */
+    public function test_judge_run_forbidden_for_team()
+    {
+        $run = Run::factory()->create(['status' => 'pending']);
+        $answer = Answer::factory()->create();
+        $team = User::factory()->create(['user_type' => 'team']);
+        Sanctum::actingAs($team);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response->assertStatus(403);
+    }
+
+    public function test_rejudge_run_forbidden_for_team()
+    {
+        Queue::fake();
+        $problem = Problem::factory()->create(['auto_judge' => true]);
+        $run = Run::factory()->create(['status' => 'judged', 'problem_id' => $problem->id]);
+        $team = User::factory()->create(['user_type' => 'team']);
+        Sanctum::actingAs($team);
+        $response = $this->postJson("/api/runs/{$run->id}/rejudge");
+        $response->assertStatus(403);
+        Queue::assertNotPushed(JudgeRunJob::class);
     }
 }

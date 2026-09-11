@@ -38,6 +38,52 @@ class ClarificationControllerTest extends TestCase
         $response->assertStatus(200)->assertJsonCount(5, 'data'); // 3 own + 2 broadcast
     }
 
+    /**
+     * Issue #65: despite the name, broadcast_site was visible contest-wide,
+     * identical to broadcast_all -- it must only be visible to teams at the
+     * same site the clarification was answered for.
+     */
+    public function test_broadcast_site_clarification_is_only_visible_to_teams_at_the_same_site()
+    {
+        $contest = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contest->id]);
+        $teamAtSiteA = User::factory()->create(['site_id' => $siteA->id]);
+        $teamAtSiteB = User::factory()->create(['site_id' => $siteB->id]);
+
+        Clarification::factory()->create([
+            'contest_id' => $contest->id,
+            'site_id' => $siteA->id,
+            'status' => 'broadcast_site',
+        ]);
+
+        Sanctum::actingAs($teamAtSiteA);
+        $this->getJson("/api/clarifications?contest_id={$contest->id}")
+            ->assertStatus(200)->assertJsonCount(1, 'data');
+
+        Sanctum::actingAs($teamAtSiteB);
+        $this->getJson("/api/clarifications?contest_id={$contest->id}")
+            ->assertStatus(200)->assertJsonCount(0, 'data');
+    }
+
+    public function test_broadcast_all_clarification_is_visible_regardless_of_site()
+    {
+        $contest = Contest::factory()->create();
+        $siteA = Site::factory()->create(['contest_id' => $contest->id]);
+        $siteB = Site::factory()->create(['contest_id' => $contest->id]);
+        $teamAtSiteB = User::factory()->create(['site_id' => $siteB->id]);
+
+        Clarification::factory()->create([
+            'contest_id' => $contest->id,
+            'site_id' => $siteA->id,
+            'status' => 'broadcast_all',
+        ]);
+
+        Sanctum::actingAs($teamAtSiteB);
+        $this->getJson("/api/clarifications?contest_id={$contest->id}")
+            ->assertStatus(200)->assertJsonCount(1, 'data');
+    }
+
     public function test_store_clarification()
     {
         $contest = Contest::factory()->has(Site::factory())->create(['is_active' => true, 'start_time' => now()]);
@@ -92,32 +138,63 @@ class ClarificationControllerTest extends TestCase
 
     public function test_answer_clarification()
     {
-        $judge = User::factory()->create(['user_type' => 'judge']);
-        $clarification = Clarification::factory()->create();
+        $contest = Contest::factory()->create();
+        $judge = User::factory()->create(['user_type' => 'judge', 'contest_id' => $contest->id]);
+        $clarification = Clarification::factory()->create(['contest_id' => $contest->id]);
         Sanctum::actingAs($judge);
         $data = ['answer' => 'This is the answer.'];
         $response = $this->putJson("/api/clarifications/{$clarification->id}/answer", $data);
         $response->assertStatus(200)->assertJsonPath('answer', $data['answer']);
     }
 
+    /**
+     * Issue #64/#66: answer() now enforces the same contest-scoping as the
+     * web UI's equivalent -- a judge assigned to a different contest can't
+     * answer this clarification just by guessing/incrementing its id.
+     */
+    public function test_answer_clarification_forbidden_for_judge_in_another_contest()
+    {
+        $judge = User::factory()->create(['user_type' => 'judge', 'contest_id' => Contest::factory()]);
+        $clarification = Clarification::factory()->create();
+        Sanctum::actingAs($judge);
+        $data = ['answer' => 'Wrong contest.'];
+        $response = $this->putJson("/api/clarifications/{$clarification->id}/answer", $data);
+        $response->assertStatus(403);
+    }
+
     public function test_answer_clarification_with_broadcast()
     {
-        $judge = User::factory()->create(['user_type' => 'judge']);
+        $contest = Contest::factory()->create();
+        $judge = User::factory()->create(['user_type' => 'judge', 'contest_id' => $contest->id]);
         Sanctum::actingAs($judge);
 
         // Test site broadcast
-        $clarification1 = Clarification::factory()->create();
+        $clarification1 = Clarification::factory()->create(['contest_id' => $contest->id]);
         $data1 = ['answer' => 'Answer 1', 'broadcast' => 'site'];
         $this->putJson("/api/clarifications/{$clarification1->id}/answer", $data1)
              ->assertStatus(200)
              ->assertJsonPath('status', 'broadcast_site');
 
         // Test all broadcast
-        $clarification2 = Clarification::factory()->create();
+        $clarification2 = Clarification::factory()->create(['contest_id' => $contest->id]);
         $data2 = ['answer' => 'Answer 2', 'broadcast' => 'all'];
         $this->putJson("/api/clarifications/{$clarification2->id}/answer", $data2)
              ->assertStatus(200)
              ->assertJsonPath('status', 'broadcast_all');
+    }
+
+    /**
+     * Issue #64: answer() previously enforced no role check beyond
+     * auth:sanctum, so any authenticated team could answer any clarification.
+     */
+    public function test_answer_clarification_forbidden_for_team()
+    {
+        $team = User::factory()->create(['user_type' => 'team']);
+        $clarification = Clarification::factory()->create();
+        Sanctum::actingAs($team);
+        $data = ['answer' => 'A team should not be able to do this.'];
+        $response = $this->putJson("/api/clarifications/{$clarification->id}/answer", $data);
+        $response->assertStatus(403);
     }
 
     public function test_destroy_clarification()

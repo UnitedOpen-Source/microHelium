@@ -21,7 +21,14 @@ class ClarificationController extends Controller
             ->when(!$user->isAdmin() && !$user->isJudge(), function ($q) use ($user) {
                 $q->where(function ($q) use ($user) {
                     $q->where('user_id', $user->user_id)
-                        ->orWhereIn('status', ['broadcast_site', 'broadcast_all']);
+                        ->orWhere('status', 'broadcast_all')
+                        // broadcast_site is scoped to the clarification's
+                        // own site (where the judge answered), not the
+                        // viewer's -- a team at another site must not see it.
+                        ->orWhere(function ($q) use ($user) {
+                            $q->where('status', 'broadcast_site')
+                                ->where('site_id', $user->site_id);
+                        });
                 });
             })
             ->with(['problem:id,short_name,name', 'user:user_id,fullname', 'judge:user_id,fullname'])
@@ -87,6 +94,12 @@ class ClarificationController extends Controller
 
     public function answer(Request $request, Clarification $clarification): JsonResponse
     {
+        $this->authorizeScopedAccess(
+            auth()->user()->contest_id,
+            $clarification->contest_id,
+            'Voce nao pode responder clarificacoes de outro contest.'
+        );
+
         $validated = $request->validate([
             'answer' => 'required|string|max:2000',
             'broadcast' => 'nullable|in:none,site,all',
@@ -103,7 +116,9 @@ class ClarificationController extends Controller
         $clarification->update([
             'answer' => $validated['answer'],
             'status' => $status,
-            'answered_time' => $clarification->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Clarification can outlive its
+            // contest being soft-deleted, so ->contest can resolve to null.
+            'answered_time' => $clarification->contest?->getContestTime() ?? 0,
             'judge_id' => auth()->id(),
             'judge_site_id' => auth()->user()->site_id,
         ]);

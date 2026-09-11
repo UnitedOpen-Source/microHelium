@@ -183,25 +183,12 @@ class SiteController extends Controller
         return $user->site ?? \App\Models\Site::find(request()->query('site_id'));
     }
 
-    /**
-     * Mirrors JudgeController::authorizeRunAccess()/StaffController::
-     * authorizeTaskAccess() -- role:site,admin only checks the user's type,
-     * not which site the target record belongs to. Without this a
-     * coordinator for site A could complete a task or answer a
-     * clarification belonging to site B just by guessing/incrementing the
-     * id. Admins are trusted across sites, matching the rest of the admin
-     * surface.
-     */
     private function authorizeSiteAccess(?int $targetSiteId, string $resource): void
     {
-        $user = auth()->user();
-
-        if ($user->isAdmin()) {
-            return;
-        }
-
-        if ($user->site_id !== $targetSiteId) {
-            abort(403, "Voce nao pode gerenciar {$resource} de outro site.");
-        }
+        $this->authorizeScopedAccess(
+            auth()->user()->site_id,
+            $targetSiteId,
+            "Voce nao pode gerenciar {$resource} de outro site."
+        );
     }
 }

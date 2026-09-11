@@ -52,8 +52,7 @@ class JudgeController extends Controller
             $runs = $query->get();
 
             $pendingRuns = $runs->whereIn('status', ['pending', 'judging'])->map(function (Run $run) {
-                $waitLimit = $run->site->max_judge_wait_time ?? 900;
-                $run->is_overdue = $run->created_at->diffInSeconds(now()) > $waitLimit;
+                $run->is_overdue = $run->isOverdue();
 
                 return $run;
             });
@@ -80,9 +79,7 @@ class JudgeController extends Controller
         ]);
 
         $answer = Answer::findOrFail($validated['answer_id']);
-        if ($answer->contest_id !== $run->contest_id) {
-            abort(422, 'Essa resposta nao pertence ao contest desta submissao.');
-        }
+        $this->assertAnswerBelongsToRunsContest($answer, $run);
 
         $run->update([
             'status' => 'judged',
@@ -113,26 +110,5 @@ class JudgeController extends Controller
         }
 
         return Contest::where('is_active', true)->first();
-    }
-
-    /**
-     * A judge must only be able to judge runs in their own contest -- the
-     * `role:judge,admin` middleware only checks the user's type, not which
-     * contest the run being acted on belongs to, so without this a judge
-     * from contest A could judge (and thus score) a run in contest B just
-     * by guessing/incrementing the run id. Admins are trusted across
-     * contests, matching the rest of the admin surface.
-     */
-    private function authorizeRunAccess(Run $run): void
-    {
-        $user = auth()->user();
-
-        if ($user->isAdmin()) {
-            return;
-        }
-
-        if ($user->contest_id !== $run->contest_id) {
-            abort(403, 'Voce nao pode julgar submissoes de outro contest.');
-        }
     }
 }

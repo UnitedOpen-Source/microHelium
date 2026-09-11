@@ -71,7 +71,54 @@ Route::get('/login', function () {
 Route::post('/login', function () {
     $credentials = request()->only('email', 'password');
 
-    if (auth()->attempt($credentials, request()->filled('remember'))) {
+    // request()->ip() is only the real client address because nginx is the
+    // sole hop in front of PHP-FPM in every compose file in this repo. If a
+    // reverse proxy/load balancer/CDN is ever placed in front of this app,
+    // bootstrap/app.php MUST configure ->trustProxies() with that proxy's
+    // *specific* IP(s) before this becomes meaningful again -- trusting
+    // X-Forwarded-For blindly (e.g. trustProxies(at: '*')) without an
+    // actual trusted proxy in front lets any client simply set that header
+    // themselves to spoof an allowed address, defeating the lock entirely.
+    $clientIp = request()->ip();
+
+    // A user who legitimately logs in from their site's own network with
+    // "remember me" checked, then leaves with the device, would otherwise
+    // silently bypass isIpAllowed() forever after -- Laravel's remember
+    // cookie re-authenticates on later requests without ever going through
+    // this route again. Accounts tied to an IP-restricted site never get a
+    // persistent session, so every new browser session re-checks the IP.
+    $remember = request()->filled('remember');
+    if ($remember) {
+        $candidate = \Helium\User::where('email', $credentials['email'] ?? null)->first();
+        if ($candidate?->site?->ip_address) {
+            $remember = false;
+        }
+    }
+
+    if (auth()->attempt($credentials, $remember)) {
+        $user = auth()->user();
+
+        // Issue #50: Site::ip_address was collected via the admin UI but
+        // never enforced. A user whose account belongs to a site with a
+        // configured ip_address must be connecting from an allowed
+        // address/range -- checked here, not on a later page, so a
+        // wrong-network login never gets a live session in the first place.
+        if ($user->site && !$user->site->isIpAllowed($clientIp)) {
+            auth()->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            \App\Models\ContestLog::warning(
+                $user->contest_id ?? $user->site->contest_id,
+                "Login bloqueado: IP fora da rede configurada para o site \"{$user->site->name}\"",
+                ['user_id' => $user->user_id, 'site_id' => $user->site_id, 'ip' => $clientIp]
+            );
+
+            return back()->withErrors([
+                'email' => 'Acesso bloqueado: fora da rede autorizada para o seu site.',
+            ])->withInput(request()->only('email'));
+        }
+
         request()->session()->regenerate();
         return redirect()->intended('/home');
     }
@@ -79,7 +126,7 @@ Route::post('/login', function () {
     return back()->withErrors([
         'email' => 'Credenciais invalidas.',
     ])->withInput(request()->only('email'));
-});
+})->middleware('throttle:5,1');
 
 Route::get('/register', function () {
     return view('auth.register');
