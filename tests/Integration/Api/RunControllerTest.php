@@ -235,4 +235,31 @@ class RunControllerTest extends TestCase
         $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
         $response->assertStatus(200)->assertJsonPath('status', 'judged');
     }
+
+    /**
+     * Issue #64: judge()/rejudge() previously enforced no role check beyond
+     * auth:sanctum, so any authenticated team could self-award a verdict or
+     * force a re-judge on any run, including their own.
+     */
+    public function test_judge_run_forbidden_for_team()
+    {
+        $run = Run::factory()->create(['status' => 'pending']);
+        $answer = Answer::factory()->create();
+        $team = User::factory()->create(['user_type' => 'team']);
+        Sanctum::actingAs($team);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response->assertStatus(403);
+    }
+
+    public function test_rejudge_run_forbidden_for_team()
+    {
+        Queue::fake();
+        $problem = Problem::factory()->create(['auto_judge' => true]);
+        $run = Run::factory()->create(['status' => 'judged', 'problem_id' => $problem->id]);
+        $team = User::factory()->create(['user_type' => 'team']);
+        Sanctum::actingAs($team);
+        $response = $this->postJson("/api/runs/{$run->id}/rejudge");
+        $response->assertStatus(403);
+        Queue::assertNotPushed(JudgeRunJob::class);
+    }
 }

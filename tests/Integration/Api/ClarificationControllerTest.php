@@ -120,6 +120,20 @@ class ClarificationControllerTest extends TestCase
              ->assertJsonPath('status', 'broadcast_all');
     }
 
+    /**
+     * Issue #64: answer() previously enforced no role check beyond
+     * auth:sanctum, so any authenticated team could answer any clarification.
+     */
+    public function test_answer_clarification_forbidden_for_team()
+    {
+        $team = User::factory()->create(['user_type' => 'team']);
+        $clarification = Clarification::factory()->create();
+        Sanctum::actingAs($team);
+        $data = ['answer' => 'A team should not be able to do this.'];
+        $response = $this->putJson("/api/clarifications/{$clarification->id}/answer", $data);
+        $response->assertStatus(403);
+    }
+
     public function test_destroy_clarification()
     {
         $admin = User::factory()->create(['user_type' => 'admin']);
