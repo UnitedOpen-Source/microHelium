@@ -21,6 +21,61 @@ class SiteControllerTest extends TestCase
         $response->assertStatus(403);
     }
 
+    /**
+     * ip_address became load-bearing for login access in issue #50 -- a
+     * typo'd octet or invalid CIDR suffix must be rejected at save time
+     * rather than silently locking out every user of that site later.
+     */
+    public function test_invalid_ip_address_is_rejected()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+
+        $response = $this->actingAs($admin)->post('/backend/sites', [
+            'contest_id' => $contest->id,
+            'name' => 'Laboratorio 2',
+            'ip_address' => '192.168.1.999',
+            'score_visibility' => 'all',
+            'max_judge_wait_time' => 600,
+        ]);
+
+        $response->assertSessionHasErrors('ip_address');
+        $this->assertDatabaseMissing('sites', ['name' => 'Laboratorio 2']);
+    }
+
+    public function test_invalid_cidr_suffix_is_rejected()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+
+        $response = $this->actingAs($admin)->post('/backend/sites', [
+            'contest_id' => $contest->id,
+            'name' => 'Laboratorio 2',
+            'ip_address' => '192.168.1.0/33',
+            'score_visibility' => 'all',
+            'max_judge_wait_time' => 600,
+        ]);
+
+        $response->assertSessionHasErrors('ip_address');
+    }
+
+    public function test_valid_comma_separated_ip_and_cidr_are_accepted()
+    {
+        $admin = $this->createAdminUser();
+        $contest = Contest::factory()->create();
+
+        $response = $this->actingAs($admin)->post('/backend/sites', [
+            'contest_id' => $contest->id,
+            'name' => 'Laboratorio 2',
+            'ip_address' => '203.0.113.5, 192.168.1.0/24',
+            'score_visibility' => 'all',
+            'max_judge_wait_time' => 600,
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('sites', ['name' => 'Laboratorio 2', 'ip_address' => '203.0.113.5, 192.168.1.0/24']);
+    }
+
     public function test_admin_can_create_a_site()
     {
         $admin = $this->createAdminUser();

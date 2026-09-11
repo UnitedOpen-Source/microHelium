@@ -33,6 +33,12 @@ class NetworkMatcherTest extends TestCase
             'IPv6 CIDR mismatch' => ['2001:db9::1', '2001:db8::/32', false],
             'mismatched address families never match' => ['192.168.1.1', '::1/128', false],
             'invalid rule never matches' => ['192.168.1.1', 'not-an-ip', false],
+            // Dual-stack listeners can surface a client IP as an
+            // IPv4-mapped IPv6 address -- must still match a plain IPv4 rule.
+            'IPv4-mapped IPv6 client matches a plain IPv4 rule' => ['::ffff:203.0.113.5', '203.0.113.5', true],
+            'IPv4-mapped IPv6 client matches an IPv4 CIDR rule' => ['::ffff:192.168.1.42', '192.168.1.0/24', true],
+            'plain IPv4 client matches an IPv4-mapped IPv6 rule' => ['203.0.113.5', '::ffff:203.0.113.5', true],
+            'IPv4-mapped IPv6 mismatch still rejected' => ['::ffff:203.0.113.5', '203.0.113.6', false],
         ];
     }
 }

@@ -13,11 +13,14 @@ class NetworkMatcher
 {
     public static function matches(string $ip, string $rule): bool
     {
+        $ip = self::normalize($ip);
+
         if (!str_contains($rule, '/')) {
-            return $ip === $rule;
+            return $ip === self::normalize($rule);
         }
 
         [$subnet, $bits] = explode('/', $rule, 2);
+        $subnet = self::normalize($subnet);
         $bits = (int) $bits;
 
         $ipBin = @inet_pton($ip);
@@ -46,5 +49,27 @@ class NetworkMatcher
         $mask = (~(0xFF >> $remainderBits)) & 0xFF;
 
         return (ord($ipBin[$fullBytes]) & $mask) === (ord($subnetBin[$fullBytes]) & $mask);
+    }
+
+    /**
+     * Collapses an IPv4-mapped IPv6 address (::ffff:a.b.c.d -- possible with
+     * dual-stack listeners) down to plain IPv4, and canonicalizes case/
+     * formatting for everything else, by round-tripping through
+     * inet_pton()/inet_ntop(). Without this, a client surfaced as
+     * "::ffff:203.0.113.5" would never match a plain "203.0.113.5" rule
+     * even though it's the exact same address.
+     */
+    private static function normalize(string $ip): string
+    {
+        $bin = @inet_pton($ip);
+        if ($bin === false) {
+            return $ip;
+        }
+
+        if (strlen($bin) === 16 && substr($bin, 0, 12) === "\0\0\0\0\0\0\0\0\0\0\xff\xff") {
+            $bin = substr($bin, 12, 4);
+        }
+
+        return inet_ntop($bin);
     }
 }
