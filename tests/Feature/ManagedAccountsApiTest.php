@@ -321,6 +321,36 @@ class ManagedAccountsApiTest extends TestCase
         $this->assertSame(1, User::where('username', 'participante-repetido')->count());
     }
 
+    /**
+     * IdempotencyStore hashes the payload to detect a genuinely different
+     * body reusing the same key -- but two requests can carry the same
+     * logical fields serialized in a different order (different client/
+     * proxy), which must still be treated as the same payload, not a 409.
+     */
+    public function test_repeating_the_same_idempotency_key_with_differently_ordered_payload_fields_still_replays(): void
+    {
+        [$contest, $site] = $this->contestWithSite();
+        $admin = $this->createAdminUser();
+        $this->actingAs($admin);
+
+        $first = $this->postJson('/api/frontend/managed-accounts', [
+            'fullname' => 'Ordem Original',
+            'username' => 'ordem-original',
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+        ], ['Idempotency-Key' => 'reordered-key'])->assertCreated();
+
+        $second = $this->postJson('/api/frontend/managed-accounts', [
+            'site_id' => $site->id,
+            'contest_id' => $contest->id,
+            'username' => 'ordem-original',
+            'fullname' => 'Ordem Original',
+        ], ['Idempotency-Key' => 'reordered-key'])->assertCreated();
+
+        $this->assertSame($first->json('data.id'), $second->json('data.id'));
+        $this->assertSame(1, User::where('username', 'ordem-original')->count());
+    }
+
     public function test_reusing_the_same_idempotency_key_with_a_different_payload_is_409(): void
     {
         [$contest, $site] = $this->contestWithSite();
