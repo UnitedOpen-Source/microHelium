@@ -22,8 +22,14 @@ return new class extends Migration
             $table->string('route');
             $table->string('idempotency_key');
             $table->string('payload_hash');
-            $table->unsignedSmallInteger('response_status');
-            $table->json('response_body');
+            // Nullable: a row is inserted to atomically CLAIM the
+            // (user_id, route, idempotency_key) slot before the mutating
+            // callback runs (see IdempotencyStore::handle()), and only
+            // gets its response_status/response_body once the callback
+            // finishes -- a still-null response_status means "another
+            // request is processing this key right now."
+            $table->unsignedSmallInteger('response_status')->nullable();
+            $table->json('response_body')->nullable();
             $table->timestamps();
 
             $table->unique(['user_id', 'route', 'idempotency_key']);

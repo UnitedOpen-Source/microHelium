@@ -31,6 +31,22 @@ class AccountActivation extends Model
         return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
+    /**
+     * Single source of truth for "this token may still be used." Shared
+     * between isValid() below (a read-only check against an
+     * already-loaded instance, used by
+     * AccountActivationController::show() to decide what to render) and
+     * that same controller's store(), which builds its atomic claim
+     * UPDATE's WHERE clause from this scope instead of hand-rewriting the
+     * same two conditions as a separate query -- so a future change to
+     * this rule (e.g. adding a "revoked" state) only has to happen here,
+     * not in both places independently.
+     */
+    public function scopeValid($query)
+    {
+        return $query->whereNull('used_at')->where('expires_at', '>', now());
+    }
+
     public function isExpired(): bool
     {
         return $this->expires_at->isPast();
@@ -41,6 +57,10 @@ class AccountActivation extends Model
         return $this->used_at !== null;
     }
 
+    /**
+     * Attribute-based equivalent of scopeValid() above, for an
+     * already-loaded instance -- must be kept in sync with it.
+     */
     public function isValid(): bool
     {
         return ! $this->isExpired() && ! $this->isUsed();

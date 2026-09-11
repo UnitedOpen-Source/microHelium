@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Contest;
+use App\Models\IdempotencyKey;
 use App\Models\Site;
 use Carbon\CarbonImmutable;
 use Helium\User;
@@ -343,6 +344,69 @@ class ManagedAccountsApiTest extends TestCase
         $this->assertSame(0, User::where('username', 'participante-b')->count());
     }
 
+    public function test_a_still_in_flight_claim_for_the_same_key_and_payload_is_409_not_a_replay(): void
+    {
+        [$contest, $site] = $this->contestWithSite();
+        $admin = $this->createAdminUser();
+        $this->actingAs($admin);
+
+        $payload = [
+            'fullname' => 'Participante Concorrente',
+            'username' => 'participante-concorrente',
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+        ];
+
+        // Simulates a second, truly concurrent request landing while a
+        // first request still holds the claim (its callback hasn't
+        // finished, so response_status is still null) -- see
+        // IdempotencyStore::handle(). This is the exact race the previous
+        // "check existing, run callback, THEN write the cache row"
+        // ordering could not detect.
+        IdempotencyKey::create([
+            'user_id' => $admin->user_id,
+            'route' => 'POST /api/frontend/managed-accounts',
+            'idempotency_key' => 'in-flight-key',
+            'payload_hash' => hash('sha256', json_encode($payload)),
+            'response_status' => null,
+            'response_body' => null,
+        ]);
+
+        $response = $this->postJson('/api/frontend/managed-accounts', $payload, ['Idempotency-Key' => 'in-flight-key']);
+
+        $response->assertStatus(409);
+        $this->assertSame(0, User::where('username', 'participante-concorrente')->count());
+    }
+
+    public function test_a_validation_failure_releases_the_idempotency_claim_so_a_corrected_retry_under_the_same_key_succeeds(): void
+    {
+        [$contest, $site] = $this->contestWithSite();
+        $admin = $this->createAdminUser();
+        $this->actingAs($admin);
+        User::factory()->create(['username' => 'ja-existe-antes']);
+
+        $this->postJson('/api/frontend/managed-accounts', [
+            'fullname' => 'Participante',
+            'username' => 'ja-existe-antes',
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+        ], ['Idempotency-Key' => 'retry-after-fix'])->assertStatus(422);
+
+        // Different payload (fixed username), SAME key -- must not be
+        // blocked by a leftover "pending" claim from the failed attempt
+        // above, and must not be treated as "reused key, different
+        // payload" either, since the failed attempt was never persisted.
+        $response = $this->postJson('/api/frontend/managed-accounts', [
+            'fullname' => 'Participante',
+            'username' => 'participante-corrigido',
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+        ], ['Idempotency-Key' => 'retry-after-fix']);
+
+        $response->assertCreated();
+        $this->assertSame(1, User::where('username', 'participante-corrigido')->count());
+    }
+
     // --- Criterio 2: aniversario de 18 anos ------------------------------
 
     public function test_privacy_locked_flips_immediately_before_and_after_the_18th_birthday(): void
@@ -400,6 +464,22 @@ class ManagedAccountsApiTest extends TestCase
         $items = $response->json('data.items');
         $this->assertCount(1, $items);
         $this->assertSame('Ana Silva', $items[0]['fullname']);
+    }
+
+    public function test_search_does_not_treat_literal_percent_or_underscore_as_wildcards(): void
+    {
+        [$contest, $site] = $this->contestWithSite();
+        $admin = $this->createAdminUser();
+        User::factory()->managed(null, $admin->user_id)->create(['contest_id' => $contest->id, 'site_id' => $site->id, 'fullname' => 'Jo_n Underscore', 'username' => 'jo_n']);
+        User::factory()->managed(null, $admin->user_id)->create(['contest_id' => $contest->id, 'site_id' => $site->id, 'fullname' => 'John Regular', 'username' => 'john']);
+        $this->actingAs($admin);
+
+        // A literal "_" in the search term must not act as a single-char
+        // wildcard -- without escaping, "jo_n" would also match "john".
+        $response = $this->getJson('/api/frontend/managed-accounts?q=jo_n')->assertOk();
+        $items = $response->json('data.items');
+        $this->assertCount(1, $items);
+        $this->assertSame('jo_n', $items[0]['username']);
     }
 
     public function test_listing_does_not_include_non_managed_accounts(): void

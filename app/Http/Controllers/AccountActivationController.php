@@ -65,8 +65,7 @@ class AccountActivationController extends Controller
             // instead of also granting access.
             $claimedRows = AccountActivation::query()
                 ->where('id', $activation->id)
-                ->whereNull('used_at')
-                ->where('expires_at', '>', now())
+                ->valid() // AccountActivation::scopeValid() -- same predicate as isValid()
                 ->update(['used_at' => now()]);
 
             if ($claimedRows !== 1) {

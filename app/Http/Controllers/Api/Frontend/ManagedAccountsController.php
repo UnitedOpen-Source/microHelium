@@ -37,10 +37,10 @@ class ManagedAccountsController extends Controller
 
         $search = trim((string) $request->query('q', ''));
         if ($search !== '') {
-            $needle = mb_strtolower($search);
+            $needle = self::escapeLike(mb_strtolower($search));
             $query->where(function ($sub) use ($needle) {
-                $sub->whereRaw('LOWER(fullname) LIKE ?', ['%'.$needle.'%'])
-                    ->orWhereRaw('LOWER(username) LIKE ?', ['%'.$needle.'%']);
+                $sub->whereRaw("LOWER(fullname) LIKE ? ESCAPE '!'", ['%'.$needle.'%'])
+                    ->orWhereRaw("LOWER(username) LIKE ? ESCAPE '!'", ['%'.$needle.'%']);
             });
         }
 
@@ -66,6 +66,15 @@ class ManagedAccountsController extends Controller
             ];
         })->values();
 
+        // Known minor inefficiency: contests/sites are refetched on every
+        // request (every page, every search refinement) even though this
+        // data only changes when a contest/site is created or edited
+        // elsewhere. Deliberately not cached across requests -- an admin
+        // who just created a contest/site expects it to appear in this
+        // same create-account form immediately (docs/specs/README.md:
+        // "Reconsultar depois de ações confirmadas"), and this table is
+        // small enough (one row per contest/site, not per managed account)
+        // that a correctness-risking cache isn't worth it here.
         $contests = Contest::query()->with(['sites' => fn ($q) => $q->orderBy('name')])->orderBy('name')->get()
             ->map(fn (Contest $contest) => [
                 'id' => $contest->id,
@@ -109,10 +118,18 @@ class ManagedAccountsController extends Controller
                 // ignores deleted_at and would let a soft-deleted contest/site
                 // (invisible in this same endpoint's `contests` list and
                 // everywhere else that queries through Eloquent) still be
-                // assigned to a new account. Same guard already used by
-                // Backend\UserController::store() for site_id.
+                // assigned to a new account.
                 'contest_id' => ['required', 'integer', Rule::exists('contests', 'id')->whereNull('deleted_at')],
-                'site_id' => ['required', 'integer', Rule::exists('sites', 'id')->whereNull('deleted_at')],
+                // Scoped to contest_id and non-deleted in the validator
+                // itself, matching the pattern already established by
+                // Backend\SiteController::store()/update() for the exact
+                // same "site belongs to this contest" check -- no separate
+                // Site::find() + manual int comparison needed afterwards.
+                'site_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('sites', 'id')->where('contest_id', $request->input('contest_id'))->whereNull('deleted_at'),
+                ],
             ]);
 
             $username = trim($validated['username']);
@@ -126,15 +143,8 @@ class ManagedAccountsController extends Controller
                 ]);
             }
 
-            $site = Site::find($validated['site_id']);
-            if (! $site || (int) $site->contest_id !== (int) $validated['contest_id']) {
-                throw ValidationException::withMessages([
-                    'site_id' => ['O local selecionado nao pertence ao concurso escolhido.'],
-                ]);
-            }
-
             try {
-                [$user, $token] = DB::transaction(function () use ($validated, $username, $site) {
+                [$user, $token] = DB::transaction(function () use ($validated, $username) {
                     $user = User::create([
                         'fullname' => trim($validated['fullname']),
                         'username' => $username,
@@ -144,8 +154,8 @@ class ManagedAccountsController extends Controller
                         // (AccountActivationController::store()).
                         'password' => Hash::make(Str::random(64)),
                         'user_type' => User::TYPE_TEAM,
-                        'contest_id' => $site->contest_id,
-                        'site_id' => $site->id,
+                        'contest_id' => $validated['contest_id'],
+                        'site_id' => $validated['site_id'],
                         // Disabled until activation completes -- "criar role
                         // team habilitada apenas conforme processo de
                         // ativação".
@@ -178,7 +188,14 @@ class ManagedAccountsController extends Controller
                 // is the real guard in that race; surface it as the same
                 // clean 422 the pre-check would have produced instead of
                 // letting a raw QueryException turn into a 500.
-                if (str_contains(strtolower($e->getMessage()), 'unique')) {
+                //
+                // This same transaction also inserts an AccountActivation
+                // row with its own unique constraint on token_hash -- a
+                // blind "does the message contain 'unique'" check would
+                // wrongly relabel *that* collision as a username conflict
+                // too, hiding the real cause. Match the username column
+                // specifically, not just the word "unique".
+                if (self::isUsernameUniqueViolation($e)) {
                     throw ValidationException::withMessages([
                         'username' => ['Este nome de usuario ja esta em uso.'],
                     ]);
@@ -194,5 +211,31 @@ class ManagedAccountsController extends Controller
                 ],
             ], 201);
         });
+    }
+
+    /**
+     * Laravel doesn't escape LIKE metacharacters in a bound parameter --
+     * without this, a literal `%` or `_` in an admin's search term (e.g.
+     * "jo_n") is silently treated as a wildcard and matches unrelated rows
+     * (e.g. "john"/"joan"). Callers must pair this with an explicit
+     * "ESCAPE '!'" clause on the LIKE itself. '!' is used instead of the
+     * more common backslash purely to avoid an extra layer of PHP/SQL
+     * string-escaping for the backslash character itself.
+     */
+    private static function escapeLike(string $value): string
+    {
+        return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
+    }
+
+    /**
+     * True only for a unique-constraint violation on users.username
+     * specifically -- see the catch block above for why a blind "unique"
+     * substring match isn't precise enough here.
+     */
+    private static function isUsernameUniqueViolation(QueryException $e): bool
+    {
+        $message = strtolower($e->getMessage());
+
+        return str_contains($message, 'unique') && str_contains($message, 'username');
     }
 }
