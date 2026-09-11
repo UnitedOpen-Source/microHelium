@@ -493,3 +493,4 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 
 require __DIR__.'/frontend.php';
 require __DIR__.'/frontend_api_bank_governance.php';
+require __DIR__.'/frontend_api_managed_accounts.php';
