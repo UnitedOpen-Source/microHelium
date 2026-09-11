@@ -169,6 +169,29 @@ class AutoJudgeServiceTest extends TestCase
         ]);
     }
 
+    public function test_wrap_with_bwrap_generates_correct_args()
+    {
+        $service = new AutoJudgeService();
+        $command = $service->wrapWithBwrap('echo hello', '/tmp/run_1');
+
+        $this->assertStringContainsString('bwrap', $command);
+        $this->assertStringContainsString('--unshare-all', $command);
+        $this->assertStringContainsString('--unshare-net', $command);
+        $this->assertStringContainsString('--ro-bind / /', $command);
+        $this->assertStringContainsString('--bind \'/tmp/run_1\' \'/tmp/run_1\'', $command);
+    }
+
+    public function test_missing_bwrap_binary_throws_runtime_exception()
+    {
+        config(['autojudge.bwrap_path' => '/non/existent/bwrap']);
+        $service = new AutoJudgeService();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Mandatory judge sandbox binary (bwrap) not found");
+
+        $service->wrapWithBwrap('echo hello', '/tmp/run_1');
+    }
+
     public function test_build_compile_command()
     {
         $language = (object) [

@@ -99,4 +99,24 @@ return [
     |
     */
     'judge_group' => env('AUTOJUDGE_GROUP', 'nogroup'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bwrap Path
+    |--------------------------------------------------------------------------
+    |
+    | Path to the bwrap binary for sandbox isolation.
+    |
+    */
+    'bwrap_path' => env('AUTOJUDGE_BWRAP_PATH', '/usr/bin/bwrap'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Use Bwrap
+    |--------------------------------------------------------------------------
+    |
+    | Use bwrap for sandbox isolation.
+    |
+    */
+    'use_bwrap' => env('AUTOJUDGE_USE_BWRAP', true),
 ];

@@ -17,6 +17,8 @@ class AutoJudgeService
     protected int $defaultTimeLimit;
     protected int $defaultMemoryLimit;
     protected string $safeExecPath;
+    protected string $bwrapPath;
+    protected bool $useBwrap;
 
     public function __construct()
     {
@@ -25,6 +27,38 @@ class AutoJudgeService
         $this->defaultTimeLimit = config('autojudge.time_limit', 10);
         $this->defaultMemoryLimit = config('autojudge.memory_limit', 512);
         $this->safeExecPath = config('autojudge.safeexec_path', '/usr/bin/safeexec');
+        $this->bwrapPath = config('autojudge.bwrap_path', '/usr/bin/bwrap');
+        $this->useBwrap = config('autojudge.use_bwrap', true);
+    }
+
+    public function wrapWithBwrap(string $command, string $runDir, array $options = []): string
+    {
+        if (!$this->useBwrap) {
+            return $command;
+        }
+
+        if (!file_exists($this->bwrapPath) || !is_executable($this->bwrapPath)) {
+            throw new \RuntimeException(
+                "Mandatory judge sandbox binary (bwrap) not found or not executable at '{$this->bwrapPath}'. Refusing unconfined host execution."
+            );
+        }
+
+        $allowNet = $options['allow_net'] ?? false;
+        $netFlag = $allowNet ? '' : '--unshare-net ';
+        $path = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+
+        return sprintf(
+            '%s --unshare-all %s--die-with-parent --ro-bind / / --proc /proc --dev /dev --chdir %s --bind %s %s --clearenv --setenv PATH %s --setenv LANG "C.UTF-8" --setenv HOME %s --setenv TMPDIR %s bash -c %s',
+            escapeshellarg($this->bwrapPath),
+            $netFlag,
+            escapeshellarg($runDir),
+            escapeshellarg($runDir),
+            escapeshellarg($runDir),
+            escapeshellarg($path),
+            escapeshellarg($runDir),
+            escapeshellarg($runDir),
+            escapeshellarg($command)
+        );
     }
 
     public function judge(Run $run): void
@@ -116,6 +150,7 @@ class AutoJudgeService
 
         // Use default compile command
         $compileCommand = $this->buildCompileCommand($language, $runDir, $run->filename);
+        $command = $this->wrapWithBwrap($compileCommand, $runDir);
 
         // npm/npx (TypeScript), dotnet and go all write caches under $HOME;
         // PHP-FPM doesn't set HOME for the worker user, so without this
@@ -124,8 +159,8 @@ class AutoJudgeService
         // submitted code. $runDir is already writable and unique per run.
         $result = Process::timeout($this->defaultTimeLimit * 2)
             ->path($runDir)
-            ->env(['HOME' => $runDir])
-            ->run($compileCommand);
+            ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
+            ->run($command);
 
         return [
             'success' => $result->successful(),
@@ -208,9 +243,11 @@ class AutoJudgeService
             $command = $this->wrapWithSafeExec($command, $timeLimit, $memoryLimit, $runDir);
         }
 
+        $command = $this->wrapWithBwrap($command, $runDir, ['allow_net' => false]);
+
         $result = Process::timeout($timeLimit + 5)
             ->path($runDir)
-            ->env(['HOME' => $runDir])
+            ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
             ->run($command);
 
         $exitCode = $result->exitCode();
