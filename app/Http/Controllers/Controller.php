@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Answer;
+use App\Models\Run;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Foundation\Validation\ValidatesRequests;
@@ -31,6 +33,33 @@ class Controller extends BaseController
 
         if ($userScope !== $resourceScope) {
             abort(403, $message);
+        }
+    }
+
+    /**
+     * Shared by JudgeController::judge()/rejudge() (web) and
+     * Api\RunController::judge()/rejudge() (API) -- both need the exact
+     * same "judge from contest A can't touch a run in contest B" check,
+     * previously duplicated verbatim between the two.
+     */
+    protected function authorizeRunAccess(Run $run): void
+    {
+        $this->authorizeScopedAccess(
+            auth()->user()->contest_id,
+            $run->contest_id,
+            'Voce nao pode julgar submissoes de outro contest.'
+        );
+    }
+
+    /**
+     * Shared by JudgeController::judge() (web) and Api\RunController::judge()
+     * (API) -- a run must be judged with an answer/verdict from its own
+     * contest's answer set, not one borrowed from an unrelated contest.
+     */
+    protected function assertAnswerBelongsToRunsContest(Answer $answer, Run $run): void
+    {
+        if ($answer->contest_id !== $run->contest_id) {
+            abort(422, 'Essa resposta nao pertence ao contest desta submissao.');
         }
     }
 }

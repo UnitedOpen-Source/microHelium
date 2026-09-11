@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\JudgeRunJob;
+use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\ContestLog;
 use App\Models\Language;
@@ -145,6 +146,8 @@ class RunController extends Controller
 
     public function rejudge(Run $run): JsonResponse
     {
+        $this->authorizeRunAccess($run);
+
         $run->update([
             'status' => 'pending',
             'answer_id' => null,
@@ -158,7 +161,7 @@ class RunController extends Controller
             'auto_judge_stderr' => null,
         ]);
 
-        if ($run->problem->isAutoJudgeEnabledFor($run->language)) {
+        if ($run->problem && $run->language && $run->problem->isAutoJudgeEnabledFor($run->language)) {
             JudgeRunJob::dispatch($run);
         }
 
@@ -172,16 +175,29 @@ class RunController extends Controller
 
     public function judge(Request $request, Run $run): JsonResponse
     {
+        $this->authorizeRunAccess($run);
+
+        if ($run->status === 'judged') {
+            return response()->json([
+                'error' => "Run #{$run->run_number} ja foi julgada. Use a API de rejudge para reabrir antes de julgar de novo.",
+            ], 422);
+        }
+
         $validated = $request->validate([
             'answer_id' => 'required|exists:answers,id',
         ]);
 
+        $answer = Answer::findOrFail($validated['answer_id']);
+        $this->assertAnswerBelongsToRunsContest($answer, $run);
+
         $run->update([
             'status' => 'judged',
-            'answer_id' => $validated['answer_id'],
+            'answer_id' => $answer->id,
             'judge_id' => auth()->id(),
             'judge_site_id' => auth()->user()->site_id,
-            'judged_time' => $run->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Run can outlive its contest
+            // being soft-deleted, so ->contest can resolve to null here.
+            'judged_time' => $run->contest?->getContestTime() ?? 0,
         ]);
 
         // Update score

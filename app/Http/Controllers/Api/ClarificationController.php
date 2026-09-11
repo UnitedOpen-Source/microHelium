@@ -87,6 +87,12 @@ class ClarificationController extends Controller
 
     public function answer(Request $request, Clarification $clarification): JsonResponse
     {
+        $this->authorizeScopedAccess(
+            auth()->user()->contest_id,
+            $clarification->contest_id,
+            'Voce nao pode responder clarificacoes de outro contest.'
+        );
+
         $validated = $request->validate([
             'answer' => 'required|string|max:2000',
             'broadcast' => 'nullable|in:none,site,all',
@@ -103,7 +109,9 @@ class ClarificationController extends Controller
         $clarification->update([
             'answer' => $validated['answer'],
             'status' => $status,
-            'answered_time' => $clarification->contest->getContestTime(),
+            // Contest uses SoftDeletes -- a Clarification can outlive its
+            // contest being soft-deleted, so ->contest can resolve to null.
+            'answered_time' => $clarification->contest?->getContestTime() ?? 0,
             'judge_id' => auth()->id(),
             'judge_site_id' => auth()->user()->site_id,
         ]);

@@ -27,7 +27,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/clarifications/pending', [ClarificationController::class, 'pending']);
     Route::apiResource('clarifications', ClarificationController::class);
-    Route::put('/clarifications/{clarification}/answer', [ClarificationController::class, 'answer']);
+    Route::put('/clarifications/{clarification}/answer', [ClarificationController::class, 'answer'])
+        ->middleware('role:judge,admin');
 
     Route::apiResource('problems', ProblemController::class);
     Route::get('/problems/{problem}/download', [ProblemController::class, 'download']);
@@ -35,8 +36,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('runs', RunController::class);
     Route::get('/runs/{run}/source', [RunController::class, 'downloadSource']);
-    Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
-    Route::put('/runs/{run}/judge', [RunController::class, 'judge']);
+    Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge'])
+        ->middleware('role:judge,admin');
+    Route::put('/runs/{run}/judge', [RunController::class, 'judge'])
+        ->middleware('role:judge,admin');
 
     Route::get('/contests/{contest}/scoreboard', [ScoreboardController::class, 'index']);
     Route::get('/contests/{contest}/my-score', [ScoreboardController::class, 'userScore']);

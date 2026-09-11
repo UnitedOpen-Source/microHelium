@@ -79,9 +79,7 @@ class JudgeController extends Controller
         ]);
 
         $answer = Answer::findOrFail($validated['answer_id']);
-        if ($answer->contest_id !== $run->contest_id) {
-            abort(422, 'Essa resposta nao pertence ao contest desta submissao.');
-        }
+        $this->assertAnswerBelongsToRunsContest($answer, $run);
 
         $run->update([
             'status' => 'judged',
@@ -112,14 +110,5 @@ class JudgeController extends Controller
         }
 
         return Contest::where('is_active', true)->first();
-    }
-
-    private function authorizeRunAccess(Run $run): void
-    {
-        $this->authorizeScopedAccess(
-            auth()->user()->contest_id,
-            $run->contest_id,
-            'Voce nao pode julgar submissoes de outro contest.'
-        );
     }
 }
