@@ -5,6 +5,7 @@
 @section('description', 'Revise os envios pendentes e consulte os julgamentos recentes.')
 
 @section('content')
+<a href="/judge/health" class="button-secondary mb-5">Saúde do julgamento</a>
 <div class="space-y-6">
 
     <div class="bg-card rounded-lg border border-border shadow-sm">

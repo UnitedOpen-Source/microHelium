@@ -5,6 +5,7 @@
 @section('description', 'Acompanhe submissões, times e o andamento do seu site.')
 
 @section('content')
+<a href="/judge/health" class="button-secondary mb-5">Saúde do julgamento</a>
 <div class="space-y-6">
     {{-- layouts/app.blade.php already renders session('success')/session('error') globally --}}
 

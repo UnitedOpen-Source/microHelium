@@ -1,6 +1,20 @@
 {
+  "_FeaturePager-BHIBYI_C.js": {
+    "file": "assets/FeaturePager-BHIBYI_C.js",
+    "name": "FeaturePager",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_FieldError-29wPZt8N.js": {
+    "file": "assets/FieldError-29wPZt8N.js",
+    "name": "FieldError",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
   "resources/css/app.css": {
-    "file": "assets/app-x7W_Kyhw.css",
+    "file": "assets/app-CeCcdaY3.css",
     "name": "app",
     "names": [
       "app.css"
@@ -9,9 +23,94 @@
     "isEntry": true
   },
   "resources/js/app.js": {
-    "file": "assets/app-DwAcmKKf.js",
+    "file": "assets/app-B27uO_F_.js",
     "name": "app",
     "src": "resources/js/app.js",
-    "isEntry": true
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/features/mount.js"
+    ]
+  },
+  "resources/js/features/BankGovernance.vue": {
+    "file": "assets/BankGovernance-C33x-6l2.js",
+    "name": "BankGovernance",
+    "src": "resources/js/features/BankGovernance.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeaturePager-BHIBYI_C.js",
+      "_FieldError-29wPZt8N.js"
+    ]
+  },
+  "resources/js/features/JudgingHealth.vue": {
+    "file": "assets/JudgingHealth-BbjX3kph.js",
+    "name": "JudgingHealth",
+    "src": "resources/js/features/JudgingHealth.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeaturePager-BHIBYI_C.js"
+    ]
+  },
+  "resources/js/features/ManagedAccounts.vue": {
+    "file": "assets/ManagedAccounts-B7awaCSI.js",
+    "name": "ManagedAccounts",
+    "src": "resources/js/features/ManagedAccounts.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeaturePager-BHIBYI_C.js",
+      "_FieldError-29wPZt8N.js"
+    ]
+  },
+  "resources/js/features/Practice.vue": {
+    "file": "assets/Practice-CVAy8ez0.js",
+    "name": "Practice",
+    "src": "resources/js/features/Practice.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeaturePager-BHIBYI_C.js",
+      "_FieldError-29wPZt8N.js"
+    ]
+  },
+  "resources/js/features/Similarity.vue": {
+    "file": "assets/Similarity-xg2AtSI_.js",
+    "name": "Similarity",
+    "src": "resources/js/features/Similarity.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeaturePager-BHIBYI_C.js",
+      "_FieldError-29wPZt8N.js"
+    ]
+  },
+  "resources/js/features/Webcast.vue": {
+    "file": "assets/Webcast-BBjTeyhz.js",
+    "name": "Webcast",
+    "src": "resources/js/features/Webcast.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeaturePager-BHIBYI_C.js",
+      "_FieldError-29wPZt8N.js"
+    ]
+  },
+  "resources/js/features/mount.js": {
+    "file": "assets/mount-DRtJ-Vnb.js",
+    "name": "mount",
+    "src": "resources/js/features/mount.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js"
+    ],
+    "dynamicImports": [
+      "resources/js/features/Similarity.vue",
+      "resources/js/features/Practice.vue",
+      "resources/js/features/Webcast.vue",
+      "resources/js/features/JudgingHealth.vue",
+      "resources/js/features/BankGovernance.vue",
+      "resources/js/features/ManagedAccounts.vue"
+    ]
   }
 }

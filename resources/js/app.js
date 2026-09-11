@@ -22,3 +22,11 @@ document.querySelectorAll(selectors.join(',')).forEach(element => {
 });
 
 initializeUI();
+
+if (document.querySelector('[data-feature-page]')) {
+    import('./features/mount.js').then(({ mountFeaturePages }) => mountFeaturePages()).catch(() => {
+        const host = document.querySelector('[data-feature-page]');
+        host.textContent = 'Não foi possível abrir esta página. Atualize para tentar novamente.';
+        host.setAttribute('role', 'alert');
+    });
+}
