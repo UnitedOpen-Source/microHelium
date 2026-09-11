@@ -7,6 +7,7 @@
 @section('page-actions')<a href="{{ route('backend.import-boca') }}" class="button-primary">Importar BOCA</a>@endsection
 
 @section('content')
+<a href="/backend/bank-governance" class="button-secondary mb-5">Organizar responsáveis e etiquetas</a>
 <div class="space-y-6">
     <!-- Stats -->
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">

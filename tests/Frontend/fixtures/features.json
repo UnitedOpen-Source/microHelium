@@ -1,0 +1,356 @@
+{
+  "/api/frontend/practice/problems": {
+    "items": [
+      {
+        "id": 1,
+        "short_name": "A",
+        "name": "Caminhos pela cidade",
+        "summary": "Encontre o trajeto mais curto entre os bairros de uma cidade conectada.",
+        "tags": [
+          "grafos",
+          "caminhos mínimos"
+        ],
+        "solved": false,
+        "stats": {
+          "solved_count": 38,
+          "participant_count": 62
+        }
+      },
+      {
+        "id": 2,
+        "short_name": "B",
+        "name": "Uma soma de possibilidades",
+        "summary": "Comece pelos fundamentos: leia dois valores e apresente o resultado.",
+        "tags": [
+          "introdução",
+          "aritmética"
+        ],
+        "solved": true,
+        "stats": {
+          "solved_count": 120,
+          "participant_count": 132
+        }
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    }
+  },
+  "/api/frontend/practice/problems/1": {
+    "capabilities": {
+      "can_submit": true
+    },
+    "problem": {
+      "id": 1,
+      "short_name": "A",
+      "name": "Caminhos pela cidade",
+      "time_limit_ms": 2000,
+      "memory_limit_mb": 256,
+      "max_source_bytes": 102400,
+      "statement": "Uma cidade tem N bairros conectados por ruas. Sua tarefa é encontrar o menor caminho entre a escola e a biblioteca.\n\nEntrada\nA primeira linha contém N e M. As próximas M linhas descrevem uma rua e sua distância.\n\nSaída\nImprima a menor distância. Se não houver caminho, imprima -1.",
+      "examples": [
+        {
+          "input": "3 2\n1 2 4\n2 3 5",
+          "output": "9"
+        }
+      ],
+      "languages": [
+        {
+          "id": 1,
+          "name": "C++ 17"
+        },
+        {
+          "id": 2,
+          "name": "Python 3"
+        }
+      ]
+    }
+  },
+  "/api/frontend/practice/problems/2": {
+    "capabilities": {
+      "can_submit": true
+    },
+    "problem": {
+      "id": 2,
+      "short_name": "B",
+      "name": "Uma soma de possibilidades",
+      "time_limit_ms": 2000,
+      "memory_limit_mb": 256,
+      "max_source_bytes": 102400,
+      "statement": "Uma cidade tem N bairros conectados por ruas. Sua tarefa é encontrar o menor caminho entre a escola e a biblioteca.\n\nEntrada\nA primeira linha contém N e M. As próximas M linhas descrevem uma rua e sua distância.\n\nSaída\nImprima a menor distância. Se não houver caminho, imprima -1.",
+      "examples": [
+        {
+          "input": "3 2\n1 2 4\n2 3 5",
+          "output": "9"
+        }
+      ],
+      "languages": [
+        {
+          "id": 1,
+          "name": "C++ 17"
+        },
+        {
+          "id": 2,
+          "name": "Python 3"
+        }
+      ]
+    }
+  },
+  "/api/frontend/practice/history": {
+    "items": [
+      {
+        "id": 301,
+        "problem_name": "Caminhos pela cidade",
+        "language_name": "C++ 17",
+        "status": "pending",
+        "verdict": null,
+        "created_at": "2026-09-10T18:20:00Z",
+        "recovery_message": "Aguardando avaliação. Você não precisa reenviar.",
+        "detail_url": null
+      },
+      {
+        "id": 300,
+        "problem_name": "Uma soma de possibilidades",
+        "language_name": "Python 3",
+        "status": "judged",
+        "verdict": "AC",
+        "created_at": "2026-09-10T18:10:00Z",
+        "detail_url": null
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    }
+  },
+  "/api/frontend/similarity": {
+    "items": [
+      {
+        "id": 1,
+        "problem_name": "Caminhos pela cidade",
+        "language_name": "C++ 17",
+        "status": "completed",
+        "team_count": 24,
+        "created_at": "2026-09-10T18:00:00Z",
+        "threshold": 80,
+        "pairs": [
+          {
+            "id": 1,
+            "team_a": "Equipe Horizonte",
+            "team_b": "Equipe Aurora",
+            "run_id_a": 210,
+            "run_id_b": 214,
+            "source_a_url": "/submission/210",
+            "source_b_url": "/submission/214",
+            "similarity_score": 86.4
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "problem_name": "Caminhos pela cidade",
+        "language_name": "Python 3",
+        "status": "running",
+        "team_count": 18,
+        "created_at": "2026-09-10T18:30:00Z",
+        "threshold": 80,
+        "pairs": []
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    },
+    "capabilities": {
+      "can_start": true
+    },
+    "problems": [
+      {
+        "id": 1,
+        "name": "Caminhos pela cidade",
+        "contest_name": "Maratona de Primavera",
+        "languages": [
+          {
+            "id": 1,
+            "name": "C++ 17"
+          },
+          {
+            "id": 2,
+            "name": "Python 3"
+          }
+        ]
+      }
+    ]
+  },
+  "/api/frontend/webcast": {
+    "items": [
+      {
+        "id": 1,
+        "label": "Computador da cerimônia",
+        "status": "active",
+        "expires_at": "2026-09-11T02:00:00Z",
+        "last_used_at": "2026-09-10T18:30:00Z"
+      },
+      {
+        "id": 2,
+        "label": "Ensaio técnico",
+        "status": "revoked",
+        "expires_at": "2026-09-10T12:00:00Z",
+        "last_used_at": null
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    },
+    "capabilities": {
+      "can_export": false,
+      "can_manage_credentials": true
+    },
+    "contests": [
+      {
+        "id": 1,
+        "name": "Maratona de Primavera"
+      }
+    ],
+    "contest": {
+      "id": 1,
+      "name": "Maratona de Primavera"
+    },
+    "export_url": null
+  },
+  "/api/frontend/judging-health": {
+    "items": [
+      {
+        "id": 301,
+        "problem_name": "Caminhos pela cidade",
+        "team_name": "Equipe Horizonte",
+        "site_name": "Escola Central",
+        "max_wait_seconds": 300,
+        "retry_count": 1,
+        "recovery_status": "retrying",
+        "last_activity_at": "2026-09-10T18:30:00Z",
+        "next_check_at": "2026-09-10T18:36:00Z",
+        "message": "Uma nova tentativa foi solicitada. Nenhuma ação necessária por enquanto.",
+        "detail_url": null
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    },
+    "generated_at": "2026-09-10T18:35:00Z",
+    "watchdog": {
+      "enabled": true,
+      "last_checked_at": "2026-09-10T18:34:00Z"
+    },
+    "summary": {
+      "overdue": 2,
+      "retrying": 1,
+      "recovered": 14,
+      "failed": 0
+    }
+  },
+  "/api/frontend/bank-governance": {
+    "items": [
+      {
+        "id": 1,
+        "name": "Caminhos pela cidade",
+        "owning_org_id": 1,
+        "organization_name": "Escola Central",
+        "tags": [
+          "grafos",
+          "caminhos mínimos"
+        ],
+        "version": "1",
+        "capabilities": {
+          "can_edit": true,
+          "can_transfer": true, "can_publish": true
+        },
+        "practice_status": "unpublished"
+      },
+      {
+        "id": 2,
+        "name": "Uma soma de possibilidades",
+        "owning_org_id": null,
+        "organization_name": null,
+        "tags": [
+          "introdução"
+        ],
+        "version": "1",
+        "capabilities": {
+          "can_edit": false,
+          "can_transfer": false
+        },
+        "practice_status": "published"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    },
+    "organizations": [
+      {
+        "id": 1,
+        "name": "Escola Central"
+      },
+      {
+        "id": 2,
+        "name": "Instituto Horizonte"
+      }
+    ]
+  },
+  "/api/frontend/managed-accounts": {
+    "items": [
+      {
+        "id": 1,
+        "fullname": "Participante de exemplo",
+        "username": "participante01",
+        "contest_name": "Maratona de Primavera",
+        "site_name": "Escola Central",
+        "privacy_locked": true,
+        "visibility": "private",
+        "external_linking_allowed": false,
+        "privacy_reason": "Privacidade protegida pela organização."
+      },
+      {
+        "id": 2,
+        "fullname": "Outra participante",
+        "username": "participante02",
+        "contest_name": "Maratona de Primavera",
+        "site_name": "Escola Central",
+        "privacy_locked": false,
+        "visibility": "private",
+        "external_linking_allowed": true,
+        "privacy_reason": "A restrição etária foi liberada. A conta permanece privada."
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 2
+    },
+    "capabilities": {
+      "can_create": true
+    },
+    "contests": [
+      {
+        "id": 1,
+        "name": "Maratona de Primavera",
+        "sites": [
+          {
+            "id": 1,
+            "name": "Escola Central"
+          }
+        ]
+      }
+    ]
+  }
+}

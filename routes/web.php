@@ -397,3 +397,5 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             ->with('error', implode(', ', $result['errors']));
     });
 });
+
+require __DIR__.'/frontend.php';

@@ -5,6 +5,7 @@
 @section('description', 'Gerencie participantes, credenciais e perfis de acesso.')
 
 @section('content')
+<a href="/backend/managed-accounts" class="button-secondary mb-5">Contas gerenciadas e privacidade</a>
 <div class="space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
