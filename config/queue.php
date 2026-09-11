@@ -15,7 +15,7 @@ return [
     |
     */
 
-    'default' => env('QUEUE_DRIVER', 'sync'),
+    'default' => env('QUEUE_CONNECTION', 'sync'),
 
     /*
     |--------------------------------------------------------------------------
@@ -61,7 +61,22 @@ return [
             'driver' => 'redis',
             'connection' => 'default',
             'queue' => 'default',
-            'retry_after' => 90,
+            // Must exceed JudgeRunJob::$timeout (300s) -- otherwise Redis
+            // considers the job "lost" and hands it to another worker
+            // before the original one (still legitimately compiling/
+            // running test cases) has finished, which is exactly the
+            // duplicate-processing scenario JudgeRunJob's ShouldBeUnique
+            // guard (issue #45) exists to prevent. This was never
+            // reachable while config/queue.php silently defaulted to the
+            // 'sync' driver (see issue #61) -- worth fixing now, together.
+            //
+            // Laravel enforces the job timeout with a hard SIGALRM kill of
+            // the whole worker process rather than a graceful release, so
+            // the margin here also has to absorb that process's exit,
+            // supervisor/`queue:work` restart, and reconnect to Redis
+            // before the retry_after window lapses. 60s was too thin for
+            // that; doubling the timeout leaves a comfortable cushion.
+            'retry_after' => 600,
         ],
 
     ],
