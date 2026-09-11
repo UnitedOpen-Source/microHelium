@@ -58,7 +58,7 @@ class IdempotencyStore
         }
 
         $userId = $request->user()->user_id;
-        $payloadHash = hash('sha256', json_encode($request->all()));
+        $payloadHash = hash('sha256', json_encode(self::normalizeForHash($request->all())));
 
         $existing = self::lookup($userId, $route, $key);
 
@@ -127,6 +127,25 @@ class IdempotencyStore
         ]);
 
         return $response;
+    }
+
+    /**
+     * Recursively key-sorts an array before hashing, so two requests with
+     * the same logical payload but differently-ordered JSON fields (e.g.
+     * different client/proxy serialization) hash identically instead of
+     * being misclassified as a conflicting payload (spurious 409).
+     */
+    private static function normalizeForHash(array $data): array
+    {
+        ksort($data);
+
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = self::normalizeForHash($value);
+            }
+        }
+
+        return $data;
     }
 
     private static function lookup(int|string $userId, string $route, string $key): ?IdempotencyKey
