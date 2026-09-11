@@ -29,6 +29,17 @@ class ScoreboardController extends Controller
         $credential = $request->attributes->get('webcastCredential');
         $contest = $credential->contest;
 
+        if (! $contest) {
+            // Contest uses SoftDeletes and nothing cascades a delete onto
+            // webcast_credentials, so a still-active (non-revoked, non-
+            // expired) credential can outlive its own contest --
+            // $credential->contest then resolves to null under the global
+            // soft-delete scope. Deny the same way an invalid/expired/
+            // revoked credential is denied rather than let
+            // Leaderboard::getScoreboard() blow up on a null contest id.
+            abort(401, 'Credencial de transmissao invalida ou ausente.');
+        }
+
         $entries = Leaderboard::getScoreboard($contest->id);
 
         return response()->json([

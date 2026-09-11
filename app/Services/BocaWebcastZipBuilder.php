@@ -88,20 +88,10 @@ class BocaWebcastZipBuilder
      */
     private function timeFile(Contest $contest): string
     {
-        // Deliberately not using Contest::getContestTime() here: it calls
-        // now()->diffInSeconds($this->start_time) with no explicit
-        // $absolute argument, which returns a *signed* difference on the
-        // Carbon version this app pins (negative once the contest has
-        // started) -- a pre-existing quirk in that model method, out of
-        // scope for issue #44 to fix. Computed directly here instead, with
-        // absolute=true forced explicitly so the sign convention can't
-        // silently flip again.
-        if (! $contest->start_time || now()->lt($contest->start_time)) {
-            return "0\n";
-        }
-
-        $elapsedSeconds = $contest->start_time->diffInSeconds(now(), true);
-        $minutes = (int) min(floor($elapsedSeconds / 60), $contest->duration);
+        // Contest::getContestTime() (fixed in #76 -- previously returned a
+        // negative signed diff on this app's pinned Carbon 3) now correctly
+        // returns positive elapsed seconds, or 0 before the contest starts.
+        $minutes = (int) min(floor($contest->getContestTime() / 60), $contest->duration);
 
         return $minutes."\n";
     }
@@ -215,7 +205,7 @@ class BocaWebcastZipBuilder
             ->get()
             ->map(fn (User $user) => [
                 'id' => $user->user_id,
-                'name' => $user->fullname ?: ('Equipe #'.$user->user_id),
+                'name' => $user->fullname ?? ('Equipe #'.$user->user_id),
                 'institution' => $user->site->name ?? '',
             ])
             ->values()
@@ -262,7 +252,7 @@ class BocaWebcastZipBuilder
 
     private function resultCode(Run $run): string
     {
-        if (! in_array($run->status, ['judged'], true) || ! $run->answer) {
+        if ($run->status !== 'judged' || ! $run->answer) {
             return '?';
         }
 

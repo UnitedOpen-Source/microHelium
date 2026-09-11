@@ -11,9 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Backend for issue #44 (`/backend/webcast`, see resources/js/features/
@@ -68,18 +67,16 @@ class WebcastController extends Controller
             ]);
         }
 
-        $page = max(1, (int) $request->query('page', 1));
-        $perPage = 20;
-
-        $query = WebcastCredential::where('contest_id', $contest->id)
+        // Matches the pagination convention already established by
+        // Api\Frontend\ManagedAccountsController (issue #47) for the same
+        // "session-admin JSON list" shape, instead of hand-rolling
+        // page/perPage/lastPage/forPage bookkeeping.
+        $paginator = WebcastCredential::where('contest_id', $contest->id)
             ->orderByDesc('created_at')
-            ->orderByDesc('id');
+            ->orderByDesc('id')
+            ->paginate(20);
 
-        $total = $query->count();
-        $lastPage = max(1, (int) ceil($total / $perPage));
-        $page = min($page, $lastPage);
-
-        $items = $query->forPage($page, $perPage)->get()->map(fn (WebcastCredential $c) => [
+        $items = $paginator->getCollection()->map(fn (WebcastCredential $c) => [
             'id' => $c->id,
             'label' => $c->label,
             'status' => $c->status(),
@@ -96,7 +93,11 @@ class WebcastController extends Controller
                 'capabilities' => ['can_export' => $canExport, 'can_manage_credentials' => true],
                 'export_url' => '/api/frontend/webcast/export?contest_id='.$contest->id,
                 'items' => $items,
-                'meta' => ['current_page' => $page, 'last_page' => $lastPage, 'total' => $total],
+                'meta' => [
+                    'current_page' => $paginator->currentPage(),
+                    'last_page' => $paginator->lastPage(),
+                    'total' => $paginator->total(),
+                ],
             ],
         ]);
     }
@@ -134,31 +135,34 @@ class WebcastController extends Controller
         // has already persisted the redacted response by the time control
         // returns here, so overlaying the real secret afterwards, only for
         // the winning caller, never touches what's stored.
+        //
+        // This is a one-off pattern; a future "reveal a one-time secret"
+        // endpoint would have to reinvent it. A cleaner shared fix would be
+        // an optional third `redact` closure on IdempotencyStore::handle()
+        // -- applied to the response before persisting, not before
+        // returning to the caller -- but that changes a shared class also
+        // used by #47's managed-accounts endpoint, so it's left as a
+        // follow-up rather than done here.
         $issuedSecret = null;
 
         $response = IdempotencyStore::handle($request, self::ROUTE_CREDENTIALS, function () use ($request, &$issuedSecret) {
             $maxDays = (int) config('webcast.max_credential_lifetime_days', 30);
 
             $validator = Validator::make($request->all(), [
-                'contest_id' => [
-                    'required',
-                    'integer',
-                    Rule::exists('contests', 'id')->where(fn ($q) => $q->whereNull('deleted_at')),
-                ],
+                'contest_id' => ['required', 'integer'],
                 'label' => ['required', 'string', 'min:1', 'max:80'],
                 'expires_at' => ['required', 'date', 'after:now', 'before_or_equal:'.now()->addDays($maxDays)->toISOString()],
             ]);
             $validator->validate();
 
+            // A Rule::exists('contests','id') check here would be a second
+            // DB round trip to answer the exact same question this
+            // Contest::find() + null-check already answers -- including
+            // correctly rejecting a soft-deleted contest, since
+            // Eloquent's global SoftDeletes scope excludes it from find().
             $contest = Contest::find((int) $request->input('contest_id'));
 
             if (! $contest) {
-                // Passed the Rule::exists() check above but is gone by
-                // now (e.g. concurrently soft-deleted between validation
-                // and this line) -- report it the same way as any other
-                // invalid contest_id instead of letting a null Contest
-                // reach WebcastCredential::issue()'s typed parameter as a
-                // TypeError/500.
                 throw ValidationException::withMessages([
                     'contest_id' => ['Competicao invalida.'],
                 ]);
@@ -214,7 +218,7 @@ class WebcastController extends Controller
         });
     }
 
-    public function export(Request $request): StreamedResponse|JsonResponse
+    public function export(Request $request): BinaryFileResponse|JsonResponse
     {
         if (! config('webcast.export_enabled')) {
             abort(503, 'A exportacao do webcast ainda nao esta disponivel.');
@@ -238,26 +242,18 @@ class WebcastController extends Controller
 
         $filename = 'webcast-contest-'.$contest->id.'.zip';
 
-        return response()->streamDownload(function () use ($zipPath) {
-            // A plain try/finally here would NOT run its finally block
-            // when PHP terminates mid-readfile() because the client
-            // aborted/cancelled the download -- that termination happens
-            // via connection-abort detection during output, not a normal
-            // exception unwind. register_shutdown_function() DOES still
-            // run in that case, so it's the only reliable way to guarantee
-            // the temp ZIP is removed instead of accumulating forever in
-            // sys_get_temp_dir() every time a download is cancelled.
-            register_shutdown_function(static function () use ($zipPath) {
-                if (is_file($zipPath)) {
-                    @unlink($zipPath);
-                }
-            });
-
-            readfile($zipPath);
-        }, $filename, [
+        // response()->download()->deleteFileAfterSend(true) over a hand-
+        // rolled streamDownload()+readfile()+register_shutdown_function:
+        // Symfony's BinaryFileResponse::sendContent() already calls
+        // ignore_user_abort(true) and unlinks the temp file in a finally
+        // block around the transfer loop (checking connection_aborted()
+        // itself each chunk), so a client cancelling mid-download still
+        // gets the temp ZIP cleaned up -- the same guarantee the manual
+        // shutdown-function version existed for, provided by the
+        // framework instead of ~15 lines of custom lifecycle code.
+        return response()->download($zipPath, $filename, [
             'Content-Type' => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
             'Cache-Control' => 'no-store',
-        ]);
+        ])->deleteFileAfterSend(true)->setPrivate();
     }
 }

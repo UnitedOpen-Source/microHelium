@@ -92,6 +92,32 @@ RUN set -eu; \
         "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" > /etc/fpc.cfg; \
     rm -rf /tmp/fpc.tar /tmp/fpcx
 
+# JPlag (issue #42, similarity analysis) -- pinned to v6.2.0, the last
+# release built against JDK 21 (v6.3.0 bumped the minimum to JDK 25; see
+# https://github.com/jplag/JPlag/releases/tag/v6.3.0 and .../v6.2.0),
+# matching the openjdk21-jdk installed above rather than requiring a JDK
+# bump. JPLAG_SHA256 is the sha256 GitHub itself attests for this release
+# asset (the `digest` field on
+# GET /repos/jplag/JPlag/releases/tags/v6.2.0, verified 2026-09-11) --
+# verified here at build time AND again at runtime by
+# App\Services\Similarity\JplagSimilarityEngine before every invocation, so
+# a corrupted download or a jar swapped in by a derived image/volume mount
+# can never execute silently.
+ARG JPLAG_VERSION=6.2.0
+ARG JPLAG_SHA256=f2d2b98ce57018d074be023583ce5d1801240e67dd37344ef7834e63ba7e521f
+RUN mkdir -p /opt/jplag \
+    && wget -q "https://github.com/jplag/JPlag/releases/download/v${JPLAG_VERSION}/jplag-${JPLAG_VERSION}-jar-with-dependencies.jar" \
+        -O "/opt/jplag/jplag-${JPLAG_VERSION}-jar-with-dependencies.jar" \
+    && echo "${JPLAG_SHA256}  /opt/jplag/jplag-${JPLAG_VERSION}-jar-with-dependencies.jar" | sha256sum -c -
+# Exported as real container ENV (not just build-time ARGs) so
+# config/similarity.php's env() calls pick up these exact values at
+# runtime automatically -- the literals in that config file are only a
+# fallback for running outside this image; this ENV block is the one place
+# that actually needs updating on a version bump.
+ENV SIMILARITY_JPLAG_VERSION=${JPLAG_VERSION} \
+    SIMILARITY_JPLAG_JAR_SHA256=${JPLAG_SHA256} \
+    SIMILARITY_JPLAG_JAR_PATH=/opt/jplag/jplag-${JPLAG_VERSION}-jar-with-dependencies.jar
+
 # Configure and install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \

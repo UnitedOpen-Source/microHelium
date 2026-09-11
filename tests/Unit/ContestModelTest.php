@@ -698,11 +698,11 @@ class ContestModelTest extends TestCase
         $expectedSeconds = $minutesElapsed * 60;
         $actualSeconds = $contest->getContestTime();
 
-        // The method returns the time difference (negative when contest has started)
-        // diffInSeconds returns negative when start_time is in the past
-        // Allow for small time differences (within 2 seconds) due to test execution time
-        $this->assertLessThan(0, $actualSeconds);
-        $this->assertEqualsWithDelta(-$expectedSeconds, $actualSeconds, 2);
+        // Elapsed time since start must be positive once the contest has
+        // started -- allow a small delta (within 2 seconds) for test
+        // execution time.
+        $this->assertGreaterThan(0, $actualSeconds);
+        $this->assertEqualsWithDelta($expectedSeconds, $actualSeconds, 2);
     }
 
     /**

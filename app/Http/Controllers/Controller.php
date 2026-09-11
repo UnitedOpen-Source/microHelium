@@ -62,4 +62,20 @@ class Controller extends BaseController
             abort(422, 'Essa resposta nao pertence ao contest desta submissao.');
         }
     }
+
+    /**
+     * "Admin/judge, or the run's own owner" -- shared by
+     * Api\RunController::downloadSource() and
+     * Frontend\SimilarityController::downloadSource() (issue #42), which
+     * previously duplicated this exact check verbatim. A future change to
+     * who may read a run's source now only needs to happen here.
+     */
+    protected function authorizeSourceAccess(Run $run, string $message = 'Unauthorized'): void
+    {
+        $user = auth()->user();
+
+        if (!$user->isAdmin() && !$user->isJudge() && $run->user_id !== $user->user_id) {
+            abort(403, $message);
+        }
+    }
 }

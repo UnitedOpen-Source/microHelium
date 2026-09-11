@@ -41,6 +41,42 @@ class WebcastCredentialAuthTest extends TestCase
         $this->assertNotNull($credential->last_used_at);
     }
 
+    public function test_credential_lookup_eager_loads_contest_relation(): void
+    {
+        // This is the one route a webcast credential is expected to poll
+        // repeatedly -- AuthenticateWebcastCredential must resolve
+        // `contest` eagerly, not force a lazily-loaded query on every
+        // access of $credential->contest. Tested directly against the
+        // exact query shape the middleware uses (rather than by counting
+        // queries across a full request, which would also pick up
+        // Leaderboard::getScoreboard()'s own unrelated internal
+        // Contest::findOrFail() call and not actually isolate this).
+        $contest = Contest::factory()->create();
+        [, $secret] = WebcastCredential::issue($contest, 'Consumidor', now()->addDay(), null);
+
+        $resolved = WebcastCredential::with('contest')->where('token_hash', hash('sha256', $secret))->first();
+
+        $this->assertTrue($resolved->relationLoaded('contest'));
+    }
+
+    public function test_credential_whose_contest_was_soft_deleted_is_denied_not_500(): void
+    {
+        // Contest uses SoftDeletes and nothing cascades onto
+        // webcast_credentials, so a still-active credential can outlive
+        // its own contest (see Api\ContestController::destroy(), a plain
+        // soft delete). $credential->contest then resolves to null under
+        // the global soft-delete scope -- this must be denied cleanly,
+        // not crash Leaderboard::getScoreboard() with a null contest id.
+        $contest = Contest::factory()->create();
+        [, $secret] = WebcastCredential::issue($contest, 'Consumidor', now()->addDay(), null);
+        $contest->delete();
+
+        $response = $this->withHeaders(['Authorization' => "Bearer {$secret}"])
+            ->getJson('/api/webcast/scoreboard');
+
+        $response->assertStatus(401);
+    }
+
     public function test_bearer_scheme_match_is_case_insensitive(): void
     {
         $contest = Contest::factory()->create();

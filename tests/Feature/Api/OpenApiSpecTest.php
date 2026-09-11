@@ -22,12 +22,14 @@ class OpenApiSpecTest extends TestCase
 
     /**
      * Path prefixes that intentionally have no OpenAPI entry: the
-     * /api/frontend/* endpoints (see routes/frontend_api_bank_governance.php)
-     * are registered on the web session guard + CSRF for the app's own
-     * Vue features, not routes/api.php's auth:sanctum contract this spec
-     * documents (see the file header above). They share the literal "api/"
-     * URI prefix only incidentally; their contract is documented in
-     * docs/specs/README.md instead.
+     * /api/frontend/* endpoints (see routes/frontend_api_similarity.php,
+     * routes/frontend_api_bank_governance.php,
+     * routes/frontend_api_managed_accounts.php) are registered on the web
+     * session guard + CSRF for the app's own Vue features, not
+     * routes/api.php's auth:sanctum contract this spec documents (see the
+     * file header above). They share the literal "api/" URI prefix only
+     * incidentally; their contract is documented per-feature under
+     * docs/specs/*.md instead.
      */
     private const EXCLUDED_PREFIXES = ['/frontend/'];
 

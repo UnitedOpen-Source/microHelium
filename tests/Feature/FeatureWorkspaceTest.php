@@ -42,10 +42,4 @@ class FeatureWorkspaceTest extends TestCase
             $this->get('/backend/similarity')->assertForbidden();
         }
     }
-
-    public function test_missing_feature_api_never_reports_a_successful_mutation(): void
-    {
-        $this->actingAs($this->createAdminUser());
-        $this->postJson('/api/frontend/similarity/checks', ['problem_id' => 1])->assertNotFound();
-    }
 }

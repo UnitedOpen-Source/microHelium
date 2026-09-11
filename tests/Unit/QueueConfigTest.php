@@ -21,17 +21,25 @@ class QueueConfigTest extends TestCase
 {
     public function test_config_file_reads_queue_connection_not_queue_driver()
     {
+        // Snapshot+restore the ACTUAL prior value (phpunit.xml's forced
+        // "sync") rather than unsetting the var: putenv($key) with no "="
+        // removes it entirely rather than restoring phpunit's forced
+        // override, which let the real .env's QUEUE_CONNECTION=redis leak
+        // back in via dotenv on every subsequent test's app boot for the
+        // rest of this single PHPUnit process -- previously breaking any
+        // later test that dispatches a job through a real (non-faked)
+        // queue connection.
+        $originalConnection = getenv('QUEUE_CONNECTION');
+        $originalDriver = getenv('QUEUE_DRIVER');
+
         $this->setEnv('QUEUE_CONNECTION', 'redis');
         $this->setEnv('QUEUE_DRIVER', 'beanstalkd');
 
         try {
             $config = require base_path('config/queue.php');
         } finally {
-            // Guaranteed even if require() throws, so a failure here can't
-            // leak QUEUE_CONNECTION/QUEUE_DRIVER into the rest of this
-            // single-process PHPUnit run.
-            $this->setEnv('QUEUE_CONNECTION', null);
-            $this->setEnv('QUEUE_DRIVER', null);
+            $this->setEnv('QUEUE_CONNECTION', $originalConnection === false ? null : $originalConnection);
+            $this->setEnv('QUEUE_DRIVER', $originalDriver === false ? null : $originalDriver);
         }
 
         $this->assertSame('redis', $config['default']);

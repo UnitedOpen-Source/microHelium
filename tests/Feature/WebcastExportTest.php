@@ -228,6 +228,33 @@ class WebcastExportTest extends TestCase
         @unlink($zipPath);
     }
 
+    public function test_team_named_the_literal_string_zero_is_not_replaced_by_the_placeholder(): void
+    {
+        // "0" is falsy in PHP -- a `?:` fallback (rather than `??`) would
+        // silently replace a team literally named "0" with the generated
+        // placeholder. See App\Services\BocaWebcastZipBuilder::teams().
+        $contest = Contest::factory()->create();
+        $site = Site::factory()->create(['contest_id' => $contest->id]);
+        $team = User::factory()->create(['contest_id' => $contest->id, 'site_id' => $site->id, 'user_type' => 'team', 'fullname' => '0']);
+
+        $builder = app(BocaWebcastZipBuilder::class);
+        $zipPath = $builder->build($contest);
+
+        $zip = new ZipArchive;
+        $zip->open($zipPath);
+        $contestFile = $zip->getFromName('contest');
+        $lines = explode("\n", rtrim($contestFile, "\n"));
+        // Line 0 is the header, line 1 is the team/problem counts (a
+        // string like "1\x1C0" that -- if matched loosely -- can be
+        // mistaken for a one-team export's own team line), line 2 is the
+        // one team line this contest has.
+        $fields = explode(self::FS, $lines[2]);
+        $this->assertSame((string) $team->user_id, $fields[0]);
+        $this->assertSame('0', $fields[2]);
+        $zip->close();
+        @unlink($zipPath);
+    }
+
     public function test_sanitizes_fs_and_newline_characters_from_names(): void
     {
         $contest = Contest::factory()->create(['name' => "Nome\x1Ccom\nquebra"]);

@@ -22,9 +22,13 @@ use Symfony\Component\HttpFoundation\Response;
  * looked up by sha256(token) against the unique token_hash column (the
  * same approach Laravel Sanctum itself uses for personal access tokens --
  * hash the presented token and use an indexed equality lookup rather than
- * a linear hash_equals() scan of every row). hash_equals() is still used
- * below to compare the resolved row's hash against the computed one, as a
- * defensive constant-time check beyond the indexed lookup.
+ * a linear hash_equals() scan of every row). No separate hash_equals()
+ * re-check is done after the lookup: a row can only be returned by
+ * `WHERE token_hash = $hash`, so `$credential->token_hash === $hash`
+ * always holds for any matched row -- comparing them again is dead code,
+ * not a real timing-safety measure (the DB index equality lookup itself
+ * isn't a PHP-level string-comparison timing side-channel the way
+ * comparing two variables with `===` would be).
  *
  * Active, expired, and revoked credentials -- and a token that matches no
  * row at all -- all produce the exact same 401 response, so a client can
@@ -43,9 +47,13 @@ class AuthenticateWebcastCredential
         }
 
         $hash = hash('sha256', $token);
-        $credential = WebcastCredential::where('token_hash', $hash)->first();
+        // Eager-load contest here: ScoreboardController::show() (the only
+        // route this guard protects) always needs it, and this endpoint is
+        // the one meant to be polled repeatedly -- without this, every
+        // request pays for a second, lazily-loaded query.
+        $credential = WebcastCredential::with('contest')->where('token_hash', $hash)->first();
 
-        if (! $credential || ! hash_equals($credential->token_hash, $hash) || $credential->isRevoked() || $credential->isExpired()) {
+        if (! $credential || $credential->isRevoked() || $credential->isExpired()) {
             abort(401, 'Credencial de transmissao invalida ou ausente.');
         }
 
