@@ -1,5 +1,12 @@
 # #42 — Análise de similaridade
 
+Status: implementado. `GET/POST /api/frontend/similarity*` existem de fato
+(routes/frontend_api_similarity.php), com migrations, job assíncrono e
+motor JPlag real por trás de `Similarity.vue`, cobertos por
+`tests/Feature/SimilarityTest.php`. Ver "Estado da implementação" ao final
+para o que foi decidido/simplificado e o que ainda depende de outra issue
+ou de decisão do time.
+
 ## Contexto e objetivo
 
 Hoje `Run.source_hash` identifica duplicatas, mas não compara equipes. Entregar comparação assíncrona por problema/linguagem para administração, com rastreabilidade e revisão humana. Interface: `/backend/similarity`, componente `Similarity.vue`.
@@ -40,3 +47,94 @@ Tabelas propostas: `similarity_checks` (ator, contest_id, problem_id, language_i
 ## Perguntas para decisão
 
 Release do JPlag, teto de equipes/pares, retenção dos relatórios e direito de revisão das fontes precisam ser fixados pelo time antes da ativação. A UI não presume que 80% prove cópia.
+
+## Estado da implementação
+
+**JPlag e JDK.** Fixado em v6.2.0 (`config/similarity.php`, `Dockerfile`) —
+a última release construída para JDK 21, antes de v6.3.0 exigir JDK 25 (ver
+notas de release de ambas as tags no GitHub). O `Dockerfile` principal
+(usado por `app`/`queue`/`scheduler`, conforme `docker-compose.yml`) já
+instala `openjdk21-jdk` para o autojudge de Java, então v6.2.0 evita bump de
+JDK. O jar é baixado e verificado por sha256 **no build da imagem** (evita
+dependência de rede em tempo de execução) e o sha256 é conferido de novo
+**a cada execução** por `App\Services\Similarity\JplagSimilarityEngine`
+antes de rodar `java -jar`, contra o mesmo checksum que o GitHub atesta
+para o asset da release (campo `digest` de
+`GET /repos/jplag/JPlag/releases/tags/v6.2.0`, conferido em 2026-09-11).
+`Dockerfile.judge` (imagem legada, não usada pelos serviços `queue`/
+`scheduler` atuais) não foi alterado.
+
+**Saída do JPlag.** A struct `.jplag` (zip) e seus `runInformation.json`/
+`topComparisons.json` foram inspecionados rodando a v6.2.0 real localmente
+contra um par de fontes conhecidas (não durante os testes automatizados,
+que usam `Tests\Support\Similarity\FakeSimilarityEngine`, sem rede nem jar
+real). `topComparisons[].similarities.AVG` é a fração 0.0–1.0 usada como
+"similaridade média"; a normalização para 0–100 acontece exatamente uma
+vez, em `RunSimilarityCheckJob`. `-n` (native do JPlag) implementa o teto
+de pares do relatório e `-m` filtra por limiar já na origem.
+
+**Tetos escolhidos** (`config/similarity.php`, todos por env var):
+máx. 60 equipes por job, máx. 300 pares por relatório, máx. 2 checks
+`queued`/`running` simultâneos por concurso. Não há política de retenção
+implementada (relatórios não expiram nem são apagados) — fica como decisão
+pendente do time, conforme a pergunta original.
+
+**Linguagens suportadas**: mapeadas em
+`App\Services\Similarity\SimilarityLanguageMap` a partir de
+`Language::getDefaultLanguages()` para os identificadores de CLI do JPlag
+v6.2.0 (cpp, java, python3, javascript, typescript, kotlin, scala, csharp,
+rust, golang, swift, rlang). Uma linguagem fora do mapa é rejeitada com 422
+em `language_id`, nunca tentada silenciosamente.
+
+**Exclusão de envios de prática**: não implementada — é um no-op. A tabela
+`runs` ainda não tem uma coluna que distinga um envio de prática de um de
+concurso (issue #43 não chegou a esse ponto). `EligibleRunFinder` está
+comentado no local exato onde esse filtro deve entrar quando #43 adicionar
+a coluna.
+
+**Isolamento de rede**: o JPlag em modo `RUN` não faz chamadas de rede por
+conta própria (nenhuma flag usada aqui habilita o recurso separado de
+upload para o report-viewer hospedado). Negar rede no nível de processo/
+container (namespace de rede, política de egress no worker de fila) é uma
+tarefa de infraestrutura fora do escopo desta mudança em PHP e fica como
+follow-up operacional.
+
+**Base code comum**: suportado via `SIMILARITY_BASE_CODE_PATH` (config do
+servidor, não um campo do formulário/contrato da API — `Similarity.vue`
+não foi alterado). Desabilitado por padrão.
+
+**Download de fonte**: `GET /api/frontend/similarity/runs/{run}/source`
+replica exatamente a checagem de autorização de
+`Api\RunController::downloadSource()` (admin/judge ou dono do run), sob o
+grupo de rotas `['auth','admin']` já usado pelas demais rotas desta
+feature — um participante recebe 403 antes mesmo de a checagem interna
+rodar.
+
+**Corrida entre requisições concorrentes**: `POST /checks` sem
+`Idempotency-Key` (duas abas de admin, por exemplo) usa um `Cache::lock`
+por `contest_id` em volta da checagem de concorrência + duplicata +
+`SimilarityCheck::create()`, já que nenhuma dessas checagens tinha
+suporte de constraint única no banco capaz de pegar uma corrida real de
+INSERT/INSERT. Se o lock não for adquirido em `SIMILARITY_LOCK_WAIT_SECONDS`
+(padrão 5s), a resposta é 409.
+
+**`safe_error_code` de interrupções não previstas**: `RunSimilarityCheckJob::failed()`
+só atribui `engine_timeout` quando a exceção recebida é de fato
+`Illuminate\Queue\TimeoutExceededException`; qualquer outra interrupção
+(worker morto por OOM, conexão de banco perdida) usa o código genérico
+`worker_interrupted`, para não afirmar um timeout que não ocorreu.
+
+**Achado corrigido fora do escopo direto da issue**: `bootstrap/providers.php`
+não existia neste repositório, então `Helium\Providers\AppServiceProvider`
+nunca era de fato registrado pelo Laravel 11 (ver
+`Illuminate\Foundation\Application::configure()`). Sem isso, o binding de
+`SimilarityEngineInterface` não teria efeito em produção/fila real. O
+arquivo foi criado listando apenas esse provider. Também foi corrigido um
+vazamento de ambiente em `tests/Unit/QueueConfigTest.php` (issue #61's
+teste): ele usava `putenv($key)` sem valor para "restaurar" `QUEUE_CONNECTION`
+no `finally`, o que na verdade REMOVE a variável — deixando o dotenv real
+(`.env`, `QUEUE_CONNECTION=redis`) vazar para todos os testes seguintes no
+mesmo processo do PHPUnit. Isso nunca tinha se manifestado porque nenhum
+teste anterior despachava um job real (não fake) esperando rodar de fato
+em `sync`; `RunSimilarityCheckJob` foi o primeiro. Corrigido para
+salvar/restaurar o valor original em vez de removê-lo.
