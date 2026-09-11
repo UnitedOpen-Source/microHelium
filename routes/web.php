@@ -79,7 +79,7 @@ Route::post('/login', function () {
     return back()->withErrors([
         'email' => 'Credenciais invalidas.',
     ])->withInput(request()->only('email'));
-});
+})->middleware('throttle:5,1');
 
 Route::get('/register', function () {
     return view('auth.register');
