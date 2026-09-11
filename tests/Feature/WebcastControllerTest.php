@@ -189,8 +189,29 @@ class WebcastControllerTest extends TestCase
         $this->assertNull($replay->json('data.secret'));
         $this->assertSame($first->json('data.id'), $replay->json('data.id'));
 
+        // The replay response has the exact same shape as the original
+        // success response -- just {id, secret}, secret null instead of a
+        // value -- not a differently-shaped payload with extra fields.
+        $this->assertSame(['id', 'secret'], array_keys($replay->json('data')));
+        $this->assertSame(array_keys($first->json('data')), array_keys($replay->json('data')));
+
         // Only one credential was actually created.
         $this->assertSame(1, WebcastCredential::where('contest_id', $contest->id)->count());
+    }
+
+    public function test_whitespace_only_label_is_rejected_not_silently_emptied(): void
+    {
+        $admin = $this->createAdminUser();
+        $this->actingAs($admin);
+        $contest = Contest::factory()->create();
+
+        $this->postJson('/api/frontend/webcast/credentials', [
+            'contest_id' => $contest->id,
+            'label' => '   ',
+            'expires_at' => now()->addHour()->toISOString(),
+        ])->assertStatus(422)->assertJsonValidationErrors('label');
+
+        $this->assertSame(0, WebcastCredential::where('contest_id', $contest->id)->count());
     }
 
     public function test_idempotency_key_reused_with_different_payload_is_a_conflict(): void

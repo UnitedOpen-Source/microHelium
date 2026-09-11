@@ -9,6 +9,7 @@ use App\Services\BocaWebcastZipBuilder;
 use App\Services\IdempotencyGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -46,7 +47,7 @@ class WebcastController extends Controller
         if (! $contest) {
             return response()->json([
                 'data' => [
-                    'contests' => $contests->map(fn (Contest $c) => ['id' => $c->id, 'name' => $c->name])->values(),
+                    'contests' => $this->contestOptions($contests),
                     'contest' => null,
                     'capabilities' => ['can_export' => false, 'can_manage_credentials' => false],
                     'export_url' => null,
@@ -79,7 +80,7 @@ class WebcastController extends Controller
 
         return response()->json([
             'data' => [
-                'contests' => $contests->map(fn (Contest $c) => ['id' => $c->id, 'name' => $c->name])->values(),
+                'contests' => $this->contestOptions($contests),
                 'contest' => ['id' => $contest->id, 'name' => $contest->name],
                 'capabilities' => ['can_export' => $canExport, 'can_manage_credentials' => true],
                 'export_url' => '/api/frontend/webcast/export?contest_id='.$contest->id,
@@ -89,8 +90,22 @@ class WebcastController extends Controller
         ]);
     }
 
+    /**
+     * @param  Collection<int, Contest>  $contests
+     */
+    private function contestOptions($contests): array
+    {
+        return $contests->map(fn (Contest $c) => ['id' => $c->id, 'name' => $c->name])->values()->all();
+    }
+
     public function storeCredential(Request $request): JsonResponse
     {
+        // Trim before validating (not after) -- a whitespace-only label
+        // like "   " previously passed `min:1` on the raw, untrimmed
+        // length and only got trimmed to "" afterwards, letting an
+        // effectively empty label slip past `required`.
+        $request->merge(['label' => trim((string) $request->input('label', ''))]);
+
         return $this->idempotency->handle($request, function () use ($request) {
             $maxDays = (int) config('webcast.max_credential_lifetime_days', 30);
 
@@ -121,7 +136,7 @@ class WebcastController extends Controller
 
             [$credential, $secret] = WebcastCredential::issue(
                 $contest,
-                trim((string) $request->input('label')),
+                (string) $request->input('label'), // already trimmed above, before validation
                 new \DateTimeImmutable($request->input('expires_at')),
                 auth()->id()
             );
@@ -137,13 +152,14 @@ class WebcastController extends Controller
             // in flight) cannot recover it via retry; it must revoke and
             // reissue, which is the safer of the two policies the spec
             // explicitly allows here.
-            $storedBody = ['data' => [
-                'id' => $credential->id,
-                'secret' => null,
-                'label' => $credential->label,
-                'status' => $credential->status(),
-                'expires_at' => $credential->expires_at?->toISOString(),
-            ]];
+            //
+            // The stored/replayed shape is deliberately identical to the
+            // public one -- {id, secret} -- so a client retrying under the
+            // same Idempotency-Key always gets the same response shape,
+            // just with secret null instead of a value. It previously also
+            // carried label/status/expires_at, which no other response
+            // from this endpoint ever included.
+            $storedBody = ['data' => ['id' => $credential->id, 'secret' => null]];
 
             return [201, $publicBody, $storedBody];
         });
@@ -203,8 +219,21 @@ class WebcastController extends Controller
         $filename = 'webcast-contest-'.$contest->id.'.zip';
 
         return response()->streamDownload(function () use ($zipPath) {
+            // A plain try/finally here would NOT run its finally block
+            // when PHP terminates mid-readfile() because the client
+            // aborted/cancelled the download -- that termination happens
+            // via connection-abort detection during output, not a normal
+            // exception unwind. register_shutdown_function() DOES still
+            // run in that case, so it's the only reliable way to guarantee
+            // the temp ZIP is removed instead of accumulating forever in
+            // sys_get_temp_dir() every time a download is cancelled.
+            register_shutdown_function(static function () use ($zipPath) {
+                if (is_file($zipPath)) {
+                    @unlink($zipPath);
+                }
+            });
+
             readfile($zipPath);
-            @unlink($zipPath);
         }, $filename, [
             'Content-Type' => 'application/zip',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',

@@ -60,7 +60,11 @@ class AuthenticateWebcastCredential
     {
         $header = $request->header('Authorization', '');
 
-        if (str_starts_with($header, 'Bearer ')) {
+        // The auth-scheme name ("Bearer") is case-insensitive per RFC
+        // 7235 -- only the scheme prefix is compared case-insensitively
+        // here; the token itself is taken from the original, unmodified
+        // remainder of the header.
+        if (str_starts_with(strtolower($header), 'bearer ')) {
             return trim(substr($header, 7));
         }
 

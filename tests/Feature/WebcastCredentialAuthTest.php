@@ -41,6 +41,20 @@ class WebcastCredentialAuthTest extends TestCase
         $this->assertNotNull($credential->last_used_at);
     }
 
+    public function test_bearer_scheme_match_is_case_insensitive(): void
+    {
+        $contest = Contest::factory()->create();
+        [, $secret] = WebcastCredential::issue($contest, 'Consumidor', now()->addDay(), null);
+
+        foreach (['bearer', 'BEARER', 'BeArEr'] as $scheme) {
+            $response = $this->withHeaders(['Authorization' => "{$scheme} {$secret}"])
+                ->getJson('/api/webcast/scoreboard');
+
+            $response->assertOk();
+            $this->assertSame($contest->id, $response->json('contest.id'));
+        }
+    }
+
     public function test_missing_expired_revoked_and_nonexistent_tokens_are_denied_identically(): void
     {
         $contest = Contest::factory()->create();

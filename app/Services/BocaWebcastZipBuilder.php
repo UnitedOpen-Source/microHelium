@@ -131,7 +131,9 @@ class BocaWebcastZipBuilder
     private function contestFile(Contest $contest, array $teams): string
     {
         $fs = self::FS;
-        $problems = $contest->problems()->orderBy('sort_order')->get(['id', 'short_name', 'name']);
+        // Contest::problems() already orders by sort_order -- no need to
+        // repeat it here.
+        $problems = $contest->problems()->get(['id', 'short_name', 'name']);
         $siteCount = $contest->sites()->count();
 
         $lines = [];
