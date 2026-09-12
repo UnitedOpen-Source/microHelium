@@ -17,26 +17,63 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * E2E test suite verifying that bwrap prevents filesystem modification outside $runDir
- * for ALL active languages (C, C++, C++17, Java, Python, Node, TS, Kotlin, C#, Rust, Go, PHP, Ruby, Pascal).
+ * Issue #49 -- per-language E2E proof that a submission cannot touch the
+ * filesystem outside its own run directory, and that an honest solution in
+ * the same language still gets AC through the sandbox.
+ *
+ * Covers the ten active languages whose toolchains come straight from the
+ * Alpine package set: C, C++, C++17, Java, Python, Node, Rust, Go, PHP and
+ * Ruby. The four remaining active languages -- TypeScript, Kotlin, C# and
+ * Pascal -- are NOT covered here yet: their toolchains (npx/tsc, kotlinc,
+ * dotnet, fpc) are installed out-of-band in Dockerfile.judge and need
+ * per-language work to run under --clearenv with no network, which is
+ * tracked separately rather than claimed here.
+ *
+ * The escape target is deliberately a path under /etc, which the sandbox
+ * mounts read-only as part of the system image. Picking a target matters
+ * more than it looks: /tmp is a private tmpfs inside the sandbox and writing
+ * there is legitimately allowed, and any directory bwrap had to create as a
+ * mount point (the application root among them, since the test case input is
+ * bound in from under it) exists only inside the sandbox and is writable
+ * there without any of it reaching the host. A write into the read-only
+ * system image is unambiguous: it is "não alterar imagem/host" failing, and
+ * it fails deterministically in every language.
  */
 class JudgeSandboxIsolationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        // Checked before parent::setUp(): skipping after the application has
+        // booted leaves Laravel's error handlers installed and PHPUnit marks
+        // the test risky, which phpunit.xml treats as a failure.
+        $bwrap = getenv('AUTOJUDGE_BWRAP_PATH') ?: '/usr/bin/bwrap';
+        if (!is_executable($bwrap)) {
+            $this->markTestSkipped("bubblewrap is not installed at {$bwrap}");
+        }
+
+        parent::setUp();
+
+        // phpunit.xml defaults the sandbox off so the rest of the suite runs
+        // on a machine without bubblewrap; this suite is the part that needs
+        // it for real.
+        config(['autojudge.use_bwrap' => true]);
+    }
+
     public static function escapeAttemptPayloads(): array
     {
         return [
-            'c_gcc13' => ['c_gcc13', 'escape.c', "#include <stdio.h>\nint main(){FILE *f = fopen(\"/tmp/sandbox_jailbreak_c_gcc13.txt\", \"w\"); if(f) { fprintf(f, \"hacked\"); fclose(f); } return 0;}\n"],
-            'cpp_gpp13' => ['cpp_gpp13', 'escape.cpp', "#include <fstream>\nint main(){std::ofstream f(\"/tmp/sandbox_jailbreak_cpp_gpp13.txt\"); if(f) f << \"hacked\"; return 0;}\n"],
-            'cpp17_gpp' => ['cpp17_gpp', 'escape.cpp', "#include <fstream>\nint main(){std::ofstream f(\"/tmp/sandbox_jailbreak_cpp17_gpp.txt\"); if(f) f << \"hacked\"; return 0;}\n"],
-            'java21' => ['java21', 'Main.java', "import java.io.*;\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    FileWriter f = new FileWriter(\"/tmp/sandbox_jailbreak_java21.txt\"); f.write(\"hacked\"); f.close();\n  }\n}\n"],
-            'py3' => ['py3', 'escape.py', "with open('/tmp/sandbox_jailbreak_py3.txt', 'w') as f:\n    f.write('hacked')\nprint('8')\n"],
-            'js_node24' => ['js_node24', 'escape.js', "require('fs').writeFileSync('/tmp/sandbox_jailbreak_js_node24.txt', 'hacked'); console.log('8');\n"],
-            'rs' => ['rs', 'escape.rs', "use std::fs::File;\nuse std::io::Write;\nfn main() {\n    let mut file = File::create(\"/tmp/sandbox_jailbreak_rs.txt\").unwrap(); file.write_all(b\"hacked\").unwrap();\n    println!(\"8\");\n}\n"],
-            'go' => ['go', 'escape.go', "package main\nimport (\"fmt\"; \"os\")\nfunc main() {\n  err := os.WriteFile(\"/tmp/sandbox_jailbreak_go.txt\", []byte(\"hacked\"), 0644); if err != nil { panic(err) }\n  fmt.Println(\"8\")\n}\n"],
-            'php' => ['php', 'escape.php', "<?php\nfile_put_contents('/tmp/sandbox_jailbreak_php.txt', 'hacked') or die('failed');\necho '8', PHP_EOL;\n"],
-            'rb' => ['rb', 'escape.rb', "File.write('/tmp/sandbox_jailbreak_rb.txt', 'hacked')\nputs '8'\n"],
+            'c_gcc13' => ['c_gcc13', 'escape.c', "#include <stdio.h>\nint main(){FILE *f = fopen(\"{ESCAPE_TARGET}\", \"w\"); if(f) { fprintf(f, \"hacked\"); fclose(f); } return 0;}\n"],
+            'cpp_gpp13' => ['cpp_gpp13', 'escape.cpp', "#include <fstream>\nint main(){std::ofstream f(\"{ESCAPE_TARGET}\"); if(f) f << \"hacked\"; return 0;}\n"],
+            'cpp17_gpp' => ['cpp17_gpp', 'escape.cpp', "#include <fstream>\nint main(){std::ofstream f(\"{ESCAPE_TARGET}\"); if(f) f << \"hacked\"; return 0;}\n"],
+            'java21' => ['java21', 'Main.java', "import java.io.*;\npublic class Main {\n  public static void main(String[] args) throws Exception {\n    FileWriter f = new FileWriter(\"{ESCAPE_TARGET}\"); f.write(\"hacked\"); f.close();\n  }\n}\n"],
+            'py3' => ['py3', 'escape.py', "with open('{ESCAPE_TARGET}', 'w') as f:\n    f.write('hacked')\nprint('8')\n"],
+            'js_node24' => ['js_node24', 'escape.js', "require('fs').writeFileSync('{ESCAPE_TARGET}', 'hacked'); console.log('8');\n"],
+            'rs' => ['rs', 'escape.rs', "use std::fs::File;\nuse std::io::Write;\nfn main() {\n    let mut file = File::create(\"{ESCAPE_TARGET}\").unwrap(); file.write_all(b\"hacked\").unwrap();\n    println!(\"8\");\n}\n"],
+            'go' => ['go', 'escape.go', "package main\nimport (\"fmt\"; \"os\")\nfunc main() {\n  err := os.WriteFile(\"{ESCAPE_TARGET}\", []byte(\"hacked\"), 0644); if err != nil { panic(err) }\n  fmt.Println(\"8\")\n}\n"],
+            'php' => ['php', 'escape.php', "<?php\nfile_put_contents('{ESCAPE_TARGET}', 'hacked') or die('failed');\necho '8', PHP_EOL;\n"],
+            'rb' => ['rb', 'escape.rb', "File.write('{ESCAPE_TARGET}', 'hacked')\nputs '8'\n"],
         ];
     }
 
@@ -59,14 +96,26 @@ class JudgeSandboxIsolationTest extends TestCase
     #[DataProvider('escapeAttemptPayloads')]
     public function test_sandbox_prevents_writing_outside_rundir(string $extension, string $filename, string $escapeSource)
     {
-        $targetFile = '/tmp/sandbox_jailbreak_' . $extension . '.txt';
+        $targetFile = '/etc/sandbox_jailbreak_' . $extension . '.txt';
         @unlink($targetFile);
+
+        $escapeSource = str_replace('{ESCAPE_TARGET}', $targetFile, $escapeSource);
 
         $run = $this->createAndJudgeRun($extension, $filename, $escapeSource);
 
+        // PHP caches stat() results, and the @unlink above primed that cache
+        // with "absent" -- without this the assertion below would pass even
+        // if the submission had just created the file.
+        clearstatcache(true, $targetFile);
+
         $this->assertFileDoesNotExist($targetFile, "SECURITY ESCAPE FAILURE: Language {$extension} successfully wrote outside sandbox!");
         
-        $this->assertNotEquals('AC', $run->answer?->short_name);
+        $this->assertNotEquals(
+            'AC',
+            $run->answer?->short_name,
+            "Escape attempt in {$extension} was accepted, so the write it attempted must have succeeded somewhere: "
+            . "{$run->auto_judge_result}\nstdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
     }
 
     #[DataProvider('validSolutionPayloads')]
@@ -81,7 +130,51 @@ class JudgeSandboxIsolationTest extends TestCase
         );
     }
 
-    private function createAndJudgeRun(string $extension, string $filename, string $source): Run
+    public function test_custom_compile_script_runs_inside_the_sandbox()
+    {
+        // AutoJudgeService::compile() returns early into runCustomScript()
+        // whenever a problem ships its own compile/<lang> script. That branch
+        // hands untrusted submitted source to a real compiler just like the
+        // default one does, so docs/specs/49-judge-isolation.md covers it
+        // too: "aplicar também à compilação".
+        $targetFile = '/etc/sandbox_jailbreak_compile_script.txt';
+        @unlink($targetFile);
+        $scriptPath = null;
+
+        try {
+            $run = $this->createAndJudgeRun(
+                'py3',
+                'solution.py',
+                "a, b = map(int, input().split())\nprint(a + b)\n",
+                function (Problem $problem) use ($targetFile, &$scriptPath) {
+                    $scriptPath = $problem->getCompileScriptPath('py3');
+                    @mkdir(dirname($scriptPath), 0755, true);
+                    file_put_contents(
+                        $scriptPath,
+                        "#!/bin/bash\necho hacked > " . escapeshellarg($targetFile) . "\n"
+                    );
+                }
+            );
+        } finally {
+            if ($scriptPath !== null) {
+                @unlink($scriptPath);
+            }
+        }
+
+        clearstatcache(true, $targetFile);
+
+        $this->assertFileDoesNotExist(
+            $targetFile,
+            'SECURITY ESCAPE FAILURE: a custom compile script wrote outside the sandbox.'
+        );
+
+        // And the script really did run: writing into the read-only system
+        // image failed, so the compile step failed with it. Without this the
+        // assertion above would also pass for a script that never executed.
+        $this->assertSame('CE', $run->answer?->short_name, $run->auto_judge_stderr);
+    }
+
+    private function createAndJudgeRun(string $extension, string $filename, string $source, ?callable $beforeJudge = null): Run
     {
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()->subMinutes(5), 'duration' => 300]);
         $site = Site::factory()->create(['contest_id' => $contest->id]);
@@ -130,6 +223,10 @@ class JudgeSandboxIsolationTest extends TestCase
         ]);
 
         \Illuminate\Support\Facades\Bus::fake();
+
+        if ($beforeJudge !== null) {
+            $beforeJudge($problem);
+        }
 
         $file = UploadedFile::fake()->createWithContent($filename, $source);
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\SandboxUnavailableException;
 use App\Models\Answer;
 use App\Models\ContestLog;
 use App\Models\Run;
@@ -19,6 +20,10 @@ class AutoJudgeService
     protected string $safeExecPath;
     protected string $bwrapPath;
     protected bool $useBwrap;
+    protected array $sandboxPaths;
+    protected int $compileMaxFileKb;
+    protected int $runMaxFileKb;
+    protected ?bool $sandboxProbeFailed = null;
 
     public function __construct()
     {
@@ -29,8 +34,30 @@ class AutoJudgeService
         $this->safeExecPath = config('autojudge.safeexec_path', '/usr/bin/safeexec');
         $this->bwrapPath = config('autojudge.bwrap_path', '/usr/bin/bwrap');
         $this->useBwrap = config('autojudge.use_bwrap', true);
+        $this->sandboxPaths = config('autojudge.sandbox_paths', ['/usr', '/bin', '/sbin', '/lib', '/lib64', '/etc', '/opt', '/go']);
+        $this->compileMaxFileKb = (int) config('autojudge.compile_max_file_kb', 262144);
+        $this->runMaxFileKb = (int) config('autojudge.run_max_file_kb', 32768);
     }
 
+    /**
+     * Issue #49 -- wrap $command so it runs confined, per
+     * docs/specs/49-judge-isolation.md.
+     *
+     * The sandbox is an allowlist, not a read-only view of the host: only
+     * `autojudge.sandbox_paths` (the language toolchains) plus whatever this
+     * specific step declares in $options['ro_binds'] is visible. The
+     * application root is never mounted, so .env, the source tree, other
+     * runs' directories and other problems' hidden test data simply do not
+     * exist inside the sandbox.
+     *
+     * Supported $options:
+     *   allow_net (bool)     -- re-share the network namespace. Off by default.
+     *   ro_binds (string[])  -- extra host paths to expose read-only, each at
+     *                           its own path so the caller's command string
+     *                           needs no rewriting. Missing paths are skipped.
+     *   cpu_seconds (int)    -- `ulimit -t` inside the sandbox.
+     *   file_size_kb (int)   -- `ulimit -f` inside the sandbox.
+     */
     public function wrapWithBwrap(string $command, string $runDir, array $options = []): string
     {
         if (!$this->useBwrap) {
@@ -38,27 +65,154 @@ class AutoJudgeService
         }
 
         if (!file_exists($this->bwrapPath) || !is_executable($this->bwrapPath)) {
-            throw new \RuntimeException(
+            throw new SandboxUnavailableException(
                 "Mandatory judge sandbox binary (bwrap) not found or not executable at '{$this->bwrapPath}'. Refusing unconfined host execution."
             );
         }
 
-        $allowNet = $options['allow_net'] ?? false;
-        $netFlag = $allowNet ? '' : '--unshare-net ';
-        $path = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+        $args = [escapeshellarg($this->bwrapPath), '--unshare-all'];
 
-        return sprintf(
-            '%s --unshare-all %s--die-with-parent --ro-bind / / --proc /proc --dev /dev --chdir %s --bind %s %s --clearenv --setenv PATH %s --setenv LANG "C.UTF-8" --setenv HOME %s --setenv TMPDIR %s bash -c %s',
-            escapeshellarg($this->bwrapPath),
-            $netFlag,
-            escapeshellarg($runDir),
-            escapeshellarg($runDir),
-            escapeshellarg($runDir),
-            escapeshellarg($path),
-            escapeshellarg($runDir),
-            escapeshellarg($runDir),
-            escapeshellarg($command)
+        // --unshare-all ALREADY unshares the network namespace. Re-enabling
+        // it takes an explicit --share-net; merely omitting --unshare-net
+        // does nothing.
+        if ($options['allow_net'] ?? false) {
+            $args[] = '--share-net';
+        }
+
+        // setsid(), so sandboxed code cannot push characters back into the
+        // judge's controlling terminal with TIOCSTI.
+        $args[] = '--new-session';
+        $args[] = '--die-with-parent';
+
+        foreach ($this->sandboxPaths as $path) {
+            $args = array_merge($args, $this->roBindArgs($path));
+        }
+
+        // Private scratch space. Must come before the $runDir bind below:
+        // autojudge.work_dir defaults to /tmp/autojudge, and a --tmpfs would
+        // otherwise shadow the run directory mounted under it.
+        $args[] = '--tmpfs /tmp';
+        $args[] = '--tmpfs /var/tmp';
+        $args[] = '--proc /proc';
+        $args[] = '--dev /dev';
+
+        foreach ($options['ro_binds'] ?? [] as $path) {
+            $args = array_merge($args, $this->roBindArgs($path));
+        }
+
+        // The only writable path, and the last mount applied.
+        $args[] = '--bind ' . escapeshellarg($runDir) . ' ' . escapeshellarg($runDir);
+        $args[] = '--chdir ' . escapeshellarg($runDir);
+
+        $envPath = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+        $args[] = '--clearenv';
+        $args[] = '--setenv PATH ' . escapeshellarg($envPath);
+        $args[] = '--setenv LANG ' . escapeshellarg('C.UTF-8');
+        $args[] = '--setenv HOME ' . escapeshellarg($runDir);
+        $args[] = '--setenv TMPDIR ' . escapeshellarg($runDir);
+
+        $args[] = 'bash -c ' . escapeshellarg($this->rlimitPrologue($options) . $command);
+
+        return implode(' ', $args);
+    }
+
+    /**
+     * `--ro-bind <path> <path>`, or nothing at all when the path is absent
+     * on this image -- one sandbox_paths list has to serve Dockerfile,
+     * Dockerfile.dev and Dockerfile.judge, which don't install the same set.
+     *
+     * @return string[]
+     */
+    protected function roBindArgs(mixed $path): array
+    {
+        if (!is_string($path) || $path === '' || !file_exists($path)) {
+            return [];
+        }
+
+        return ['--ro-bind ' . escapeshellarg($path) . ' ' . escapeshellarg($path)];
+    }
+
+    /**
+     * Resource limits applied inside the sandbox, as a `bash -c` prologue.
+     *
+     * Deliberately no `ulimit -v`: the JVM, Go and Rust runtimes reserve
+     * large virtual address ranges at startup and die under an address-space
+     * cap no matter how little they actually touch. Resident memory stays
+     * with safeexec (-m/-d) and the per-language {memory} flag.
+     */
+    protected function rlimitPrologue(array $options): string
+    {
+        $prologue = '';
+
+        if (!empty($options['cpu_seconds'])) {
+            $prologue .= 'ulimit -t ' . (int) $options['cpu_seconds'] . '; ';
+        }
+
+        // bash counts -f in 1024-byte increments.
+        if (!empty($options['file_size_kb'])) {
+            $prologue .= 'ulimit -f ' . (int) $options['file_size_kb'] . '; ';
+        }
+
+        return $prologue;
+    }
+
+    /**
+     * The {judge_runtime} helper scripts (resources/judge-runtime/...), which
+     * some languages' compile/run commands shell out to. It lives under the
+     * application root, which the sandbox does not mount, so it has to be
+     * bound explicitly.
+     */
+    protected function judgeRuntimePath(): string
+    {
+        return base_path('resources/judge-runtime');
+    }
+
+    /**
+     * Turn a bwrap start-up failure into a CS verdict rather than a CE/RE
+     * blamed on the submitter (docs/specs/49-judge-isolation.md: "histórico
+     * distingue indisponibilidade técnica de resposta incorreta").
+     *
+     * bwrap prints its own failures on stderr prefixed with "bwrap: " and
+     * never executes the payload -- but submitted code controls the stderr
+     * we are reading here and could forge that prefix to fake an
+     * infrastructure failure. So a match is only a hypothesis: it is
+     * confirmed by actually trying to start an empty sandbox.
+     */
+    protected function assertSandboxStarted(\Illuminate\Contracts\Process\ProcessResult $result): void
+    {
+        if (!$this->useBwrap || $result->exitCode() === 0) {
+            return;
+        }
+
+        if (!preg_match('/^bwrap: .*/m', $result->errorOutput(), $matches)) {
+            return;
+        }
+
+        if (!$this->sandboxProbeFails()) {
+            return;
+        }
+
+        throw new SandboxUnavailableException(
+            'Judge sandbox failed to start: ' . trim($matches[0])
         );
+    }
+
+    /**
+     * Can bwrap start an empty sandbox at all? Memoised per service instance;
+     * only ever reached on an error path.
+     */
+    protected function sandboxProbeFails(): bool
+    {
+        if ($this->sandboxProbeFailed !== null) {
+            return $this->sandboxProbeFailed;
+        }
+
+        $probeDir = sys_get_temp_dir();
+        $probe = Process::timeout(10)->run(
+            $this->wrapWithBwrap('exit 0', $probeDir)
+        );
+
+        return $this->sandboxProbeFailed = $probe->exitCode() !== 0;
     }
 
     public function judge(Run $run): void
@@ -150,17 +304,26 @@ class AutoJudgeService
 
         // Use default compile command
         $compileCommand = $this->buildCompileCommand($language, $runDir, $run->filename);
-        $command = $this->wrapWithBwrap($compileCommand, $runDir);
+        $command = $this->wrapWithBwrap($compileCommand, $runDir, [
+            'ro_binds' => [$this->judgeRuntimePath()],
+            'cpu_seconds' => $this->defaultTimeLimit * 2,
+            'file_size_kb' => $this->compileMaxFileKb,
+        ]);
 
         // npm/npx (TypeScript), dotnet and go all write caches under $HOME;
         // PHP-FPM doesn't set HOME for the worker user, so without this
         // they'd try to write to a HOME they can't access (or none at all)
         // and fail with a permission/lookup error unrelated to the
         // submitted code. $runDir is already writable and unique per run.
+        // Under the sandbox these come from --setenv instead (--clearenv
+        // wipes the inherited environment); they are kept here because the
+        // same code path runs unsandboxed when use_bwrap is off.
         $result = Process::timeout($this->defaultTimeLimit * 2)
             ->path($runDir)
             ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
             ->run($command);
+
+        $this->assertSandboxStarted($result);
 
         return [
             'success' => $result->successful(),
@@ -243,21 +406,47 @@ class AutoJudgeService
             $command = $this->wrapWithSafeExec($command, $timeLimit, $memoryLimit, $runDir);
         }
 
-        $command = $this->wrapWithBwrap($command, $runDir, ['allow_net' => false]);
+        // The test case input lives under storage/app/problems, i.e. inside
+        // the application root the sandbox does not mount. Bind this one
+        // file -- not the problems tree, which would hand submitted code
+        // every problem's hidden test data.
+        $command = $this->wrapWithBwrap($command, $runDir, [
+            'allow_net' => false,
+            'ro_binds' => [$inputFile, $this->judgeRuntimePath(), file_exists($runScript) ? $runScript : null],
+            'cpu_seconds' => $timeLimit,
+            'file_size_kb' => $this->runMaxFileKb,
+        ]);
 
         $result = Process::timeout($timeLimit + 5)
             ->path($runDir)
             ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
             ->run($command);
 
+        $this->assertSandboxStarted($result);
+
         $exitCode = $result->exitCode();
 
-        // Interpret exit codes
-        if ($exitCode === 137 || $exitCode === 9) {
+        // Interpret exit codes. 152 is 128+SIGXCPU, how the sandbox's
+        // `ulimit -t` reports a program that burned through its CPU budget;
+        // without it that lands in the generic branch below as a Runtime
+        // Error instead of a Time Limit Exceeded.
+        if ($exitCode === 137 || $exitCode === 9 || $exitCode === 152) {
             return [
                 'success' => false,
                 'verdict' => 'TLE',
                 'message' => 'Time Limit Exceeded',
+                'stdout' => $result->output(),
+                'stderr' => $result->errorOutput(),
+            ];
+        }
+
+        // 128+SIGXFSZ -- the program blew the sandbox's `ulimit -f` output
+        // budget. Reported distinctly so it is not mistaken for a crash.
+        if ($exitCode === 153) {
+            return [
+                'success' => false,
+                'verdict' => 'RE',
+                'message' => 'Runtime Error (output size limit exceeded)',
                 'stdout' => $result->output(),
                 'stderr' => $result->errorOutput(),
             ];
@@ -375,10 +564,38 @@ class AutoJudgeService
         ];
     }
 
+    /**
+     * A problem's custom compare script (special judge).
+     *
+     * Also sandboxed: the script is trusted, but one of its three arguments
+     * is the output the submission just produced, so it is a tool processing
+     * attacker-controlled input. The run directory (where the actual output
+     * lives) is the writable root; the input and expected-output files are
+     * bound in read-only, individually.
+     */
     protected function runCompareScript(string $script, string $inputFile, string $expectedOutputFile, string $actualOutputFile): array
     {
-        $result = Process::timeout($this->defaultTimeLimit * 2)
-            ->run(['bash', $script, $inputFile, $expectedOutputFile, $actualOutputFile]);
+        $runDir = dirname($actualOutputFile);
+
+        $command = $this->wrapWithBwrap(
+            sprintf(
+                'bash %s %s %s %s',
+                escapeshellarg($script),
+                escapeshellarg($inputFile),
+                escapeshellarg($expectedOutputFile),
+                escapeshellarg($actualOutputFile)
+            ),
+            $runDir,
+            [
+                'ro_binds' => [$script, $inputFile, $expectedOutputFile],
+                'cpu_seconds' => $this->defaultTimeLimit * 2,
+                'file_size_kb' => $this->runMaxFileKb,
+            ]
+        );
+
+        $result = Process::timeout($this->defaultTimeLimit * 2)->run($command);
+
+        $this->assertSandboxStarted($result);
 
         if ($result->exitCode() === 0) {
             return [
@@ -399,11 +616,30 @@ class AutoJudgeService
         ];
     }
 
+    /**
+     * A problem's custom compile script (BOCA's compile/<lang> convention).
+     *
+     * Sandboxed for exactly the same reason the default compile path is: the
+     * script hands untrusted submitted source to a real compiler, and
+     * docs/specs/49-judge-isolation.md requires the isolation to cover
+     * compilation too ("aplicar também à compilação, que executa ferramentas
+     * sobre fonte não confiável"). The script itself lives under the
+     * application root, so it has to be bound in explicitly.
+     */
     protected function runCustomScript(string $script, string $runDir, Run $run): array
     {
+        $command = $this->wrapWithBwrap("bash {$script} {$run->filename}", $runDir, [
+            'ro_binds' => [$script, $this->judgeRuntimePath()],
+            'cpu_seconds' => $this->defaultTimeLimit * 2,
+            'file_size_kb' => $this->compileMaxFileKb,
+        ]);
+
         $result = Process::timeout($this->defaultTimeLimit * 2)
             ->path($runDir)
-            ->run("bash {$script} {$run->filename}");
+            ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
+            ->run($command);
+
+        $this->assertSandboxStarted($result);
 
         return [
             'success' => $result->exitCode() === 0,
