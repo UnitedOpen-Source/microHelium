@@ -14,10 +14,8 @@ use Illuminate\Support\Facades\Process;
 class AutoJudgeService
 {
     public string $workDir;
-    protected string $jailPath;
     protected int $defaultTimeLimit;
     protected int $defaultMemoryLimit;
-    protected string $safeExecPath;
     protected string $bwrapPath;
     protected bool $useBwrap;
     protected array $sandboxPaths;
@@ -29,10 +27,8 @@ class AutoJudgeService
     public function __construct()
     {
         $this->workDir = config('autojudge.work_dir', '/tmp/autojudge');
-        $this->jailPath = config('autojudge.jail_path', '/bocajail');
         $this->defaultTimeLimit = config('autojudge.time_limit', 10);
         $this->defaultMemoryLimit = config('autojudge.memory_limit', 512);
-        $this->safeExecPath = config('autojudge.safeexec_path', '/usr/bin/safeexec');
         $this->bwrapPath = config('autojudge.bwrap_path', '/usr/bin/bwrap');
         $this->useBwrap = config('autojudge.use_bwrap', true);
         $this->sandboxPaths = config('autojudge.sandbox_paths', ['/usr', '/bin', '/sbin', '/lib', '/lib64', '/etc', '/opt', '/go']);
@@ -148,7 +144,8 @@ class AutoJudgeService
      * Deliberately no `ulimit -v`: the JVM, Go and Rust runtimes reserve
      * large virtual address ranges at startup and die under an address-space
      * cap no matter how little they actually touch. Resident memory stays
-     * with safeexec (-m/-d) and the per-language {memory} flag.
+     * with the per-language {memory} flag (Java's -Xmx and friends); a
+     * real resident-memory cap needs cgroups, tracked in #86.
      */
     protected function rlimitPrologue(array $options): string
     {
@@ -417,18 +414,6 @@ class AutoJudgeService
             $command = $runCommand . " < {$inputFile} > {$outputFile} 2>&1";
         }
 
-        // safeexec is a setuid-root helper: it escalates to root, then drops
-        // to the run directory's owner. bubblewrap mounts everything nosuid
-        // and sets no_new_privs by design, so inside the sandbox that
-        // escalation fails with EPERM and the run dies (exit 137, reported as
-        // TLE) regardless of what the submission does. The sandbox provides
-        // what safeexec was here for -- isolation, plus the rlimits applied
-        // in wrapWithBwrap -- so the two are mutually exclusive and safeexec
-        // only runs when the sandbox is off.
-        if (!$this->useBwrap && file_exists($this->safeExecPath)) {
-            $command = $this->wrapWithSafeExec($command, $timeLimit, $memoryLimit, $runDir);
-        }
-
         // The test case input lives under storage/app/problems, i.e. inside
         // the application root the sandbox does not mount. Bind this one
         // file -- not the problems tree, which would hand submitted code
@@ -503,19 +488,6 @@ class AutoJudgeService
         ];
     }
 
-    protected function wrapWithSafeExec(string $command, int $timeLimit, int $memoryLimit, string $runDir): string
-    {
-        $memoryKb = $memoryLimit * 1024;
-
-        return "{$this->safeExecPath} " .
-            "-t {$timeLimit} " .
-            "-T " . ($timeLimit + 5) . " " .
-            "-m {$memoryKb} " .
-            "-d {$memoryKb} " .
-            "-f 10 " .
-            "-R {$runDir} " .
-            "-- {$command}";
-    }
 
     protected function compareOutput(
         string $expected,

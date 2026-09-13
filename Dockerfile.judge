@@ -137,15 +137,7 @@ RUN addgroup -g 1000 -S judge && \
 RUN mkdir -p /var/www/html/storage/app/judge \
     && mkdir -p /var/www/html/storage/app/problems \
     && mkdir -p /var/www/html/storage/app/runs \
-    && mkdir -p /bocajail \
-    && chown -R judge:judge /var/www/html \
-    && chown -R judge:judge /bocajail
-
-# Copy safeexec source and compile
-COPY tools/safeexec.c /tmp/safeexec.c
-RUN gcc -O2 -o /usr/local/bin/safeexec /tmp/safeexec.c 2>/dev/null || echo "safeexec not found, skipping" \
-    && rm -f /tmp/safeexec.c \
-    && chmod 4555 /usr/local/bin/safeexec 2>/dev/null || true
+    && chown -R judge:judge /var/www/html
 
 # Copy application files
 COPY --chown=judge:judge . /var/www/html
