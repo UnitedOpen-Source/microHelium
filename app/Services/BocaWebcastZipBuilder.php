@@ -13,16 +13,31 @@ use ZipArchive;
  * `version`, `time`, `icpc`, all field-separated with FS (byte 0x1C), per
  * docs/specs/44-webcast.md's "Formato BOCA: evidencia e limite conhecido".
  *
- * That section is explicit that this format was reconstructed from a
- * textual field breakdown of BOCA's src/admin/report/webcast.php (read via
- * the GitHub API on 2026-09-10), not from re-deriving the producer's exact
- * byte layout ourselves, and that byte-for-byte compatibility with any
- * real Animeitor consumer is UNVERIFIED (the linked consumer repo 404'd
- * during that research). Every field this class writes beyond the ones the
- * spec explicitly names (see the per-file docblocks below) is this
- * implementation's own documented interpretation, not a confirmed BOCA
- * constant. config('webcast.export_enabled') stays false until a real
- * fixture confirms this -- see config/webcast.php.
+ * The spec's "Gate de integracao" recorded that the consumer repository
+ * linked from the issue 404'd, so the layout was reconstructed from a
+ * textual breakdown of BOCA's producer and marked UNVERIFIED. The consumer
+ * has since been located -- it moved to wuerges/maratona-animeitor-rust --
+ * and this class is now written against its actual parser rather than
+ * against an interpretation of the producer:
+ *
+ *   server/service/src/webcast.rs   reads `time`, `contest`, `runs`
+ *   server/service/src/dataio.rs    ContestFile/RunTuple/Team::from_string
+ *   server/data/src/lib.rs          Letter::from_str, ALPHABET
+ *
+ * Four things that parser requires were not what this class emitted, and
+ * each of them made the import fail outright rather than degrade:
+ *
+ *   1. `contest` line 1 is the contest name ALONE. The timing parameters
+ *      are line 2 and there are exactly FOUR of them.
+ *   2. Those four are maximum_time, current_time, score_freeze_time,
+ *      penalty -- current_time was missing entirely.
+ *   3. A run's problem field parses as `Letter`, which rejects anything
+ *      outside A-Z. A numeric problem id fails, and one bad line rejects
+ *      the whole runs file.
+ *   4. `time` is parsed with a bare i64 parse and no trim, so a trailing
+ *      newline fails.
+ *
+ * Encoding and the FS separator were already right.
  *
  * Encoding: UTF-8 throughout (accents preserved, not transliterated) --
  * the spec asks to preserve accents "no encoding acordado" without naming
@@ -81,61 +96,61 @@ class BocaWebcastZipBuilder
     }
 
     /**
-     * Spec: no explicit unit conversion is named for `time` beyond runs'
-     * "tempo convertido para minutos" -- this implementation uses the same
-     * minutes convention for consistency: elapsed contest time in minutes,
-     * capped at the contest duration once it has ended.
+     * Elapsed contest time in minutes, capped at the duration once the
+     * contest has ended.
+     *
+     * No trailing newline, and that is not a style choice: webcast.rs does
+     *
+     *     let time_data: i64 = read_from_zip(&mut zip, "time")?.parse()?;
+     *
+     * with no trim, and Rust's i64 parse rejects "42\n".
      */
     private function timeFile(Contest $contest): string
     {
         // Contest::getContestTime() (fixed in #76 -- previously returned a
         // negative signed diff on this app's pinned Carbon 3) now correctly
         // returns positive elapsed seconds, or 0 before the contest starts.
-        $minutes = (int) min(floor($contest->getContestTime() / 60), $contest->duration);
-
-        return $minutes."\n";
+        return (string) $this->elapsedMinutes($contest);
     }
 
     /**
-     * Spec breakdown: "contest contem nome, duracao/lastmileanswer/
-     * lastmilescore/penalidade em minutos, quantidades de equipes/
-     * problemas, linhas de equipe (ID, instituicao, nome) e linhas de
-     * configuracao finais."
+     * The layout ContestFile::from_string() in the consumer's dataio.rs
+     * actually reads:
      *
-     * lastmileanswer/lastmilescore have no equivalent column in this
-     * app's Contest model (no "freeze last-mile" setting is modeled), so
-     * both are written as 0 (disabled) -- a documented placeholder, not a
-     * discovered BOCA default.
+     *   line 1  contest name, alone, no separators
+     *   line 2  maximum_time FS current_time FS score_freeze_time FS penalty
+     *   line 3  number_teams FS number_problems
+     *   then    exactly number_teams lines of  login FS institution FS name
      *
-     * The spec names team lines explicitly but only a *count* of problems,
-     * not per-problem detail lines. Runs still need to identify which
-     * problem they're for, so this implementation also emits one line per
-     * problem (id, short_name, name) as its own documented addition beyond
-     * the literal spec text -- this is exactly the kind of gap the spec's
-     * "Gate de integracao" flags as needing a real consumer fixture to
-     * confirm or correct.
+     * It stops after the team lines, so anything further is ignored. The
+     * per-problem detail lines this class used to append existed only so a
+     * run could name its problem by id; runs now use letters (see
+     * problemLetter()), so they are gone rather than left as unread
+     * speculation.
      *
-     * "linhas de configuracao finais" is written as a single trailing line
-     * with the site count -- also this implementation's placeholder.
+     * Units are minutes throughout. score_freeze_time is measured from the
+     * start, while this app's Contest::freeze_time is "minutes before the
+     * end", hence the subtraction.
      */
     private function contestFile(Contest $contest, array $teams): string
     {
         $fs = self::FS;
-        // Contest::problems() already orders by sort_order -- no need to
-        // repeat it here.
-        $problems = $contest->problems()->get(['id', 'short_name', 'name']);
-        $siteCount = $contest->sites()->count();
+        $problemCount = $contest->problems()->count();
 
         $lines = [];
+        $lines[] = $this->sanitizeField($contest->name);
+
         $lines[] = implode($fs, [
-            $this->sanitizeField($contest->name),
             (string) $contest->duration,
-            '0', // lastmileanswer (minutes) -- no equivalent setting; see docblock.
-            '0', // lastmilescore (minutes) -- no equivalent setting; see docblock.
+            (string) $this->elapsedMinutes($contest),
+            // $contest->freeze_time is an accessor returning the instant
+            // the board freezes; the stored column is the minutes-before-end
+            // this needs.
+            (string) max(0, (int) $contest->duration - (int) ($contest->getAttributes()['freeze_time'] ?? 0)),
             (string) $contest->penalty,
         ]);
 
-        $lines[] = implode($fs, [(string) count($teams), (string) $problems->count()]);
+        $lines[] = implode($fs, [(string) count($teams), (string) $problemCount]);
 
         foreach ($teams as $team) {
             $lines[] = implode($fs, [
@@ -145,18 +160,19 @@ class BocaWebcastZipBuilder
             ]);
         }
 
-        foreach ($problems as $problem) {
-            $lines[] = implode($fs, [
-                (string) $problem->id,
-                $this->sanitizeField($problem->short_name),
-                $this->sanitizeField($problem->name),
-            ]);
-        }
-
-        // Final configuration line(s) -- placeholder (site count only).
-        $lines[] = (string) $siteCount;
-
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * Elapsed contest time in minutes, never past the contest's duration.
+     * Shared by the `time` file and the contest file's current_time.
+     */
+    private function elapsedMinutes(Contest $contest): int
+    {
+        // Contest::getContestTime() (fixed in #76 -- previously returned a
+        // negative signed diff on this app's pinned Carbon 3) returns
+        // positive elapsed seconds, or 0 before the contest starts.
+        return (int) min(floor($contest->getContestTime() / 60), $contest->duration);
     }
 
     /**
@@ -168,8 +184,12 @@ class BocaWebcastZipBuilder
      * "Sem corte de freeze" is honored literally: every run is included
      * regardless of the contest's freeze_time, using the live, unfrozen
      * result -- this export is only ever reachable by an admin session or
-     * (once can_export ships) a scoped webcast credential, never by the
-     * public scoreboard.
+     * a scoped webcast credential, never by the public scoreboard.
+     *
+     * The problem field is a LETTER. RunTuple::from_string parses it as
+     * `Letter`, whose FromStr rejects any character outside A-Z, and
+     * read_runs() maps over every line with `?` -- so a single numeric id
+     * does not degrade one run, it rejects the entire runs file.
      */
     private function runsFile(array $runs): string
     {
@@ -181,7 +201,7 @@ class BocaWebcastZipBuilder
                 (string) $run['id'],
                 (string) $run['minutes'],
                 (string) $run['team_id'],
-                (string) $run['problem_id'],
+                $run['problem_letter'],
                 $run['result'],
             ]);
         }
@@ -214,11 +234,12 @@ class BocaWebcastZipBuilder
 
     /**
      * @param  list<array{id:int,name:string,institution:string}>  $teams
-     * @return list<array{id:int,minutes:int,team_id:int,problem_id:int,result:string}>
+     * @return list<array{id:int,minutes:int,team_id:int,problem_letter:string,result:string}>
      */
     private function runs(Contest $contest, array $teams): array
     {
         $teamIds = array_column($teams, 'id');
+        $letters = $this->problemLetters($contest);
 
         // Spec: "validar que todos os runs referenciam equipes do mesmo
         // export" -- scoping by contest_id already prevents a run from a
@@ -241,13 +262,70 @@ class BocaWebcastZipBuilder
             ->orderBy('id')
             ->get();
 
-        return $runs->map(fn (Run $run) => [
-            'id' => $run->id,
-            'minutes' => (int) floor($run->contest_time / 60),
-            'team_id' => $run->user_id,
-            'problem_id' => $run->problem_id,
-            'result' => $this->resultCode($run),
-        ])->values()->all();
+        return $runs
+            // A run whose problem is gone has no letter the consumer could
+            // match, and an unmatched letter is a hard parse failure there.
+            ->filter(fn (Run $run) => isset($letters[$run->problem_id]))
+            ->map(fn (Run $run) => [
+                'id' => $run->id,
+                'minutes' => (int) floor($run->contest_time / 60),
+                'team_id' => $run->user_id,
+                'problem_letter' => $letters[$run->problem_id],
+                'result' => $this->resultCode($run),
+            ])->values()->all();
+    }
+
+    /**
+     * Problem id => the letter the consumer will accept for it.
+     *
+     * Positional, not this app's own `short_name`, and deliberately so: the
+     * consumer never learns the labels an organiser chose. It only gets
+     * number_problems from the contest file and generates the letters
+     * itself (data/src/lib.rs problem_letters()), so a run naming problem
+     * "X" in a three-problem contest is an UnmatchedProblem even though "X"
+     * is a perfectly valid Letter. Position in Contest::problems() ordering
+     * (sort_order) is the only mapping guaranteed to land inside the range
+     * the consumer generated.
+     *
+     * @return array<int, string>
+     */
+    private function problemLetters(Contest $contest): array
+    {
+        $problems = $contest->problems()->get(['id']);
+        $letters = $this->letterSequence($problems->count());
+
+        $map = [];
+        foreach ($problems->values() as $index => $problem) {
+            $map[$problem->id] = $letters[$index];
+        }
+
+        return $map;
+    }
+
+    /**
+     * The same sequence data/src/lib.rs builds: combinations with
+     * replacement over A-Z, of length 1, then 2, then 3 -- A..Z, AA, AB,
+     * ..., ZZ, AAA, ... Twenty-six problems is already far beyond any real
+     * contest; the longer forms exist so this cannot silently run out.
+     *
+     * @return list<string>
+     */
+    private function letterSequence(int $count): array
+    {
+        $alphabet = range('A', 'Z');
+        $letters = [];
+
+        foreach ($alphabet as $a) {
+            $letters[] = $a;
+        }
+
+        for ($i = 0; $i < 26 && count($letters) < $count; $i++) {
+            for ($j = $i; $j < 26 && count($letters) < $count; $j++) {
+                $letters[] = $alphabet[$i].$alphabet[$j];
+            }
+        }
+
+        return $letters;
     }
 
     private function resultCode(Run $run): string
