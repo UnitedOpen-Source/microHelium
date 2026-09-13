@@ -999,7 +999,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/register:
+  /remote-judges/v1/register:
     post:
       tags: [Judgehost]
       summary: Announce a judge machine and release whatever it was still holding (issue #53)
@@ -1043,7 +1043,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/fetch-work:
+  /remote-judges/v1/fetch-work:
     post:
       tags: [Judgehost]
       summary: Claim the next pending run, if there is one (issue #53)
@@ -1070,6 +1070,20 @@ paths:
                       run_id: { type: integer }
                       run_number: { type: integer }
                       contest_id: { type: integer }
+                      claim_token:
+                        type: string
+                        description: >
+                          Issue #123. The fencing token for THIS claim. Every later request
+                          about this run must carry it in X-Claim-Token. Identity that stops
+                          at "which machine" is not enough: two processes of one judgehost
+                          present the same credential, so a hung agent that is restarted could
+                          otherwise report over the run its own replacement is judging.
+                      lease_expires_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        description: When this claim stops being current on its own.
+                      lease_seconds: { type: integer }
                       problem:
                         type: object
                         properties:
@@ -1112,7 +1126,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/runs/{run}/give-back:
+  /remote-judges/v1/runs/{run}/give-back:
     post:
       tags: [Judgehost]
       summary: Hand one claimed run back to the queue (issue #53)
@@ -1129,6 +1143,14 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A token from a
+            claim that is over -- given back, expired, or superseded by a fresh claim -- is
+            refused with 403 even when it comes from the machine the run is assigned to.
       responses:
         "200":
           description: The run is pending again
@@ -1158,7 +1180,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/runs/{run}/source:
+  /remote-judges/v1/runs/{run}/source:
     get:
       tags: [Judgehost]
       summary: The source file of a held run (issue #53)
@@ -1176,6 +1198,14 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A token from a
+            claim that is over -- given back, expired, or superseded by a fresh claim -- is
+            refused with 403 even when it comes from the machine the run is assigned to.
       responses:
         "200":
           description: The source bytes
@@ -1202,7 +1232,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/runs/{run}/testcases:
+  /remote-judges/v1/runs/{run}/testcases:
     get:
       tags: [Judgehost]
       summary: Index of the test cases for a held run's problem (issue #53)
@@ -1218,6 +1248,14 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A token from a
+            claim that is over -- given back, expired, or superseded by a fresh claim -- is
+            refused with 403 even when it comes from the machine the run is assigned to.
       responses:
         "200":
           description: The problem's test cases, in order
@@ -1255,7 +1293,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/runs/{run}/testcases/{testCase}/{kind}:
+  /remote-judges/v1/runs/{run}/testcases/{testCase}/{kind}:
     get:
       tags: [Judgehost]
       summary: One test case's input or expected output (issue #53)
@@ -1271,6 +1309,14 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A token from a
+            claim that is over -- given back, expired, or superseded by a fresh claim -- is
+            refused with 403 even when it comes from the machine the run is assigned to.
         - name: testCase
           in: path
           required: true
@@ -1303,7 +1349,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/runs/{run}/package/{kind}:
+  /remote-judges/v1/runs/{run}/package/{kind}:
     get:
       tags: [Judgehost]
       summary: One of the problem's custom scripts for a held run (issue #120)
@@ -1324,6 +1370,14 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A token from a
+            claim that is over -- given back, expired, or superseded by a fresh claim -- is
+            refused with 403 even when it comes from the machine the run is assigned to.
         - name: kind
           in: path
           required: true
@@ -1354,7 +1408,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
-  /judgehost/runs/{run}/result:
+  /remote-judges/v1/runs/{run}/result:
     post:
       tags: [Judgehost]
       summary: Report the verdict for a held run (issue #53)
@@ -1380,6 +1434,14 @@ paths:
           in: path
           required: true
           schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A token from a
+            claim that is over -- given back, expired, or superseded by a fresh claim -- is
+            refused with 403 even when it comes from the machine the run is assigned to.
       requestBody:
         required: true
         content:
@@ -1410,6 +1472,14 @@ paths:
                       status: { type: string, example: judged }
                       verdict: { type: string }
                       answer_id: { type: integer, nullable: true }
+                      replayed:
+                        type: boolean
+                        description: >
+                          Issue #123. Present and true when this exact claim had already
+                          reported: the verdict on record is returned unchanged rather than
+                          rewritten. The network can drop after the server has written a
+                          verdict and before the agent hears so, and an agent that retries
+                          then is not doing anything wrong.
         "401":
           description: Missing, unknown, or disabled judgehost token (indistinguishable)
           content:
@@ -1422,15 +1492,16 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
         "409":
           description: >
-            The run is no longer open -- already judged, or re-leased to
-            another machine between the claim and the answer
+            The run is no longer open -- judged by someone else, such as a jury member
+            deciding it by hand while this host held it. A repeat of THIS claim's own
+            report is a 200 replay instead (see `replayed`)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
         "422":
           $ref: "#/components/responses/ValidationError"
 
-  /judgehost/contests/{contest}/answers:
+  /remote-judges/v1/contests/{contest}/answers:
     get:
       tags: [Judgehost]
       summary: The verdict vocabulary of a contest (issue #53)
