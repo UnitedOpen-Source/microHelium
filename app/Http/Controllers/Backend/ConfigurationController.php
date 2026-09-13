@@ -102,16 +102,12 @@ class ConfigurationController extends Controller
 
             // Create default answers
             if (Schema::hasTable('answers')) {
-                $defaultAnswers = [
-                    ['short_name' => 'AC', 'name' => 'Accepted', 'is_accepted' => true, 'sort_order' => 1],
-                    ['short_name' => 'CE', 'name' => 'Compilation Error', 'is_accepted' => false, 'sort_order' => 2],
-                    ['short_name' => 'RE', 'name' => 'Runtime Error', 'is_accepted' => false, 'sort_order' => 3],
-                    ['short_name' => 'TLE', 'name' => 'Time Limit Exceeded', 'is_accepted' => false, 'sort_order' => 4],
-                    ['short_name' => 'MLE', 'name' => 'Memory Limit Exceeded', 'is_accepted' => false, 'sort_order' => 5],
-                    ['short_name' => 'WA', 'name' => 'Wrong Answer', 'is_accepted' => false, 'sort_order' => 6],
-                    ['short_name' => 'PE', 'name' => 'Presentation Error', 'is_accepted' => false, 'sort_order' => 7],
-                    ['short_name' => 'CS', 'name' => 'Contact Staff', 'is_accepted' => false, 'sort_order' => 8],
-                ];
+                // One list, in App\Models\Answer. A hand-written copy here
+                // drifting from it means a contest missing a verdict row, and a
+                // run that earns that verdict gets a null answer_id and looks
+                // like nothing happened -- see the test in
+                // tests/Feature/DefaultAnswersTest.php.
+                $defaultAnswers = \App\Models\Answer::getDefaultAnswers();
 
                 foreach ($defaultAnswers as $answer) {
                     DB::table('answers')->insert(array_merge($answer, [
