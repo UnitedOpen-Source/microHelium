@@ -14,6 +14,7 @@ use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
 
 /**
@@ -21,13 +22,14 @@ use Tests\TestCase;
  * filesystem outside its own run directory, and that an honest solution in
  * the same language still gets AC through the sandbox.
  *
- * Covers the ten active languages whose toolchains come straight from the
- * Alpine package set: C, C++, C++17, Java, Python, Node, Rust, Go, PHP and
- * Ruby. The four remaining active languages -- TypeScript, Kotlin, C# and
- * Pascal -- are NOT covered here yet: their toolchains (npx/tsc, kotlinc,
- * dotnet, fpc) are installed out-of-band in Dockerfile.judge and need
- * per-language work to run under --clearenv with no network, which is
- * tracked separately rather than claimed here.
+ * The escape payloads cover the ten active languages whose toolchains come
+ * straight from the Alpine package set: C, C++, C++17, Java, Python, Node,
+ * Rust, Go, PHP and Ruby. The other four active languages (TypeScript,
+ * Kotlin, C# and Pascal) get their sandboxed compile-and-run coverage from
+ * MultiLanguageJudgingTest, which judges all fourteen inside the sandbox;
+ * there is no reason to expect the kernel to enforce a mount differently
+ * per language runtime, so the escape matrix stops at the toolchains that
+ * need no out-of-band install.
  *
  * The escape target is deliberately a path under /etc, which the sandbox
  * mounts read-only as part of the system image. Picking a target matters
@@ -42,23 +44,15 @@ use Tests\TestCase;
 class JudgeSandboxIsolationTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresJudgeSandbox;
 
     protected function setUp(): void
     {
-        // Checked before parent::setUp(): skipping after the application has
-        // booted leaves Laravel's error handlers installed and PHPUnit marks
-        // the test risky, which phpunit.xml treats as a failure.
-        $bwrap = getenv('AUTOJUDGE_BWRAP_PATH') ?: '/usr/bin/bwrap';
-        if (!is_executable($bwrap)) {
-            $this->markTestSkipped("bubblewrap is not installed at {$bwrap}");
-        }
+        $this->skipUnlessJudgeSandboxAvailable();
 
         parent::setUp();
 
-        // phpunit.xml defaults the sandbox off so the rest of the suite runs
-        // on a machine without bubblewrap; this suite is the part that needs
-        // it for real.
-        config(['autojudge.use_bwrap' => true]);
+        $this->enableJudgeSandbox();
     }
 
     public static function escapeAttemptPayloads(): array

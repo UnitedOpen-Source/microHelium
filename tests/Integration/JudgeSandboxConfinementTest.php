@@ -5,6 +5,7 @@ namespace Tests\Integration;
 use App\Services\AutoJudgeService;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
+use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
 
 /**
@@ -23,40 +24,19 @@ use Tests\TestCase;
  */
 class JudgeSandboxConfinementTest extends TestCase
 {
+    use RequiresJudgeSandbox;
+
     private AutoJudgeService $service;
     private string $runDir;
     private string $sentinel;
 
     protected function setUp(): void
     {
-        // Both skip checks run BEFORE parent::setUp(): skipping after the
-        // Laravel application has booted leaves its error/exception handlers
-        // installed (tearDown never runs), which PHPUnit reports as risky --
-        // and phpunit.xml sets failOnRisky.
-        $bwrap = getenv('AUTOJUDGE_BWRAP_PATH') ?: '/usr/bin/bwrap';
-
-        if (!is_executable($bwrap)) {
-            $this->markTestSkipped("bubblewrap is not installed at {$bwrap}");
-        }
-
-        // bwrap can be installed and still be unable to build a sandbox (no
-        // user namespaces in this container). Skip loudly instead of letting
-        // every assertion below pass for the wrong reason.
-        $probeBinds = '';
-        foreach (['/usr', '/bin', '/sbin', '/lib', '/lib64'] as $probePath) {
-            if (file_exists($probePath)) {
-                $probeBinds .= '--ro-bind ' . escapeshellarg($probePath) . ' ' . escapeshellarg($probePath) . ' ';
-            }
-        }
-
-        exec(escapeshellarg($bwrap) . ' --unshare-all --die-with-parent ' . $probeBinds . '--proc /proc --dev /dev /bin/sh -c "exit 0" 2>/dev/null', $ignored, $probeExit);
-        if ($probeExit !== 0) {
-            $this->markTestSkipped('bubblewrap cannot create a sandbox here (user namespaces unavailable?)');
-        }
+        $this->skipUnlessJudgeSandboxAvailable();
 
         parent::setUp();
 
-        config(['autojudge.use_bwrap' => true]);
+        $this->enableJudgeSandbox();
 
         $this->service = new AutoJudgeService();
 

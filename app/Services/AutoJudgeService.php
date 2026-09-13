@@ -23,6 +23,7 @@ class AutoJudgeService
     protected array $sandboxPaths;
     protected int $compileMaxFileKb;
     protected int $runMaxFileKb;
+    protected int $runMaxProcesses;
     protected ?bool $sandboxProbeFailed = null;
 
     public function __construct()
@@ -37,6 +38,7 @@ class AutoJudgeService
         $this->sandboxPaths = config('autojudge.sandbox_paths', ['/usr', '/bin', '/sbin', '/lib', '/lib64', '/etc', '/opt', '/go']);
         $this->compileMaxFileKb = (int) config('autojudge.compile_max_file_kb', 262144);
         $this->runMaxFileKb = (int) config('autojudge.run_max_file_kb', 32768);
+        $this->runMaxProcesses = (int) config('autojudge.run_max_processes', 256);
     }
 
     /**
@@ -111,6 +113,14 @@ class AutoJudgeService
         $args[] = '--setenv HOME ' . escapeshellarg($runDir);
         $args[] = '--setenv TMPDIR ' . escapeshellarg($runDir);
 
+        // .NET's default W^X JIT double-maps executable memory through a
+        // memfd it ftruncates to a large size, and RLIMIT_FSIZE applies to
+        // that -- so `dotnet` dies with SIGXFSZ under any `ulimit -f` at all,
+        // 1 GB included, both when building and when running. Turning the
+        // double mapping off is the documented escape hatch and costs
+        // nothing here; every other language ignores the variable.
+        $args[] = '--setenv DOTNET_EnableWriteXorExecute 0';
+
         $args[] = 'bash -c ' . escapeshellarg($this->rlimitPrologue($options) . $command);
 
         return implode(' ', $args);
@@ -151,6 +161,12 @@ class AutoJudgeService
         // bash counts -f in 1024-byte increments.
         if (!empty($options['file_size_kb'])) {
             $prologue .= 'ulimit -f ' . (int) $options['file_size_kb'] . '; ';
+        }
+
+        // Caps fork bombs. Not applied to compilation, where a build tool
+        // legitimately fans out across cores.
+        if (!empty($options['max_processes'])) {
+            $prologue .= 'ulimit -u ' . (int) $options['max_processes'] . '; ';
         }
 
         return $prologue;
@@ -401,8 +417,15 @@ class AutoJudgeService
             $command = $runCommand . " < {$inputFile} > {$outputFile} 2>&1";
         }
 
-        // Use safeexec if available
-        if (file_exists($this->safeExecPath)) {
+        // safeexec is a setuid-root helper: it escalates to root, then drops
+        // to the run directory's owner. bubblewrap mounts everything nosuid
+        // and sets no_new_privs by design, so inside the sandbox that
+        // escalation fails with EPERM and the run dies (exit 137, reported as
+        // TLE) regardless of what the submission does. The sandbox provides
+        // what safeexec was here for -- isolation, plus the rlimits applied
+        // in wrapWithBwrap -- so the two are mutually exclusive and safeexec
+        // only runs when the sandbox is off.
+        if (!$this->useBwrap && file_exists($this->safeExecPath)) {
             $command = $this->wrapWithSafeExec($command, $timeLimit, $memoryLimit, $runDir);
         }
 
@@ -415,6 +438,7 @@ class AutoJudgeService
             'ro_binds' => [$inputFile, $this->judgeRuntimePath(), file_exists($runScript) ? $runScript : null],
             'cpu_seconds' => $timeLimit,
             'file_size_kb' => $this->runMaxFileKb,
+            'max_processes' => $this->runMaxProcesses,
         ]);
 
         $result = Process::timeout($timeLimit + 5)

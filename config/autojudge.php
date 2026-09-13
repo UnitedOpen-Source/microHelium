@@ -158,17 +158,32 @@ return [
     |--------------------------------------------------------------------------
     |
     | `ulimit -f` applied inside the sandbox, in 1024-byte increments (bash's
-    | unit for -f). Compilation gets the larger budget because a statically
-    | linked binary, a kotlinc -include-runtime jar or a dotnet publish
-    | output is legitimately several MB.
+    | unit for -f), so neither a build nor a running program can fill the
+    | disk.
     |
-    | Note there is deliberately no `ulimit -v`: the JVM, Go and Rust
-    | runtimes reserve large virtual address ranges at startup, so an
+    | Compilation gets the larger budget: a statically linked binary, a
+    | kotlinc -include-runtime jar or a dotnet build output is legitimately
+    | several MB.
+    |
+    | There is deliberately no `ulimit -v` anywhere: the JVM, Go and
+    | Rust runtimes reserve large virtual address ranges at startup, so an
     | address-space cap fails them regardless of how much memory they
-    | actually touch. Resident memory stays with safeexec (-m/-d) and the
-    | per-language {memory} flag.
+    | actually touch. Resident memory stays with the per-language {memory}
+    | flag (Java's -Xmx and friends).
     |
     */
     'compile_max_file_kb' => (int) env('AUTOJUDGE_COMPILE_MAX_FILE_KB', 262144),
     'run_max_file_kb' => (int) env('AUTOJUDGE_RUN_MAX_FILE_KB', 32768),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sandbox Process Limit
+    |--------------------------------------------------------------------------
+    |
+    | `ulimit -u` applied to a submission's execution inside the sandbox, to
+    | cap fork bombs. Generous enough for a JVM's thread pool. Not applied to
+    | compilation, where build tools legitimately fan out across cores.
+    |
+    */
+    'run_max_processes' => (int) env('AUTOJUDGE_RUN_MAX_PROCESSES', 256),
 ];
