@@ -149,4 +149,40 @@ return [
     |
     */
     'run_max_processes' => (int) env('AUTOJUDGE_RUN_MAX_PROCESSES', 256),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Languages where the memory limit is enforced with `ulimit -v`
+    |--------------------------------------------------------------------------
+    |
+    | Issue #86. Until now resident memory was capped only by the
+    | per-language {memory} placeholder in run_command -- which exists for
+    | Java and Kotlin (-Xmx) and for nothing else. Measured in the judge
+    | image, a C submission allocating in a loop reached 4 GB and kept
+    | going; under `ulimit -v 262144` the same program fails its malloc at
+    | 240 MB, and the Python equivalent raises MemoryError.
+    |
+    | It is a list rather than a blanket setting because `ulimit -v` caps
+    | ADDRESS SPACE, not resident memory, and runtimes that reserve large
+    | virtual ranges at startup die under it no matter how little they
+    | actually touch. Measured in the same image at a 256 MB cap:
+    |
+    |     C, C++, Pascal, Rust, Python, Ruby, PHP   run normally
+    |     Java / Kotlin    "Error occurred during initialization of VM"
+    |     Go               "failed to reserve page summary memory"
+    |     Node / TypeScript  silent failure below ~1 GB of address space
+    |
+    | So the JVM languages keep -Xmx, and Go, Node, TypeScript and C# keep
+    | today's behaviour until their own runtime flags are wired up or
+    | cgroups land -- see #86, which stays open for the unified answer.
+    |
+    | An extension missing from this list is never worse off than before:
+    | it simply gets no rlimit.
+    |
+    */
+    'memory_rlimit_languages' => array_filter(explode(',', (string) env(
+        'AUTOJUDGE_MEMORY_RLIMIT_LANGUAGES',
+        'c_gcc13,c_clang17,c99_gcc,cpp_gpp13,cpp14_gpp,cpp17_gpp,cpp_clang,'
+        .'pas_fpc,pas_gpc,rs,py3,py2,pypy3,php,rb,perl,lua'
+    ))),
 ];

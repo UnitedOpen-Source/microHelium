@@ -159,6 +159,24 @@ class JudgeSandboxConfinementTest extends TestCase
         $this->assertLessThan(10, (int) trim($result->output()));
     }
 
+    public function test_the_memory_limit_actually_stops_an_allocating_program()
+    {
+        // Issue #86. Without a cap a program allocates until the machine
+        // says no: measured in the judge image, a malloc loop passed 4 GB
+        // and kept going.
+        $program = 'python3 -c "'
+            ."a=[]\nfor _ in range(40): a.append(bytearray(16<<20))\nprint('grew')"
+            .'" 2>&1';
+
+        $unbounded = $this->sandbox($program, ['cpu_seconds' => 20]);
+        $this->assertStringContainsString('grew', $unbounded->output(), 'uncapped, the allocation should succeed');
+
+        $capped = $this->sandbox($program, ['cpu_seconds' => 20, 'memory_kb' => 262144]);
+
+        $this->assertStringNotContainsString('grew', $capped->output());
+        $this->assertStringContainsString('MemoryError', $capped->output());
+    }
+
     public function test_cpu_and_file_size_limits_are_applied_inside_the_sandbox()
     {
         $result = $this->sandbox('ulimit -t; ulimit -f', [
