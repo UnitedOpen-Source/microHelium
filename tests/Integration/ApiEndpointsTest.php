@@ -573,23 +573,18 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_home_page_returns_statistics()
     {
-        // Create test data
-        DB::table('exercises')->insert([
-            'exerciseName' => 'Test Exercise',
-            'category' => 'Test',
-            'difficulty' => 'easy',
-            'score' => 100,
-            'expectedOutcome' => 'Test',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // Issue #106: seeded `exercises` and `teams` -- the 2017 Helium
+        // tables the dashboard used to count. A contest created through the
+        // wizard writes to `problems` and `users`, so asserting on those
+        // legacy counts was asserting the bug.
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        $site = \App\Models\Site::factory()->create(['contest_id' => $contest->id]);
 
-        DB::table('teams')->insert([
-            'teamName' => 'Test Team',
-            'email' => 'team@test.com',
-            'score' => 100,
-            'created_at' => now(),
-            'updated_at' => now(),
+        \App\Models\Problem::factory()->create(['contest_id' => $contest->id]);
+        \Helium\User::factory()->create([
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+            'user_type' => 'team',
         ]);
 
         $response = $this->get('/');

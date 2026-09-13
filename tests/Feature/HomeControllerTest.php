@@ -18,12 +18,21 @@ class HomeControllerTest extends TestCase
     public function test_home_page_loads_with_correct_data()
     {
         // 1. Arrange
-        // Create dummy data to be counted
-        DB::table('exercises')->insert([
-            ['exerciseName' => 'P1', 'difficulty' => 'easy', 'score' => 100, 'expectedOutcome' => 'outcome1'],
-            ['exerciseName' => 'P2', 'difficulty' => 'medium', 'score' => 200, 'expectedOutcome' => 'outcome2'],
+        // Issue #106: this used to seed `exercises` and `teams`, the 2017
+        // Helium tables, and assert the dashboard counted them. A contest
+        // created through the wizard writes to `problems` and `users` and
+        // never touches those, so the assertion was locking in the bug: on
+        // a real contest the dashboard showed 0 problems and 0 teams next
+        // to a non-zero submission count.
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        $site = \App\Models\Site::factory()->create(['contest_id' => $contest->id]);
+
+        \App\Models\Problem::factory()->count(2)->create(['contest_id' => $contest->id]);
+        \Helium\User::factory()->count(3)->create([
+            'contest_id' => $contest->id,
+            'site_id' => $site->id,
+            'user_type' => 'team',
         ]);
-        DB::table('teams')->insert([['teamName' => 'T1'], ['teamName' => 'T2'], ['teamName' => 'T3']]);
         
         // 2. Act
         $response = $this->get('/');

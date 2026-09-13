@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Contest;
+use App\Models\Problem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -15,19 +17,67 @@ class ClarificationController extends Controller
      */
     public function index()
     {
-        // Get clarifications with user info
+        // Issue #106: this dropdown used to be filled from `exercises`, the
+        // 2017 Helium table, which a wizard-created contest never writes to.
+        // The list was therefore always empty and a team could only ever ask
+        // a "Geral" clarification, never one about a problem. Worse,
+        // clarifications.problem_id is a foreign key to `problems`, so an
+        // exercise_id written there would have pointed at the wrong problem
+        // or violated the constraint.
+        $contest = $this->resolveContest();
+
+        $problems = $contest
+            ? Problem::where('contest_id', $contest->id)
+                ->orderBy('sort_order')
+                ->get(['id', 'short_name', 'name'])
+            : collect();
+
+        $labels = $problems->mapWithKeys(fn ($problem) => [
+            $problem->id => trim($problem->short_name.' - '.$problem->name),
+        ]);
+
         $clarifications = DB::table('clarifications')
             ->leftJoin('users', 'clarifications.user_id', '=', 'users.user_id')
+            ->when($contest, fn ($query) => $query->where('clarifications.contest_id', $contest->id))
             ->select('clarifications.*', 'users.fullname as team_name')
             ->orderBy('clarifications.created_at', 'desc')
             ->get()
-            ->map(function ($item) {
+            ->map(function ($item) use ($labels) {
                 $item->answered = $item->status === 'answered';
-                $item->problem = $item->problem_id ? 'Problema #' . $item->problem_id : null;
+                // The letter and name the team actually chose, rather than
+                // "Problema #7".
+                $item->problem = $item->problem_id
+                    ? ($labels[$item->problem_id] ?? 'Problema #'.$item->problem_id)
+                    : null;
+
                 return $item;
             });
-        $exercises = DB::table('exercises')->get();
-        return view('clarifications', compact('clarifications', 'exercises'));
+
+        return view('clarifications', compact('clarifications', 'problems'));
+    }
+
+    private function resolveProblemId(mixed $raw, int $contestId): ?int
+    {
+        if (! is_scalar($raw) || $raw === '') {
+            return null;
+        }
+
+        return Problem::where('contest_id', $contestId)->whereKey((int) $raw)->value('id');
+    }
+
+    /**
+     * The contest this screen is about: the viewer's own when they have one,
+     * otherwise the running competition. Never the practice contest (#43).
+     */
+    private function resolveContest(): ?Contest
+    {
+        $user = auth()->user();
+
+        if ($user && $user->contest_id) {
+            return Contest::query()->competition()->find($user->contest_id);
+        }
+
+        return Contest::query()->competition()->where('is_active', true)->first();
     }
 
     /**
@@ -76,7 +126,10 @@ class ClarificationController extends Controller
             'contest_id' => $activeContest->id,
             'site_id' => $site->id,
             'user_id' => auth()->id(),
-            'problem_id' => $request->input('problem_id') ?: null,
+            // Only a problem of this very contest. Without this an id from
+            // anywhere could be posted straight into a column whose foreign
+            // key points at `problems`.
+            'problem_id' => $this->resolveProblemId($request->input('problem_id'), $activeContest->id),
             'clarification_number' => $maxNumber + 1,
             'question' => $request->input('question'),
             'contest_time' => 0, // This should probably be calculated based on contest start time
