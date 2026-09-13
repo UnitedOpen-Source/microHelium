@@ -212,6 +212,9 @@ Route::post('/judge/runs/{run}', [JudgeController::class, 'judge'])->name('judge
 
 Route::get('/staff/tasks', [StaffController::class, 'tasks'])->name('staff.tasks');
 Route::post('/staff/tasks/{task}/complete', [StaffController::class, 'complete'])->name('staff.tasks.complete');
+Route::get('/staff/tasks/{task}/file', [StaffController::class, 'downloadFile'])
+    ->middleware(['auth', 'role:staff,admin'])
+    ->name('staff.tasks.file');
 
 /*
 |--------------------------------------------------------------------------
@@ -232,6 +235,14 @@ Route::post('/site/clarifications/{clarification}/answer', [SiteController::clas
 | Backend Routes (Admin)
 |--------------------------------------------------------------------------
 */
+
+// Issue #94 -- a team sends a file to the staff print queue. Team-only and
+// rate limited: a five-hour contest with two hundred teams is a queue
+// anyone could flood.
+Route::get('/print', [App\Http\Controllers\PrintRequestController::class, 'create'])->name('print.create');
+Route::post('/print', [App\Http\Controllers\PrintRequestController::class, 'store'])
+    ->middleware('throttle:10,60')
+    ->name('print.store');
 
 // Issue #88 -- the contest audit log. Outside the admin-only backend group
 // on purpose: a judge or staff member auditing a disputed verdict needs it

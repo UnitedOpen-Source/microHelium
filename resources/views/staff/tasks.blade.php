@@ -41,6 +41,12 @@
                                       aria-hidden="true"></span>
                             @endif
                             {{ $task->description }}
+                            @if($task->file_path)
+                                {{-- Issue #94: the file the team wants printed. --}}
+                                <a href="{{ route('staff.tasks.file', $task) }}" class="ml-2 text-primary hover:underline text-xs">
+                                    Baixar arquivo<span class="sr-only"> da tarefa #{{ $task->task_number }}</span>
+                                </a>
+                            @endif
                             @if($task->color_name)
                                 <span class="sr-only">Cor do balao: {{ $task->color_name }}.</span>
                             @endif

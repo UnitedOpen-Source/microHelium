@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Contest;
 use App\Models\Task;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Staff task screen (BOCA's staff/task.php) -- printing/balloon-delivery
@@ -56,6 +58,31 @@ class StaffController extends Controller
         ]);
 
         return redirect()->route('staff.tasks')->with('success', "Tarefa #{$task->task_number} marcada como concluida.");
+    }
+
+    /**
+     * Issue #94 -- hand the print request's file to the staff member who is
+     * going to print it.
+     *
+     * The file is a competitor's source code during a live contest, so it
+     * goes through exactly the same contest-and-site scoping the completion
+     * action uses: the staff of that team's site, and nobody else.
+     */
+    public function downloadFile(Task $task): StreamedResponse
+    {
+        $this->authorizeTaskAccess($task);
+
+        if ($task->is_system || ! $task->file_path || ! Storage::disk('local')->exists($task->file_path)) {
+            abort(404, 'Esta tarefa nao tem arquivo para baixar.');
+        }
+
+        return Storage::disk('local')->download(
+            $task->file_path,
+            $task->filename ?: 'impressao.txt',
+            // Never inline: the staff machine must not render a competitor's
+            // file in the browser.
+            ['Content-Disposition' => 'attachment', 'Cache-Control' => 'no-store, private']
+        );
     }
 
     private function resolveContest(): ?Contest
