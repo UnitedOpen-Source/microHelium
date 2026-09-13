@@ -38,7 +38,9 @@ class ClarificationController extends Controller
      */
     public function store(Request $request)
     {
-        $activeContest = DB::table('contests')->where('is_active', true)->first();
+        // Issue #43: the practice contest is not an event and has no
+        // clarifications.
+        $activeContest = DB::table('contests')->where('is_active', true)->where('is_practice', false)->first();
 
         if (!$activeContest) {
             return redirect()->route('clarifications')->with('error', 'Nenhuma competicao ativa no momento.');

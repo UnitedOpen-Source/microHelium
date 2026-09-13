@@ -54,6 +54,22 @@ class ProblemBankPolicy
         return $user->isAdmin();
     }
 
+    /**
+     * Issue #43 -- publishing a bank entry into the practice library.
+     *
+     * Admin-only, deliberately. Publication puts contest material in front
+     * of anyone with the URL, including people outside the event it was
+     * written for, and docs/specs/43-practice.md leaves that disclosure
+     * policy open: "confirmar política de divulgação de problemas de eventos
+     * ainda ativos [...] proposta: publicação exige aprovação administrativa
+     * explícita." Until that policy is decided, an org editor being able to
+     * edit an entry's tags is not the same as being allowed to publish it.
+     */
+    public function publishToPractice(User $user, ProblemBank $bank): bool
+    {
+        return $user->isAdmin();
+    }
+
     public function delete(User $user, ProblemBank $bank): bool
     {
         return $user->isAdmin();

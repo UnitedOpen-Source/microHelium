@@ -57,7 +57,8 @@ class StaffController extends Controller
             return Contest::find($user->contest_id);
         }
 
-        return Contest::where('is_active', true)->first();
+        // Issue #43: practice has no tasks/balloons.
+        return Contest::query()->competition()->where('is_active', true)->first();
     }
 
     private function authorizeTaskAccess(Task $task): void

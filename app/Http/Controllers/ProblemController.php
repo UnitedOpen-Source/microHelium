@@ -56,7 +56,9 @@ class ProblemController extends Controller
             return Contest::find($user->contest_id);
         }
 
-        return Contest::where('is_active', true)->first();
+        // Issue #43: the technical practice contest is never "the active
+        // contest" of an event (docs/specs/43-practice.md).
+        return Contest::query()->competition()->where('is_active', true)->first();
     }
 
     /**
