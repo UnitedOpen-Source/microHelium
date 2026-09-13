@@ -25,6 +25,8 @@ class Run extends Model
         'contest_time',
         'judged_time',
         'status',
+        'judgehost_id',
+        'claimed_at',
         'reconcile_attempts',
         'judge_id',
         'judge_site_id',
@@ -43,6 +45,8 @@ class Run extends Model
     protected $casts = [
         'auto_judge_start' => 'datetime',
         'auto_judge_end' => 'datetime',
+        // Issue #53: the lease reaper compares this against now().
+        'claimed_at' => 'datetime',
     ];
 
     public function contest(): BelongsTo
@@ -68,6 +72,14 @@ class Run extends Model
     public function language(): BelongsTo
     {
         return $this->belongsTo(Language::class);
+    }
+
+    /**
+     * Issue #53 -- the machine currently holding this run, if any.
+     */
+    public function judgehost(): BelongsTo
+    {
+        return $this->belongsTo(Judgehost::class);
     }
 
     public function answer(): BelongsTo
