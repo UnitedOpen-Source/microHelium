@@ -122,6 +122,11 @@
                         <input id="username" type="text" name="username" value="{{ old('username') }}" maxlength="255" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="nome.usuario" required>
                     </div>
                     <div>
+                        {{-- Issue #89: the column existed since November and had no way in. --}}
+                        <label for="icpc_id" class="block text-sm font-medium text-foreground mb-1">ID ICPC <span class="text-muted-foreground">(opcional, equipes)</span></label>
+                        <input id="icpc_id" type="text" name="icpc_id" value="{{ old('icpc_id') }}" maxlength="50" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="usado no relatorio de classificacao ICPC">
+                    </div>
+                    <div>
                         <label for="email" class="block text-sm font-medium text-foreground mb-1">E-mail</label>
                         <input id="email" type="email" name="email" required autocomplete="off" value="{{ old('email') }}" maxlength="255" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="email@exemplo.com">
                     </div>

@@ -58,6 +58,11 @@ class UserController extends Controller
                 'required_if:user_type,' . User::TYPE_SITE,
                 Rule::exists('sites', 'id')->whereNull('deleted_at'),
             ],
+            // Issue #89: users.icpc_id has existed since
+            // 2025_11_25_000007_update_users_table and had no way in. It is
+            // what the ICPC standings report keys on, and a report with the
+            // column blank is useless to whoever files it.
+            'icpc_id' => ['nullable', 'string', 'max:50'],
         ]);
 
         $siteId = $validated['site_id'] ?? null;
@@ -70,6 +75,7 @@ class UserController extends Controller
             'user_type' => $validated['user_type'],
             'site_id' => $siteId,
             'contest_id' => $siteId ? Site::find($siteId)->contest_id : null,
+            'icpc_id' => $validated['icpc_id'] ?? null,
             'is_enabled' => true,
             'created_at' => now(),
             'updated_at' => now(),
