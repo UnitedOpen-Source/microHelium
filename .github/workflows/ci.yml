@@ -141,6 +141,21 @@ jobs:
       # to is the targeted fix; running the container as the runner's uid
       # instead would stop matching how docker-compose.yml actually runs the
       # autojudge service, which is the thing this job exists to verify.
+      # Ubuntu 24.04 runners ship
+      # kernel.apparmor_restrict_unprivileged_userns=1, and that policy is
+      # enforced on the host, so it reaches processes inside the container
+      # too: bwrap cannot create a user namespace and every sandbox test
+      # skips itself. --fail-on-skipped is what turned that into a failure
+      # instead of a green build over 48 silently skipped tests.
+      #
+      # `|| true` because neither knob exists on every runner image, and
+      # their absence is not itself a problem -- whether the sandbox came up
+      # is decided by --fail-on-skipped, not by these lines succeeding.
+      - name: Allow unprivileged user namespaces for bubblewrap
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+
       - name: Let the judge user write to the mounted workspace
         run: |
           chmod -R a+rwX storage bootstrap/cache
@@ -157,6 +172,8 @@ jobs:
       - name: Full suite inside the judge image
         run: |
           docker run --rm --privileged \
+            --security-opt apparmor=unconfined \
+            --security-opt seccomp=unconfined \
             -v "$PWD":/var/www/html \
             -w /var/www/html \
             microhelium-judge:ci \
