@@ -26,7 +26,7 @@ trait RequiresJudgeSandbox
     {
         $bwrap = getenv('AUTOJUDGE_BWRAP_PATH') ?: '/usr/bin/bwrap';
 
-        if (!is_executable($bwrap)) {
+        if (! is_executable($bwrap)) {
             $this->markTestSkipped("bubblewrap is not installed at {$bwrap}");
         }
 
@@ -37,13 +37,13 @@ trait RequiresJudgeSandbox
         $binds = '';
         foreach (['/usr', '/bin', '/sbin', '/lib', '/lib64'] as $path) {
             if (file_exists($path)) {
-                $binds .= '--ro-bind ' . escapeshellarg($path) . ' ' . escapeshellarg($path) . ' ';
+                $binds .= '--ro-bind '.escapeshellarg($path).' '.escapeshellarg($path).' ';
             }
         }
 
         exec(
-            escapeshellarg($bwrap) . ' --unshare-all --die-with-parent ' . $binds
-            . '--proc /proc --dev /dev /bin/sh -c "exit 0" 2>/dev/null',
+            escapeshellarg($bwrap).' --unshare-all --die-with-parent '.$binds
+            .'--proc /proc --dev /dev /bin/sh -c "exit 0" 2>/dev/null',
             $ignored,
             $exitCode
         );

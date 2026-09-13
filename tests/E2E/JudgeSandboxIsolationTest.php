@@ -13,6 +13,8 @@ use App\Services\AutoJudgeService;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
@@ -90,7 +92,7 @@ class JudgeSandboxIsolationTest extends TestCase
     #[DataProvider('escapeAttemptPayloads')]
     public function test_sandbox_prevents_writing_outside_rundir(string $extension, string $filename, string $escapeSource)
     {
-        $targetFile = '/etc/sandbox_jailbreak_' . $extension . '.txt';
+        $targetFile = '/etc/sandbox_jailbreak_'.$extension.'.txt';
         @unlink($targetFile);
 
         $escapeSource = str_replace('{ESCAPE_TARGET}', $targetFile, $escapeSource);
@@ -103,12 +105,12 @@ class JudgeSandboxIsolationTest extends TestCase
         clearstatcache(true, $targetFile);
 
         $this->assertFileDoesNotExist($targetFile, "SECURITY ESCAPE FAILURE: Language {$extension} successfully wrote outside sandbox!");
-        
+
         $this->assertNotEquals(
             'AC',
             $run->answer?->short_name,
             "Escape attempt in {$extension} was accepted, so the write it attempted must have succeeded somewhere: "
-            . "{$run->auto_judge_result}\nstdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+            ."{$run->auto_judge_result}\nstdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
         );
     }
 
@@ -145,7 +147,7 @@ class JudgeSandboxIsolationTest extends TestCase
                     @mkdir(dirname($scriptPath), 0755, true);
                     file_put_contents(
                         $scriptPath,
-                        "#!/bin/bash\necho hacked > " . escapeshellarg($targetFile) . "\n"
+                        "#!/bin/bash\necho hacked > ".escapeshellarg($targetFile)."\n"
                     );
                 }
             );
@@ -192,8 +194,8 @@ class JudgeSandboxIsolationTest extends TestCase
 
         $inputRelative = "problems/{$contest->id}/{$problem->id}/input/1";
         $outputRelative = "problems/{$contest->id}/{$problem->id}/output/1";
-        \Illuminate\Support\Facades\Storage::disk('local')->put($inputRelative, "3 5\n");
-        \Illuminate\Support\Facades\Storage::disk('local')->put($outputRelative, "8\n");
+        Storage::disk('local')->put($inputRelative, "3 5\n");
+        Storage::disk('local')->put($outputRelative, "8\n");
 
         ProblemTestCase::create([
             'problem_id' => $problem->id,
@@ -207,7 +209,7 @@ class JudgeSandboxIsolationTest extends TestCase
 
         $team = User::create([
             'fullname' => 'Lang Test Team',
-            'username' => 'lang_test_' . $extension,
+            'username' => 'lang_test_'.$extension,
             'email' => "lang-test-{$extension}@example.com",
             'password' => bcrypt('password'),
             'user_type' => 'team',
@@ -216,7 +218,7 @@ class JudgeSandboxIsolationTest extends TestCase
             'site_id' => $site->id,
         ]);
 
-        \Illuminate\Support\Facades\Bus::fake();
+        Bus::fake();
 
         if ($beforeJudge !== null) {
             $beforeJudge($problem);

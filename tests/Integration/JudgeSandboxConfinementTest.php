@@ -27,7 +27,9 @@ class JudgeSandboxConfinementTest extends TestCase
     use RequiresJudgeSandbox;
 
     private AutoJudgeService $service;
+
     private string $runDir;
+
     private string $sentinel;
 
     protected function setUp(): void
@@ -38,9 +40,9 @@ class JudgeSandboxConfinementTest extends TestCase
 
         $this->enableJudgeSandbox();
 
-        $this->service = new AutoJudgeService();
+        $this->service = new AutoJudgeService;
 
-        $this->runDir = sys_get_temp_dir() . '/autojudge_confinement_' . getmypid();
+        $this->runDir = sys_get_temp_dir().'/autojudge_confinement_'.getmypid();
         @mkdir($this->runDir, 0755, true);
 
         // The sentinel lives under the application root, next to .env and
@@ -58,7 +60,7 @@ class JudgeSandboxConfinementTest extends TestCase
         }
 
         if (isset($this->runDir)) {
-            foreach (glob($this->runDir . '/*') ?: [] as $leftover) {
+            foreach (glob($this->runDir.'/*') ?: [] as $leftover) {
                 @unlink($leftover);
             }
             @rmdir($this->runDir);
@@ -69,7 +71,7 @@ class JudgeSandboxConfinementTest extends TestCase
 
     public function test_sandboxed_code_cannot_read_a_file_outside_the_run_directory()
     {
-        $result = $this->sandbox('cat ' . escapeshellarg($this->sentinel));
+        $result = $this->sandbox('cat '.escapeshellarg($this->sentinel));
 
         $this->assertNotSame(0, $result->exitCode());
         $this->assertStringNotContainsString('SENTINEL-SECRET', $result->output());
@@ -79,11 +81,11 @@ class JudgeSandboxConfinementTest extends TestCase
     public function test_sandboxed_code_cannot_read_the_application_env_file()
     {
         $env = base_path('.env');
-        if (!file_exists($env)) {
+        if (! file_exists($env)) {
             $this->markTestSkipped('no .env in this checkout');
         }
 
-        $result = $this->sandbox('cat ' . escapeshellarg($env));
+        $result = $this->sandbox('cat '.escapeshellarg($env));
 
         $this->assertNotSame(0, $result->exitCode());
         $this->assertStringNotContainsString('APP_KEY', $result->output());
@@ -91,7 +93,7 @@ class JudgeSandboxConfinementTest extends TestCase
 
     public function test_sandboxed_code_cannot_list_the_application_root()
     {
-        $result = $this->sandbox('ls ' . escapeshellarg(base_path()));
+        $result = $this->sandbox('ls '.escapeshellarg(base_path()));
 
         $this->assertNotSame(0, $result->exitCode());
     }
@@ -101,7 +103,7 @@ class JudgeSandboxConfinementTest extends TestCase
         $target = base_path('storage/app/.sandbox-escape');
         @unlink($target);
 
-        $this->sandbox('echo hacked > ' . escapeshellarg($target));
+        $this->sandbox('echo hacked > '.escapeshellarg($target));
 
         $this->assertFileDoesNotExist($target);
     }
@@ -112,13 +114,13 @@ class JudgeSandboxConfinementTest extends TestCase
 
         $this->assertSame(0, $result->exitCode(), $result->errorOutput());
         $this->assertSame("ok\n", $result->output());
-        $this->assertFileExists($this->runDir . '/artifact.txt');
+        $this->assertFileExists($this->runDir.'/artifact.txt');
     }
 
     public function test_an_explicitly_bound_file_is_readable_but_not_writable()
     {
         $readable = $this->sandbox(
-            'cat ' . escapeshellarg($this->sentinel),
+            'cat '.escapeshellarg($this->sentinel),
             ['ro_binds' => [$this->sentinel]]
         );
 
@@ -126,7 +128,7 @@ class JudgeSandboxConfinementTest extends TestCase
         $this->assertStringContainsString('SENTINEL-SECRET', $readable->output());
 
         $this->sandbox(
-            'echo overwritten > ' . escapeshellarg($this->sentinel),
+            'echo overwritten > '.escapeshellarg($this->sentinel),
             ['ro_binds' => [$this->sentinel]]
         );
 

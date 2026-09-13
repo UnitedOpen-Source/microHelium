@@ -18,6 +18,4 @@ use RuntimeException;
  * Extends RuntimeException so existing callers catching \RuntimeException
  * (and \Exception) keep working unchanged.
  */
-class SandboxUnavailableException extends RuntimeException
-{
-}
+class SandboxUnavailableException extends RuntimeException {}
