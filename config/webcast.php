@@ -7,22 +7,24 @@ return [
     | Webcast export enabled
     |--------------------------------------------------------------------------
     |
-    | Issue #44's spec ("Formato BOCA: evidencia e limite conhecido") is
-    | explicit: the Animeitor consumer repo linked from the issue returned
-    | 404 during research, so byte-format compatibility with any real
-    | consumer has never been verified against a real fixture. Per the
-    | spec's own instruction ("Ate isso, manter can_export=false"), this
-    | stays false until that verification happens -- flipping it on is a
-    | product/ops decision for whoever confirms the consumer, not something
-    | this deploy should default to.
+    | Issue #44's spec held this false behind an integration gate: the
+    | Animeitor consumer repository linked from the issue returned 404, so
+    | byte-format compatibility had never been verified and the spec said
+    | "ate isso, manter can_export=false".
     |
-    | The export endpoint and ZIP builder are fully implemented and tested
-    | regardless of this flag (see tests/Feature/WebcastExportTest.php) --
-    | this only gates the `can_export` capability the frontend reads, and
-    | the export route itself refuses to serve when it's off.
+    | That gate is closed. The consumer is wuerges/maratona-animeitor-rust,
+    | and a ZIP from BocaWebcastZipBuilder was fed to its own loader --
+    | compiled from source at commit
+    | 555ba636e39da5585768218a1ac164666672ac0c, not to a reimplementation --
+    | which parsed it: the contest name, the timing parameters, both teams,
+    | the problem count, and all eight runs with Y/X/N/? mapping to
+    | Yes/Unk/No/Wait. The details are in the PR that flipped this.
+    |
+    | Still an env override, because turning the export on is a decision
+    | about disclosure for a given deployment, not only about format.
     |
     */
-    'export_enabled' => env('WEBCAST_EXPORT_ENABLED', false),
+    'export_enabled' => env('WEBCAST_EXPORT_ENABLED', true),
 
     /*
     |--------------------------------------------------------------------------

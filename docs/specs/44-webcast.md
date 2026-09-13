@@ -8,7 +8,7 @@ Oferecer exportação do placar completo e credenciais revogáveis de leitura, l
 
 Implementado nesta entrega: `GET/POST/DELETE /api/frontend/webcast*` (sessão admin + CSRF, `routes/frontend_api_webcast.php`), emissão/listagem/revogação real de credenciais (`webcast_credentials`, `App\Models\WebcastCredential`), o serializador BOCA completo (`App\Services\BocaWebcastZipBuilder`), o endpoint de export (`GET /api/frontend/webcast/export`) e um guard de autenticação por credencial totalmente separado (`App\Http\Middleware\AuthenticateWebcastCredential`) expondo só o placar descongelado do próprio concurso em `GET /api/webcast/scoreboard`. Testes: `tests/Feature/WebcastControllerTest.php`, `tests/Feature/WebcastExportTest.php` (formato de bytes verificado via round-trip real de ZIP), `tests/Feature/WebcastCredentialAuthTest.php` (isolamento entre concursos e entre endpoints).
 
-`capabilities.can_export` permanece `false` por padrão (`config('webcast.export_enabled')`, `WEBCAST_EXPORT_ENABLED`) — ver "Gate de integração" abaixo; isso não bloqueou a implementação do endpoint em si, só a afirmação de compatibilidade.
+`capabilities.can_export` passou a `true` por padrão (`config('webcast.export_enabled')`, `WEBCAST_EXPORT_ENABLED`) depois que o gate de integração foi fechado — ver "Gate de integração" abaixo. Continua sendo override por env, porque ligar o export é uma decisão de divulgação de cada implantação, não só de formato.
 
 **Mecanismo de autenticação do consumidor (decisão tomada):** `Authorization: Bearer <segredo>` verificado contra `webcast_credentials.token_hash` (sha256 do segredo, comparação com `hash_equals`), como uma pergunta aberta que a spec original deixava para o backend decidir. A rota correspondente não pertence aos grupos `web` nem `api` do Laravel — é registrada separadamente em `routes/webcast_consumer.php` via `bootstrap/app.php`, com sua própria pilha de middleware (`throttle:20,1` executando antes do guard, para não deixar tentativas erradas de token fora do limite; depois `webcast.auth`). O guard nunca chama `Auth::login()`, então uma credencial de transmissão não obtém identidade reconhecida por nenhum outro guard/rota do app — tentar reaproveitar o mesmo header em `/submit`, `/judge/runs`, `/backend/users` etc. falha exatamente como uma requisição anônima falharia.
 
@@ -50,6 +50,23 @@ Quatro exigências do parser não eram atendidas, e cada uma **rejeitava o arqui
 4. `time` é lido com `.parse::<i64>()` **sem trim**, então a newline final que o serializador escrevia fazia o parse falhar.
 
 O separador FS e o encoding UTF-8 já estavam corretos. As linhas de detalhe por problema e a linha de contagem de sites foram removidas: o parser para de ler depois das linhas de equipe, e elas só existiam para que `runs` pudesse referenciar o problema por id.
+
+**Verificação contra o consumidor real, não contra uma reimplementação.** Um ZIP gerado por `BocaWebcastZipBuilder` foi entregue ao próprio `service::webcast::load_data_from_url_maybe` do Animeitor, compilado do fonte no commit fixado:
+
+```
+PARSE_OK
+time=50
+contest_name=Maratona de Primavera
+teams=2
+problems=2
+runs=8
+run id=1 time=10 team=1 prob=A ans=Yes { time: 10, is_first: false, run_id: 1 }
+run id=2 time=11 team=1 prob=B ans=Unk { run_id: 2 }
+run id=3 time=13 team=1 prob=B ans=No { run_id: 3 }
+run id=4 time=15 team=1 prob=A ans=Wait { run_id: 4 }
+```
+
+O mapeamento de resultado `Y/X/N/?` chega como `Yes/Unk/No/Wait` do lado do consumidor, que é exatamente a semântica pretendida.
 
 **O que este PR implementou como interpretação própria, documentada e não confirmada por fixture real** (`App\Services\BocaWebcastZipBuilder`), além dos campos que o parágrafo acima já cita textualmente:
 
