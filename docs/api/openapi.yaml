@@ -22,6 +22,7 @@ tags:
   - name: ManagedAccounts
   - name: Misc
   - name: Webcast
+  - name: Judgehost
 
 paths:
   /user:
@@ -998,6 +999,151 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
+  /judgehost/register:
+    post:
+      tags: [Judgehost]
+      summary: Announce a judge machine and release whatever it was still holding (issue #53)
+      description: >
+        Called by the judge agent at boot, after any endpoint error, and after
+        a failed fetch. `reclaimed` is how many runs this host was still
+        leased at the moment it spoke -- work it lost when it died, put back
+        to `pending` by the only party that knows it was lost.
+        Registered outside both the `web` and `api` groups (see
+        bootstrap/app.php and routes/judgehost.php), authenticated by
+        App\Http\Middleware\AuthenticateJudgehost, not by Sanctum or the web
+        session. Rate-limited (throttle:120,1) -- looser than the webcast
+        limit because polling is the normal mode of operation here.
+      security:
+        - judgehostToken: []
+      responses:
+        "200":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      judgehost:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                      reclaimed:
+                        type: integer
+                        description: Runs this host was holding that are now pending again
+                      lease_seconds:
+                        type: integer
+                        description: How long a claim survives without a result before the server reaps it
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /judgehost/fetch-work:
+    post:
+      tags: [Judgehost]
+      summary: Claim the next pending run, if there is one (issue #53)
+      description: >
+        Pull only -- nothing ever connects to a judge machine, which is the
+        premise of the whole surface: a partner institution's judge needs no
+        inbound port. The claim is taken under a row lock, so two hosts
+        polling at the same instant cannot receive the same run. Stale leases
+        are reaped on the way in, so a run abandoned by a dead host becomes
+        available again without any cron running.
+      security:
+        - judgehostToken: []
+      responses:
+        "200":
+          description: A run was claimed by this host
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      run_id: { type: integer }
+                      run_number: { type: integer }
+                      contest_id: { type: integer }
+                      problem:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          short_name: { type: string }
+                          time_limit: { type: integer }
+                          memory_limit: { type: integer }
+                          test_case_count: { type: integer }
+                      language:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          extension: { type: string }
+                          compile_command: { type: string, nullable: true }
+                          run_command: { type: string, nullable: true }
+                      source:
+                        type: object
+                        properties:
+                          filename: { type: string }
+                          sha256: { type: string }
+        "204":
+          description: Nothing to judge -- the agent's signal to back off
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /judgehost/runs/{run}/give-back:
+    post:
+      tags: [Judgehost]
+      summary: Hand one claimed run back to the queue (issue #53)
+      description: >
+        For a host that knows it cannot finish a specific run -- a language it
+        turned out not to have, a sandbox that refused to start. Better than
+        holding it until the lease expires. A host may only speak about a run
+        it is actually holding: the run's judgehost_id must be the caller's,
+        otherwise 403.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The run is pending again
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      run_id: { type: integer }
+                      status: { type: string, example: pending }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: This run is not assigned to the calling judgehost
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: No such run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
 components:
   securitySchemes:
     sanctum:
@@ -1012,6 +1158,18 @@ components:
         <secret>`. Verified against webcast_credentials.token_hash by
         App\Http\Middleware\AuthenticateWebcastCredential -- entirely
         separate from Sanctum and from any `user_type`.
+
+    judgehostToken:
+      type: http
+      scheme: bearer
+      description: >
+        Issue #53 judge-machine credential, sent as `Authorization: Bearer
+        <token>`. Issued once by `php artisan judgehost:create` and stored
+        only as a sha256 in judgehosts.token_hash, so the server cannot
+        reveal it again. Verified by
+        App\Http\Middleware\AuthenticateJudgehost -- entirely separate from
+        Sanctum, from the webcast credential, and from any `user_type`. It
+        grants no access to a run the holder is not currently leasing.
 
   parameters:
     ContestId:

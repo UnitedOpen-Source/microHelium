@@ -1,8 +1,15 @@
 <?php
 
+use App\Http\Middleware\AuthenticateJudgehost;
+use App\Http\Middleware\AuthenticateWebcastCredential;
+use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\SecurityHeaders;
+use Helium\Http\Middleware\IsAdminMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,20 +26,39 @@ return Application::configure(basePath: dirname(__DIR__))
             // guesses -- not just successful reads -- count against the
             // limit; putting auth first would let a brute-force attempt
             // guess unlimited tokens as long as each guess fails.
-            \Illuminate\Support\Facades\Route::middleware(['throttle:20,1', 'webcast.auth'])
+            Route::middleware(['throttle:20,1', 'webcast.auth'])
                 ->group(__DIR__.'/../routes/webcast_consumer.php');
+
+            // Issue #53 -- the judge-machine surface, same reasoning: its
+            // own guard, no session, no Sanctum. The throttle is looser
+            // than the webcast one because polling for work is the normal
+            // mode of operation here, not an anomaly.
+            // SubstituteBindings is explicit here because this group is
+            // registered outside the `api` group, which is where Laravel
+            // normally supplies it. Without it a `Run $run` argument is
+            // resolved by the container into an empty model instead of the
+            // row named in the URL, and every ownership check on it compares
+            // null against a real id -- passing the 403 tests vacuously
+            // while denying the host that legitimately holds the run.
+            Route::middleware([
+                'throttle:120,1',
+                SubstituteBindings::class,
+                'judgehost.auth',
+            ])
+                ->group(__DIR__.'/../routes/judgehost.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
         // Issue #90 -- security headers belong to the response, not to one
         // deployment's nginx config. Appended so it wraps every route,
         // including the webcast consumer group registered above.
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(SecurityHeaders::class);
 
         $middleware->alias([
-            'admin' => \Helium\Http\Middleware\IsAdminMiddleware::class,
-            'role' => \App\Http\Middleware\CheckRole::class,
-            'webcast.auth' => \App\Http\Middleware\AuthenticateWebcastCredential::class,
+            'admin' => IsAdminMiddleware::class,
+            'role' => CheckRole::class,
+            'webcast.auth' => AuthenticateWebcastCredential::class,
+            'judgehost.auth' => AuthenticateJudgehost::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
