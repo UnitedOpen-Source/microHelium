@@ -55,6 +55,17 @@
     -->
     <php>
         <env name="APP_ENV" value="testing" force="true"/>
+        <!--
+            Issue #49: the judge sandbox is mandatory in every real
+            deployment (AutoJudgeService throws rather than run submitted
+            code unconfined), but bubblewrap is Linux only and most of this
+            suite has nothing to do with judging. Default it off here so the
+            suite runs on a developer machine, and let the tests that are
+            actually about confinement turn it back on and skip themselves
+            when bwrap is missing: tests/Integration/JudgeSandboxConfinementTest.php
+            and tests/E2E/JudgeSandboxIsolationTest.php.
+        -->
+        <env name="AUTOJUDGE_USE_BWRAP" value="false" force="true"/>
         <env name="APP_DEBUG" value="true" force="true"/>
         <env name="BCRYPT_ROUNDS" value="4" force="true"/>
         <env name="CACHE_STORE" value="array" force="true"/>

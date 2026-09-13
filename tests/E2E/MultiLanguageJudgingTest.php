@@ -14,6 +14,7 @@ use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
 
 /**
@@ -28,6 +29,18 @@ use Tests\TestCase;
 class MultiLanguageJudgingTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresJudgeSandbox;
+
+    protected function setUp(): void
+    {
+        // Issue #49: judging only ever happens inside the sandbox, so the
+        // test that proves judging works has to judge inside it too.
+        $this->skipUnlessJudgeSandboxAvailable();
+
+        parent::setUp();
+
+        $this->enableJudgeSandbox();
+    }
 
     public static function activeLanguages(): array
     {
