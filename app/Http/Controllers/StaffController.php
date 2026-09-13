@@ -22,10 +22,19 @@ class StaffController extends Controller
     {
         $contest = $this->resolveContest();
 
+        $user = auth()->user();
+
         $tasks = $contest
             ? Task::where('contest_id', $contest->id)
                 ->where('status', '!=', 'deleted')
+                // Issue #87: a balloon is walked to a desk in one room. A
+                // staff member assigned to a site sees that site's queue,
+                // not every site's -- BOCA and the CD-MOJ both scope this
+                // the same way. An admin, and a staff account with no site,
+                // still see everything.
+                ->when($user->site_id && ! $user->isAdmin(), fn ($query) => $query->where('site_id', $user->site_id))
                 ->with(['user:user_id,fullname,username', 'staff:user_id,fullname,username'])
+                ->orderBy('status')
                 ->orderByDesc('created_at')
                 ->get()
             : collect();
@@ -63,10 +72,19 @@ class StaffController extends Controller
 
     private function authorizeTaskAccess(Task $task): void
     {
+        $user = auth()->user();
+
         $this->authorizeScopedAccess(
-            auth()->user()->contest_id,
+            $user->contest_id,
             $task->contest_id,
             'Voce nao pode concluir tarefas de outro contest.'
         );
+
+        // Issue #87: the listing scopes by site, so the action has to as
+        // well -- otherwise another site's task is still completable by
+        // guessing its id.
+        if ($user->site_id && ! $user->isAdmin() && $task->site_id !== $user->site_id) {
+            abort(403, 'Voce nao pode concluir tarefas de outra sede.');
+        }
     }
 }

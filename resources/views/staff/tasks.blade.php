@@ -31,7 +31,20 @@
                         <td class="px-4 py-3 font-mono text-sm">
                             <span class="font-mono font-semibold text-foreground">#{{ $task->task_number }}</span>
                         </td>
-                        <td class="px-4 py-3 text-sm">{{ $task->description }}</td>
+                        <td class="px-4 py-3 text-sm">
+                            @if($task->color_hex)
+                                {{-- Issue #87: the colour is what the staff member
+                                     actually looks for when picking the balloon up. --}}
+                                <span class="inline-block w-3 h-3 rounded-full align-middle mr-2 border border-border"
+                                      style="background-color: {{ $task->color_hex }}"
+                                      title="{{ $task->color_name }}"
+                                      aria-hidden="true"></span>
+                            @endif
+                            {{ $task->description }}
+                            @if($task->color_name)
+                                <span class="sr-only">Cor do balao: {{ $task->color_name }}.</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-3 text-sm">{{ $task->user->fullname ?? $task->user->username }}</td>
                         <td class="px-4 py-3">
                             @if($task->isDone())
