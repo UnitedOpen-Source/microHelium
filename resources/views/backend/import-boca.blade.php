@@ -161,7 +161,7 @@
 @endsection
 
 @section('scripts')
-<script>
+<script @cspNonce>
 function updateFileName(input) {
     const fileName = document.getElementById('fileName');
     if (input.files.length > 0) {

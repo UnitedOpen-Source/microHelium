@@ -1,5 +1,11 @@
 name: CI
 
+# Actions are pinned to commit SHAs, not tags: a tag is mutable, and whoever
+# controls an action's repository can move it to different code inside a
+# workflow that holds GITHUB_TOKEN and the build cache. The trailing comment
+# on each line is the tag that SHA was resolved from, so bumping stays
+# readable.
+
 on:
   push:
     branches: [master, main]
@@ -19,13 +25,13 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # The Pint step below diffs against the base commit to find the
           # files this change adds, which needs more than a shallow clone.
           fetch-depth: 0
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.3'
           extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
@@ -33,7 +39,7 @@ jobs:
           coverage: none
 
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: vendor
           key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
@@ -95,16 +101,16 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.3'
           extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
           coverage: none
 
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: vendor
           key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
@@ -118,14 +124,14 @@ jobs:
 
       - run: php artisan key:generate
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # The image carries the fourteen language toolchains and bubblewrap.
       # Cached against the layer cache, so a run that doesn't touch
       # Dockerfile.judge doesn't pay for the Kotlin and Free Pascal
       # downloads again.
       - name: Build the judge image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: Dockerfile.judge
@@ -185,9 +191,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           # tests/Frontend/vue-loader.js uses module.registerHooks(), which
           # only exists from Node 22.15. On Node 20 features.test.js dies at
