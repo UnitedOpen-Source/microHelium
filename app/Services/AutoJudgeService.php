@@ -354,6 +354,28 @@ class AutoJudgeService
         }
     }
 
+    /**
+     * Issue #116 -- judge a run and return the verdict, writing nothing.
+     *
+     * The entry point a judgehost agent uses. judge() above owns the run's
+     * lifecycle: it marks the row `judging`, records the verdict, moves the
+     * scoreboard. An agent owns none of that -- the run is already
+     * `judging` because the server set it when the lease was granted, and
+     * the verdict goes back over HTTP for the server to record (#113), so
+     * the scoreboard, the first-solve balloon and the contest log all
+     * happen once, in one place, on the machine that has the database.
+     *
+     * #119 measured that this path issues no queries at all when the
+     * relations are loaded, which is what makes it safe to run on a machine
+     * with no database credentials.
+     *
+     * @return array{verdict: string, message?: string, stdout?: string, stderr?: string}
+     */
+    public function judgeWithoutPersisting(Run $run): array
+    {
+        return $this->executeJudging($run);
+    }
+
     protected function executeJudging(Run $run): array
     {
         $problem = $run->problem;
