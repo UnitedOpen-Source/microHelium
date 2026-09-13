@@ -74,6 +74,11 @@ class WebcastExportTest extends TestCase
         $contest = Contest::factory()->create([
             'name' => 'Maratona de Primavera',
             'duration' => 300,
+            // Pinned rather than left to the factory's random value: the
+            // consumer reads score_freeze_time as minutes FROM THE START,
+            // while this app stores minutes before the end, and that
+            // conversion is the thing being asserted.
+            'freeze_time' => 60,
             'penalty' => 20,
             'start_time' => now()->subMinutes(50),
         ]);
@@ -122,17 +127,25 @@ class WebcastExportTest extends TestCase
 
         $this->assertSame("1.0\n", $zip->getFromName('version'));
         $this->assertSame('', $zip->getFromName('icpc'));
-        $this->assertSame("50\n", $zip->getFromName('time'));
+        // No trailing newline: webcast.rs parses this straight into an i64
+        // with no trim, and Rust's parse rejects "50\n".
+        $this->assertSame('50', $zip->getFromName('time'));
 
         $contestFile = $zip->getFromName('contest');
         $lines = explode("\n", rtrim($contestFile, "\n"));
 
-        $header = explode(self::FS, $lines[0]);
-        $this->assertSame('Maratona de Primavera', $header[0]);
-        $this->assertSame('300', $header[1]);
-        $this->assertSame('20', $header[4]);
+        // ContestFile::from_string(): line 1 is the name alone, line 2 is
+        // exactly four timing params, line 3 is the two counts.
+        $this->assertSame('Maratona de Primavera', $lines[0]);
 
-        $counts = explode(self::FS, $lines[1]);
+        $params = explode(self::FS, $lines[1]);
+        $this->assertCount(4, $params);
+        $this->assertSame('300', $params[0]);  // maximum_time
+        $this->assertSame('50', $params[1]);   // current_time
+        $this->assertSame('240', $params[2]);  // score_freeze_time, from the start
+        $this->assertSame('20', $params[3]);   // penalty
+
+        $counts = explode(self::FS, $lines[2]);
         $this->assertSame('2', $counts[0]); // teams
         $this->assertSame('1', $counts[1]); // problems
 
@@ -143,8 +156,9 @@ class WebcastExportTest extends TestCase
         $this->assertSame('Instituto Federal — São Paulo', $teamFields[1]);
         $this->assertSame('Equipe Ação', $teamFields[2]);
 
-        $problemLine = collect($lines)->first(fn ($l) => str_contains($l, self::FS.'A'.self::FS));
-        $this->assertNotNull($problemLine);
+        // The consumer stops reading after number_teams team lines, so the
+        // file ends there: exactly three header lines plus two teams.
+        $this->assertCount(5, $lines);
 
         $runsFile = $zip->getFromName('runs');
         $runLines = array_values(array_filter(explode("\n", $runsFile)));
@@ -158,7 +172,9 @@ class WebcastExportTest extends TestCase
 
         $this->assertSame('10', $byId[(string) $runAccepted->id][1]); // minutes
         $this->assertSame((string) $teamA->user_id, $byId[(string) $runAccepted->id][2]);
-        $this->assertSame((string) $problem->id, $byId[(string) $runAccepted->id][3]);
+        // A letter, not the problem id: Letter::from_str rejects digits and
+        // read_runs() fails the whole file on one bad line.
+        $this->assertSame('A', $byId[(string) $runAccepted->id][3]);
         $this->assertSame('Y', $byId[(string) $runAccepted->id][4]);
 
         $this->assertSame('X', $byId[(string) $runCe->id][4]);
@@ -185,7 +201,7 @@ class WebcastExportTest extends TestCase
         $this->assertSame('', $zip->getFromName('runs'));
         $contestFile = $zip->getFromName('contest');
         $lines = explode("\n", rtrim($contestFile, "\n"));
-        $counts = explode(self::FS, $lines[1]);
+        $counts = explode(self::FS, $lines[2]);
         $this->assertSame('0', $counts[0]);
         $this->assertSame('0', $counts[1]);
         $zip->close();
@@ -244,11 +260,11 @@ class WebcastExportTest extends TestCase
         $zip->open($zipPath);
         $contestFile = $zip->getFromName('contest');
         $lines = explode("\n", rtrim($contestFile, "\n"));
-        // Line 0 is the header, line 1 is the team/problem counts (a
-        // string like "1\x1C0" that -- if matched loosely -- can be
-        // mistaken for a one-team export's own team line), line 2 is the
-        // one team line this contest has.
-        $fields = explode(self::FS, $lines[2]);
+        // Line 0 is the contest name, line 1 the timing params, line 2 the
+        // team/problem counts (a string like "1\x1C0" that -- if matched
+        // loosely -- can be mistaken for a one-team export's own team
+        // line), line 3 the one team line this contest has.
+        $fields = explode(self::FS, $lines[3]);
         $this->assertSame((string) $team->user_id, $fields[0]);
         $this->assertSame('0', $fields[2]);
         $zip->close();
@@ -266,13 +282,12 @@ class WebcastExportTest extends TestCase
         $contestFile = $zip->getFromName('contest');
         $headerLine = explode("\n", $contestFile)[0];
 
-        // The sanitized name must not introduce a spurious extra field --
-        // FS and newline bytes from the raw name are replaced with a
-        // space, so the header line still has exactly 5 FS-separated
-        // fields instead of the corrupted 6 a raw FS byte would produce.
-        $header = explode(self::FS, $headerLine);
-        $this->assertCount(5, $header);
-        $this->assertSame('Nome com quebra', $header[0]);
+        // The name is a line of its own, so a raw FS or newline in it would
+        // not merely add a field -- the newline would push the timing params
+        // onto the wrong line and desynchronise the entire file. Both bytes
+        // become a space.
+        $this->assertSame('Nome com quebra', $headerLine);
+        $this->assertStringNotContainsString(self::FS, $headerLine);
 
         $zip->close();
         @unlink($zipPath);
