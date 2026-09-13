@@ -168,8 +168,14 @@ jobs:
           chmod a+rwX .
 
       # --privileged matches how docker-compose.yml runs the autojudge
-      # service, and is what lets bubblewrap create user namespaces. The
-      # workspace is mounted over the image's own copy so the code under
+      # service, and is what lets bubblewrap create user namespaces. Since
+      # #86 it carries a second load: Docker mounts /sys/fs/cgroup read-only
+      # otherwise (moby#46763), and without a writable one the entrypoint
+      # cannot delegate the cgroup v2 subtree the per-run memory cap needs.
+      # The cgroup tests skip themselves when that delegation did not
+      # happen, so --fail-on-skipped below is also what stops a silently
+      # uncapped judge from passing as a green build.
+      # The workspace is mounted over the image's own copy so the code under
       # test is this commit's, with the vendor tree installed above.
       #
       # --fail-on-skipped is the point of this job: the judging suites skip

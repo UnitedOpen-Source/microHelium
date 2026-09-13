@@ -3,6 +3,7 @@
 namespace Tests\Integration;
 
 use App\Services\AutoJudgeService;
+use App\Services\CgroupMemoryLimiter;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Process;
 use Tests\Concerns\RequiresJudgeSandbox;
@@ -175,6 +176,132 @@ class JudgeSandboxConfinementTest extends TestCase
 
         $this->assertStringNotContainsString('grew', $capped->output());
         $this->assertStringContainsString('MemoryError', $capped->output());
+    }
+
+    public function test_a_cgroup_memory_cap_stops_an_allocating_program_at_the_limit()
+    {
+        // Issue #86 -- the difference between this and the `ulimit -v` case
+        // above: that one caps address space and hopes the allocation fails
+        // somewhere sensible, this one is a resident cap the kernel
+        // enforces, and the program never gets a byte past it.
+        $limiter = new CgroupMemoryLimiter;
+
+        if (! $limiter->isAvailable()) {
+            $this->markTestSkipped('no delegated cgroup v2 subtree (is the judge container privileged?)');
+        }
+
+        $name = 'confinement_'.getmypid();
+        $program = 'python3 -c "'
+            ."a=[]\nfor _ in range(40): a.append(bytearray(16<<20))\nprint('grew')"
+            .'" 2>&1';
+
+        $command = $limiter->confine(
+            $this->service->wrapWithBwrap($program, $this->runDir, ['cpu_seconds' => 20]),
+            $name,
+            128
+        );
+
+        $result = Process::timeout(60)->path($this->runDir)->run($command);
+        $usage = $limiter->release($name);
+
+        $this->assertStringNotContainsString('grew', $result->output());
+        $this->assertNotNull($usage);
+        $this->assertTrue(
+            $limiter->exceeded($usage, 128, $result->exitCode() === 0),
+            'the run should have been judged over its memory limit, got '.json_encode($usage)
+        );
+        $this->assertLessThanOrEqual(
+            128 * 1024 * 1024,
+            $usage['peak_bytes'],
+            'the cap is a cap: nothing should have been resident above it'
+        );
+    }
+
+    public function test_a_cgroup_memory_cap_leaves_a_well_behaved_program_alone()
+    {
+        $limiter = new CgroupMemoryLimiter;
+
+        if (! $limiter->isAvailable()) {
+            $this->markTestSkipped('no delegated cgroup v2 subtree (is the judge container privileged?)');
+        }
+
+        $name = 'confinement_ok_'.getmypid();
+
+        $command = $limiter->confine(
+            $this->service->wrapWithBwrap('echo ok', $this->runDir, ['cpu_seconds' => 20]),
+            $name,
+            128
+        );
+
+        $result = Process::timeout(60)->path($this->runDir)->run($command);
+        $usage = $limiter->release($name);
+
+        $this->assertSame(0, $result->exitCode(), $result->errorOutput());
+        $this->assertSame("ok\n", $result->output());
+        $this->assertFalse($limiter->exceeded($usage, 128, true));
+    }
+
+    public function test_the_cgroup_is_removed_after_the_run()
+    {
+        // A judge that leaked a cgroup per run would fill /sys/fs/cgroup
+        // over a contest.
+        $limiter = new CgroupMemoryLimiter;
+
+        if (! $limiter->isAvailable()) {
+            $this->markTestSkipped('no delegated cgroup v2 subtree (is the judge container privileged?)');
+        }
+
+        $root = config('autojudge.cgroup_root');
+        $name = 'confinement_gc_'.getmypid();
+
+        $command = $limiter->confine(
+            $this->service->wrapWithBwrap('echo ok', $this->runDir, []),
+            $name,
+            128
+        );
+
+        Process::timeout(60)->path($this->runDir)->run($command);
+
+        $this->assertDirectoryExists($root.'/'.$name);
+
+        $limiter->release($name);
+
+        $this->assertDirectoryDoesNotExist($root.'/'.$name);
+    }
+
+    public function test_sandboxed_code_cannot_reach_the_cgroup_hierarchy_at_all()
+    {
+        // Issue #86. Submitted code runs as the same uid 1000 the subtree
+        // is delegated to, so if /sys were visible inside the sandbox a
+        // submission could raise its own memory.max or simply write its pid
+        // into another cgroup and walk out of the cap. It is not: /sys is
+        // absent from autojudge.sandbox_paths and bwrap mounts nothing it
+        // was not asked to.
+        $result = $this->sandbox('ls /sys/fs/cgroup; echo "exit:$?"');
+
+        $this->assertStringNotContainsString('cgroup.procs', $result->output());
+        $this->assertStringContainsString('exit:', $result->output());
+        $this->assertStringNotContainsString('exit:0', $result->output());
+    }
+
+    public function test_the_delegated_subtree_does_not_expose_its_own_resource_controls()
+    {
+        // Kernel delegation containment: uid 1000 owns the subtree's
+        // cgroup.procs so it can move processes into its children, but NOT
+        // the parent's memory.max -- otherwise submitted code could raise
+        // the ceiling it is being capped under.
+        $limiter = new CgroupMemoryLimiter;
+
+        if (! $limiter->isAvailable()) {
+            $this->markTestSkipped('no delegated cgroup v2 subtree (is the judge container privileged?)');
+        }
+
+        $root = config('autojudge.cgroup_root');
+
+        $this->assertFalse(
+            @file_put_contents($root.'/memory.max', (string) (64 << 20)) !== false,
+            'the judge user must not be able to write the delegated root\'s own memory.max'
+        );
     }
 
     public function test_cpu_and_file_size_limits_are_applied_inside_the_sandbox()

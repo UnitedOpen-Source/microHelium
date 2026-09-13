@@ -194,6 +194,58 @@ print(8)
         );
     }
 
+    public function test_a_jvm_submission_over_the_memory_limit_is_MLE()
+    {
+        // Issue #86, and the case that motivated the cgroup. Kotlin runs as
+        // `java -jar`, and config/autojudge.php gives the JVM languages no
+        // `ulimit -v` at all: measured on this image, one large enough for
+        // the JVM to boot at a 256 MB problem limit is 4096 MB, which
+        // bounds nothing worth bounding. A cgroup memory.max caps RESIDENT
+        // memory instead, which the JVM tolerates -- a trivial Kotlin
+        // program peaks at 27 MB under a 256 MB cap -- so this submission
+        // is now stopped AT the limit rather than judged after the fact.
+        $run = $this->createAndJudgeRun(
+            'kt',
+            'hog.kt',
+            "fun main() {
+    val held = ArrayList<ByteArray>()
+    for (i in 0 until 40) held.add(ByteArray(16 shl 20))
+    println(held.size)
+}
+",
+            fn (Problem $problem) => $problem->update(['memory_limit' => 256, 'time_limit' => 10])
+        );
+
+        $this->assertSame(
+            'MLE',
+            $run->answer?->short_name,
+            "esperado MLE, veio '{$run->answer?->short_name}': {$run->auto_judge_result}\n{$run->auto_judge_stderr}"
+        );
+    }
+
+    public function test_a_jvm_submission_inside_the_memory_limit_still_passes()
+    {
+        // The regression this change could plausibly cause: a resident cap
+        // tight enough to stop a hog also has to leave room for the runtime
+        // to start. Without it a JVM language would fail every submission
+        // instead of only the greedy ones.
+        $run = $this->createAndJudgeRun(
+            'kt',
+            'solution.kt',
+            "fun main() {
+    val (a, b) = readLine()!!.trim().split(Regex(\"\\\\s+\")).map { it.toInt() }
+    println(a + b)
+}
+",
+            fn (Problem $problem) => $problem->update(['memory_limit' => 256, 'time_limit' => 10])
+        );
+
+        $this->assertTrue(
+            $run->answer?->is_accepted,
+            "esperado AC, veio '{$run->answer?->short_name}': {$run->auto_judge_result}\n{$run->auto_judge_stderr}"
+        );
+    }
+
     public function test_a_well_behaved_submission_is_not_mistaken_for_one_over_the_limit()
     {
         // The other half: a solution that stays inside the limit must not be

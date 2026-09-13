@@ -160,6 +160,22 @@ return [
     | comes from peak RSS (see rss_time_path below). That split is DMOJ's
     | design.
     |
+    | NONE of this applies when cgroup_root below is live, and this table
+    | is what is left for the deployments without one -- an unprivileged
+    | container, a cgroup v1 host.
+    |
+    | The barrier is dropped rather than stacked under the cgroup for two
+    | measured reasons. It is redundant: the barrier sits at limit+grace
+    | while memory.max sits at the limit itself, and resident memory is
+    | bounded by address space, so the cgroup always binds first. On this
+    | image at a 256 MB limit, a Python hog is OOM-killed at exactly 256 MB
+    | with `ulimit -v 393216` and without it alike -- identical peak,
+    | identical oom_kill, identical exit 137. And it is not free: an
+    | address-space cap can still fail a runtime that RESERVES more than it
+    | touches, which is the whole reason the JVM and .NET rows below are
+    | null. Keeping a barrier that cannot bind but can misfire buys
+    | nothing.
+    |
     | DMOJ's shipped address_grace table was the starting point and holds
     | for Go (768) and Node (1024) -- their Node figure is the same 1 GB we
     | arrived at independently. It does NOT hold for the JVM and .NET on
@@ -230,16 +246,43 @@ return [
     | regardless of how it died.
     |
     | This is how DMOJ produces MLE with no cgroups and no privileges at
-    | all. cgroup v2's memory.max would be a harder cap, but it costs a
-    | privileged judge container (the isolate manual: "If you still want to
-    | use containers, you are on your own and you probably have to make
-    | them privileged") and it still does not guarantee an OOM kill -- an
-    | allocation that simply returns NULL looks like any other crash there
-    | too. Tracked in #86.
+    | all, and it stays the fallback for exactly that case. Where
+    | cgroup_root below is live the cgroup decides first, because it is the
+    | limit that was actually enforced rather than a reading of what the
+    | run got away with.
     |
     | If the binary is absent the run is judged exactly as before, without
     | an MLE verdict: a missing measurement must not break judging.
     |
     */
     'rss_time_path' => env('AUTOJUDGE_TIME_PATH', '/usr/bin/time'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Delegated cgroup v2 subtree
+    |--------------------------------------------------------------------------
+    |
+    | Issue #86 -- where CgroupMemoryLimiter creates one cgroup per run to
+    | cap it with memory.max. This is the only memory limit that bounds
+    | every language: `ulimit -v` caps address space, which the JVM and
+    | .NET reserve gigabytes of before running submitted code (hence the
+    | nulls above), while memory.max caps resident memory, which they do
+    | not. Measured on this image at a 256 MB cap: a trivial Java program
+    | peaks at 30 MB and a Kotlin one at 27 MB, and an allocating program
+    | in either is killed at exactly 256 MB -- the verdict no rlimit could
+    | ever produce.
+    |
+    | The subtree is delegated to uid 1000 by docker/judge/entrypoint.sh,
+    | which needs the judge container to be privileged: Docker mounts
+    | /sys/fs/cgroup read-only otherwise (moby#46763), and cgroup v2's "no
+    | internal processes" rule means the delegation has to be arranged from
+    | root before the judge user exists in the picture at all.
+    |
+    | When the path is absent or unwritable -- an unprivileged container, a
+    | cgroup v1 host, a developer's laptop -- every per-run limit silently
+    | becomes a no-op and the peak-RSS path above decides on its own.
+    | Judging must never stop because cgroups are unavailable.
+    |
+    */
+    'cgroup_root' => env('AUTOJUDGE_CGROUP_ROOT', '/sys/fs/cgroup/judge'),
 ];
