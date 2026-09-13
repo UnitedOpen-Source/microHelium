@@ -292,31 +292,77 @@ class AutoJudgeServiceTest extends TestCase
         $this->assertStringNotContainsString('{memory}', $defaults['go']['run_command']);
     }
 
-    public function test_the_memory_rlimit_is_applied_only_to_languages_that_tolerate_it()
+    public function test_every_language_gets_an_address_space_barrier_with_its_own_grace()
     {
         $service = $this->sandboxingService();
-        $method = new \ReflectionMethod($service, 'memoryRlimitKbFor');
+        $method = new \ReflectionMethod($service, 'addressSpaceLimitKbFor');
+        $limit = 256;
 
-        // Measured in the judge image: these run normally under a 256 MB
-        // address-space cap.
-        foreach (['c_gcc13', 'cpp_gpp13', 'pas_fpc', 'rs', 'py3', 'rb', 'php'] as $extension) {
+        // Issue #86: `ulimit -v` now applies to everything, as
+        // limit + grace, because it is a crash barrier and not the
+        // measurement. The grace numbers are DMOJ's shipped table; Node's
+        // 1024 MB is the same figure we arrived at independently when V8
+        // refused to boot below roughly 1 GB of address space.
+        foreach ([
+            'c_gcc13' => 64,
+            'py3' => 128,
+            'go' => 768,
+            'js_node24' => 1024,
+            'ts' => 1024,
+        ] as $extension => $graceMb) {
             $this->assertSame(
-                256 * 1024,
-                $method->invoke($service, (object) ['extension' => $extension], 256),
-                "{$extension} should get an address-space cap"
+                ($limit + $graceMb) * 1024,
+                $method->invoke($service, (object) ['extension' => $extension], $limit),
+                "{$extension} should get {$graceMb} MB of grace"
             );
         }
 
-        // And these refuse to boot under one, whatever they actually touch:
-        // "Error occurred during initialization of VM" for the JVM,
-        // "failed to reserve page summary memory" for Go, a silent failure
-        // below ~1 GB for V8. They keep the {memory} run_command flag.
-        foreach (['java21', 'kt', 'go', 'js_node24', 'ts', 'cs_dotnet'] as $extension) {
+        // An unknown language falls back to the default rather than to no
+        // barrier at all.
+        $this->assertSame(
+            ($limit + 64) * 1024,
+            $method->invoke($service, (object) ['extension' => 'lang-que-nao-existe'], $limit)
+        );
+
+        // And the runtimes that would need a barrier seven to fifteen times
+        // the limit just to boot get none: measured on the judge image,
+        // java needs 2 GB, kotlin 4 GB and C# 3 GB of address space for a
+        // 256 MB problem. They keep -Xmx / DOTNET_GCHeapHardLimit, and the
+        // MLE verdict comes from measured peak RSS regardless.
+        foreach (['java21', 'kt', 'cs_dotnet'] as $extension) {
             $this->assertNull(
-                $method->invoke($service, (object) ['extension' => $extension], 256),
-                "{$extension} must not get an address-space cap"
+                $method->invoke($service, (object) ['extension' => $extension], $limit),
+                "{$extension} must not get an address-space barrier"
             );
         }
+    }
+
+    public function test_the_peak_memory_measurement_keeps_its_output_away_from_the_submissions()
+    {
+        $service = $this->sandboxingService();
+        $method = new \ReflectionMethod($service, 'withPeakRssMeasurement');
+
+        config(['autojudge.rss_time_path' => '/bin/sh']);
+        $service = $this->sandboxingService();
+
+        $wrapped = $method->invoke($service, "prog < in > out 2>&1", '/tmp/run_1/.mhrss');
+
+        // `time -f` writes to its own stderr, and the submission's stderr is
+        // already merged into the output file -- so the measured command is
+        // re-nested and time's stream is redirected somewhere else entirely.
+        $this->assertStringContainsString("-f 'MHRSS %M'", $wrapped);
+        $this->assertStringContainsString("2> '/tmp/run_1/.mhrss'", $wrapped);
+        $this->assertStringContainsString("bash -c 'prog < in > out 2>&1'", $wrapped);
+    }
+
+    public function test_a_missing_measurement_binary_leaves_the_command_alone()
+    {
+        config(['autojudge.rss_time_path' => '/no/such/time']);
+        $service = $this->sandboxingService();
+        $method = new \ReflectionMethod($service, 'withPeakRssMeasurement');
+
+        // A missing measurement must not stop a contest.
+        $this->assertSame('prog < in > out', $method->invoke($service, 'prog < in > out', '/tmp/x'));
     }
 
     public function test_sandbox_applies_a_memory_rlimit_when_one_is_given()

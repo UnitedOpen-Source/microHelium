@@ -170,6 +170,46 @@ class JudgeSandboxIsolationTest extends TestCase
         $this->assertSame('CE', $run->answer?->short_name, $run->auto_judge_stderr);
     }
 
+    public function test_a_submission_over_the_memory_limit_is_MLE_and_not_a_generic_crash()
+    {
+        // Issue #86. Before this, an allocation failure was indistinguishable
+        // from any other runtime error and came back as RE. The verdict now
+        // comes from measured peak RSS, which is what lets every language
+        // have an MLE -- including the ones no address-space limit can cap.
+        $run = $this->createAndJudgeRun(
+            'py3',
+            'hog.py',
+            "a = []
+for _ in range(40):
+    a.append(bytearray(16 << 20))
+print(8)
+",
+            fn (Problem $problem) => $problem->update(['memory_limit' => 128])
+        );
+
+        $this->assertSame(
+            'MLE',
+            $run->answer?->short_name,
+            "esperado MLE, veio '{$run->answer?->short_name}': {$run->auto_judge_result}"
+        );
+    }
+
+    public function test_a_well_behaved_submission_is_not_mistaken_for_one_over_the_limit()
+    {
+        // The other half: a solution that stays inside the limit must not be
+        // swept up by the measurement.
+        $run = $this->createAndJudgeRun(
+            'py3',
+            'solution.py',
+            "a, b = map(int, input().split())
+print(a + b)
+",
+            fn (Problem $problem) => $problem->update(['memory_limit' => 128])
+        );
+
+        $this->assertTrue($run->answer?->is_accepted, "esperado AC, veio '{$run->answer?->short_name}'");
+    }
+
     private function createAndJudgeRun(string $extension, string $filename, string $source, ?callable $beforeJudge = null): Run
     {
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()->subMinutes(5), 'duration' => 300]);
@@ -180,13 +220,11 @@ class JudgeSandboxIsolationTest extends TestCase
         }
         $language = Language::where('contest_id', $contest->id)->where('extension', $extension)->firstOrFail();
 
-        foreach ([
-            ['name' => 'Accepted', 'short_name' => 'AC', 'is_accepted' => true],
-            ['name' => 'Wrong Answer', 'short_name' => 'WA', 'is_accepted' => false],
-            ['name' => 'Compilation Error', 'short_name' => 'CE', 'is_accepted' => false],
-            ['name' => 'Runtime Error', 'short_name' => 'RE', 'is_accepted' => false],
-            ['name' => 'Contest Stopped', 'short_name' => 'CS', 'is_accepted' => false],
-        ] as $answer) {
+        // The full set, the same one the contest wizard and
+        // Api\ContestController seed. The hand-written subset this used to
+        // carry had no MLE row, so a memory verdict (#86) would land on a
+        // null answer_id and look like nothing happened.
+        foreach (Answer::getDefaultAnswers() as $answer) {
             Answer::create(array_merge($answer, ['contest_id' => $contest->id]));
         }
 
