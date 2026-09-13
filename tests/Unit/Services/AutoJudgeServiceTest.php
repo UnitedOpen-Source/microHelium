@@ -169,6 +169,140 @@ class AutoJudgeServiceTest extends TestCase
         ]);
     }
 
+    /**
+     * Issue #49 -- command-string generation only. These never need a real
+     * bubblewrap: /bin/sh stands in as an existing, executable binary so the
+     * generated arguments can be asserted on any platform. Confinement
+     * itself is proven by tests/Integration/JudgeSandboxConfinementTest.php,
+     * which runs bwrap for real and skips where it isn't installed.
+     */
+    private function sandboxingService(): AutoJudgeService
+    {
+        config([
+            'autojudge.use_bwrap' => true,
+            'autojudge.bwrap_path' => '/bin/sh',
+        ]);
+
+        return new AutoJudgeService();
+    }
+
+    public function test_wrap_with_bwrap_generates_correct_args()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1');
+
+        $this->assertStringContainsString('--unshare-all', $command);
+        $this->assertStringContainsString('--die-with-parent', $command);
+        $this->assertStringContainsString('--new-session', $command);
+        $this->assertStringContainsString('--clearenv', $command);
+        $this->assertStringContainsString("--bind '/tmp/run_1' '/tmp/run_1'", $command);
+        $this->assertStringContainsString("--chdir '/tmp/run_1'", $command);
+        $this->assertStringContainsString("bash -c 'echo hello'", $command);
+    }
+
+    public function test_sandbox_never_binds_the_host_root()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1');
+
+        // The whole point of #49's "não ler arquivo sentinela fora da
+        // tentativa": binding / read-only would confine writes but leave
+        // every file on the host readable, .env included.
+        $this->assertStringNotContainsString('--ro-bind / /', $command);
+        $this->assertStringNotContainsString("--ro-bind '/' '/'", $command);
+    }
+
+    public function test_sandbox_does_not_expose_the_application_root()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1');
+
+        // base_path() holds .env, the source tree, every other run's
+        // directory and every problem's hidden test data.
+        $this->assertStringNotContainsString(base_path(), $command);
+    }
+
+    public function test_sandbox_binds_the_configured_system_allowlist_read_only()
+    {
+        config(['autojudge.sandbox_paths' => ['/usr', '/no/such/path']]);
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1');
+
+        $this->assertStringContainsString("--ro-bind '/usr' '/usr'", $command);
+        // Paths absent on this image are skipped, not passed to bwrap as a
+        // mount that would fail the whole sandbox.
+        $this->assertStringNotContainsString('/no/such/path', $command);
+    }
+
+    public function test_sandbox_binds_run_dir_after_the_tmpfs_that_would_shadow_it()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/autojudge/run_1');
+
+        // autojudge.work_dir defaults to /tmp/autojudge, so a --tmpfs /tmp
+        // applied after the run-dir bind would hide the run directory.
+        $this->assertLessThan(
+            strpos($command, "--bind '/tmp/autojudge/run_1'"),
+            strpos($command, '--tmpfs /tmp'),
+            'The --tmpfs /tmp must be applied before the run directory is bound over it.'
+        );
+    }
+
+    public function test_sandbox_unshares_the_network_by_default()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1');
+
+        // --unshare-all already covers the network namespace.
+        $this->assertStringContainsString('--unshare-all', $command);
+        $this->assertStringNotContainsString('--share-net', $command);
+    }
+
+    public function test_sandbox_shares_the_network_only_when_explicitly_asked()
+    {
+        $command = $this->sandboxingService()
+            ->wrapWithBwrap('echo hello', '/tmp/run_1', ['allow_net' => true]);
+
+        // Re-enabling the network takes --share-net; simply omitting
+        // --unshare-net does nothing against --unshare-all.
+        $this->assertStringContainsString('--share-net', $command);
+    }
+
+    public function test_sandbox_exposes_only_the_extra_paths_a_step_asks_for()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1', [
+            'ro_binds' => ['/usr/bin/env', '/no/such/file'],
+        ]);
+
+        $this->assertStringContainsString("--ro-bind '/usr/bin/env' '/usr/bin/env'", $command);
+        $this->assertStringNotContainsString('/no/such/file', $command);
+    }
+
+    public function test_sandbox_applies_cpu_and_file_size_rlimits()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1', [
+            'cpu_seconds' => 3,
+            'file_size_kb' => 512,
+        ]);
+
+        $this->assertStringContainsString("bash -c 'ulimit -t 3; ulimit -f 512; echo hello'", $command);
+    }
+
+    public function test_wrap_with_bwrap_is_a_no_op_when_the_sandbox_is_disabled()
+    {
+        config(['autojudge.use_bwrap' => false]);
+
+        $this->assertSame('echo hello', (new AutoJudgeService())->wrapWithBwrap('echo hello', '/tmp/run_1'));
+    }
+
+    public function test_missing_bwrap_binary_throws_runtime_exception()
+    {
+        config([
+            'autojudge.use_bwrap' => true,
+            'autojudge.bwrap_path' => '/non/existent/bwrap',
+        ]);
+        $service = new AutoJudgeService();
+
+        $this->expectException(\App\Exceptions\SandboxUnavailableException::class);
+        $this->expectExceptionMessage("Mandatory judge sandbox binary (bwrap) not found");
+
+        $service->wrapWithBwrap('echo hello', '/tmp/run_1');
+    }
+
     public function test_build_compile_command()
     {
         $language = (object) [

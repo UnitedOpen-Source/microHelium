@@ -11,6 +11,7 @@ use App\Models\Task;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
 
 /**
@@ -38,6 +39,18 @@ use Tests\TestCase;
 class FullBocaLifecycleTest extends TestCase
 {
     use RefreshDatabase;
+    use RequiresJudgeSandbox;
+
+    protected function setUp(): void
+    {
+        // Issue #49: judging only ever happens inside the sandbox, so the
+        // test that proves judging works has to judge inside it too.
+        $this->skipUnlessJudgeSandboxAvailable();
+
+        parent::setUp();
+
+        $this->enableJudgeSandbox();
+    }
 
     public function test_full_contest_lifecycle_from_wizard_to_scoreboard()
     {
