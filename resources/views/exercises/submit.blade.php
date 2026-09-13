@@ -181,7 +181,7 @@ int main() {
 @endsection
 
 @section('scripts')
-<script>
+<script @cspNonce>
 function updateFileName(input) {
     const placeholder = document.getElementById('upload-placeholder');
     const selected = document.getElementById('upload-selected');

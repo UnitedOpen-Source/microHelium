@@ -167,7 +167,7 @@
 @endsection
 
 @section('scripts')
-<script>
+<script @cspNonce>
 const problems = @json($problems);
 
 const bankParams = new URL(location.href).searchParams;
