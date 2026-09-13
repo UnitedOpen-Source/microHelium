@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (PHP 8.3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The Pint step below diffs against the base commit to find the
+          # files this change adds, which needs more than a shallow clone.
+          fetch-depth: 0
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
+          # No coverage driver: see the --no-coverage note on the test step.
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.3-
+
+      # Before composer install: its post-autoload-dump script runs
+      # `artisan package:discover`, which boots the framework.
+      - run: cp .env.example .env
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - run: php artisan key:generate
+
+      # phpunit.xml pins the whole suite to an in-memory sqlite database, so
+      # no service container is needed here.
+      #
+      # --no-coverage is required, not cosmetic: phpunit.xml configures
+      # <coverage> reports, and with no driver installed PHPUnit aborts with
+      # "No tests executed!" and a zero exit code -- a silently green build
+      # that ran nothing.
+      #
+      # E2E is excluded here, not skipped anywhere: those suites compile and
+      # run real submissions and need the fourteen language toolchains plus
+      # bubblewrap, none of which a bare runner has. The judge-image job
+      # below runs the whole suite, E2E included, in the image that does.
+      - name: PHPUnit
+        run: ./vendor/bin/phpunit --no-coverage --exclude-testsuite E2E
+
+      # Scoped to files this change ADDS, deliberately. 278 of the repo's
+      # 363 PHP files predate Pint, so a repo-wide --test fails today and
+      # even an all-changed-files check would redden a PR over formatting it
+      # inherited rather than wrote. New files have no such excuse.
+      #
+      # The path out is a one-off `./vendor/bin/pint` over the tree; after
+      # that this becomes --diff-filter=ACMR, and eventually a plain
+      # `./vendor/bin/pint --test`.
+      - name: Laravel Pint (new files)
+        run: |
+          base='${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}'
+
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "No usable base commit to diff against; skipping."
+            exit 0
+          fi
+
+          files=$(git diff --name-only --diff-filter=A "$base" HEAD -- '*.php')
+
+          if [ -z "$files" ]; then
+            echo "No PHP files added."
+            exit 0
+          fi
+
+          echo "$files"
+          echo "$files" | xargs ./vendor/bin/pint --test
+
+  judge-image:
+    name: Judging (all languages, inside the sandbox)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.3-
+
+      # Before composer install: its post-autoload-dump script runs
+      # `artisan package:discover`, which boots the framework.
+      - run: cp .env.example .env
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - run: php artisan key:generate
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The image carries the fourteen language toolchains and bubblewrap.
+      # Cached against the layer cache, so a run that doesn't touch
+      # Dockerfile.judge doesn't pay for the Kotlin and Free Pascal
+      # downloads again.
+      - name: Build the judge image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.judge
+          tags: microhelium-judge:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --privileged matches how docker-compose.yml runs the autojudge
+      # service, and is what lets bubblewrap create user namespaces. The
+      # workspace is mounted over the image's own copy so the code under
+      # test is this commit's, with the vendor tree installed above.
+      #
+      # --fail-on-skipped is the point of this job: the judging suites skip
+      # themselves when no usable sandbox exists, so without it a broken
+      # sandbox would show up as a green build that quietly tested nothing.
+      - name: Full suite inside the judge image
+        run: |
+          docker run --rm --privileged \
+            -v "$PWD":/var/www/html \
+            -w /var/www/html \
+            microhelium-judge:ci \
+            ./vendor/bin/phpunit --no-coverage --fail-on-skipped
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # tests/Frontend/vue-loader.js uses module.registerHooks(), which
+          # only exists from Node 22.15. On Node 20 features.test.js dies at
+          # import time and eleven of the twenty-six tests never run.
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:frontend
+
+      - name: Production asset build
+        run: npm run build
