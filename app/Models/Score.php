@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Services\BalloonService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -67,7 +68,10 @@ class Score extends Model
 
         $score->attempts++;
 
+        $justSolved = false;
+
         if ($run->isAccepted()) {
+            $justSolved = true;
             $score->is_solved = true;
             $score->solved_time = (int) floor($run->contest_time / 60);
             $score->penalty_time = ($score->attempts - 1) * $run->contest->penalty;
@@ -87,5 +91,13 @@ class Score extends Model
 
         // Update leaderboard
         Leaderboard::updateForUser($run->contest_id, $run->user_id);
+
+        if ($justSolved) {
+            // Issue #87: the one point every judging path converges on --
+            // the auto judge, a manual verdict, and the API's judge and
+            // rejudge all reach here. Hooking the balloon anywhere else
+            // would cover some of them and quietly miss the rest.
+            app(BalloonService::class)->awardFor($run);
+        }
     }
 }

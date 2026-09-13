@@ -15,6 +15,7 @@ class Task extends Model
         'contest_id',
         'site_id',
         'user_id',
+        'problem_id',
         'task_number',
         'description',
         'filename',
@@ -41,6 +42,11 @@ class Task extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    public function problem(): BelongsTo
+    {
+        return $this->belongsTo(Problem::class);
     }
 
     public function user(): BelongsTo
@@ -70,8 +76,11 @@ class Task extends Model
 
     public static function getNextTaskNumber(int $contestId, int $siteId): int
     {
-        return self::where('contest_id', $contestId)
+        // `?? 1` used to sit after the `+ 1`, where it could never fire:
+        // `null + 1` is already 1, so the null case was handled by accident
+        // rather than by the coalesce that looked like it was handling it.
+        return (int) (self::where('contest_id', $contestId)
             ->where('site_id', $siteId)
-            ->max('task_number') + 1 ?? 1;
+            ->max('task_number') ?? 0) + 1;
     }
 }

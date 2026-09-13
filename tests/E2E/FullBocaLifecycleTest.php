@@ -168,17 +168,26 @@ class FullBocaLifecycleTest extends TestCase
         $manualJudgeResponse->assertRedirect(route('judge.runs'));
         $this->assertDatabaseHas('runs', ['id' => $run->id, 'answer_id' => $wrongAnswer->id, 'judge_id' => $judge->user_id]);
 
-        // --- A staff member can complete a task -------------------------
-        $staff = $this->createTestUser(['user_type' => 'staff', 'contest_id' => $contest->id]);
-        $task = Task::create([
+        // --- The accepted run raised a balloon, and staff complete it ---
+        // Issue #87: this task used to be hand-created here, because nothing
+        // in the application ever produced one. It is now the real article,
+        // raised by Score::updateScore() when the run above was accepted --
+        // which is what makes this the last link of the chain rather than a
+        // fixture standing in for it.
+        $staff = $this->createTestUser([
+            'user_type' => 'staff',
             'contest_id' => $contest->id,
             'site_id' => $site->id,
-            'user_id' => $team->user_id,
-            'task_number' => 1,
-            'description' => 'Entregar balao do problema A',
-            'contest_time' => 100,
-            'status' => 'pending',
         ]);
+
+        $task = Task::where('contest_id', $contest->id)
+            ->where('user_id', $team->user_id)
+            ->where('problem_id', $realProblem->id)
+            ->firstOrFail();
+
+        $this->assertTrue($task->is_system);
+        $this->assertSame('pending', $task->status);
+        $this->assertSame($site->id, $task->site_id);
 
         $staffTasksResponse = $this->actingAs($staff)->get('/staff/tasks');
         $staffTasksResponse->assertStatus(200);
