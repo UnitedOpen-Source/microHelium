@@ -34,8 +34,12 @@ class AutoJudgeService
     protected string $rssTimePath;
     protected ?bool $sandboxProbeFailed = null;
 
-    public function __construct()
+    protected CgroupMemoryLimiter $cgroup;
+
+    public function __construct(?CgroupMemoryLimiter $cgroup = null)
     {
+        $this->cgroup = $cgroup ?? new CgroupMemoryLimiter;
+
         $this->workDir = config('autojudge.work_dir', '/tmp/autojudge');
         $this->defaultTimeLimit = config('autojudge.time_limit', 10);
         $this->defaultMemoryLimit = config('autojudge.memory_limit', 512);
@@ -164,9 +168,22 @@ class AutoJudgeService
      * actually touch. The verdict comes from peak RSS instead
      * (peakRssKb()), which is how DMOJ produces an MLE with no cgroups and
      * no privileges; the grace numbers are DMOJ's own shipped table.
+     *
+     * Issue #86 -- and it is a barrier of last resort. Where a cgroup
+     * memory.max is available it caps RESIDENT memory, which is both a
+     * harder bound and one every language tolerates, and the address-space
+     * approximation is dropped rather than stacked under it: the barrier
+     * sits at limit+grace where memory.max sits at the limit, so it can
+     * never bind first, while it can still fail a runtime that reserves
+     * address space it never touches. See config/autojudge.php for the
+     * measurement.
      */
     protected function addressSpaceLimitKbFor(object $language, int $memoryLimitMb): ?int
     {
+        if ($this->cgroup->isAvailable()) {
+            return null;
+        }
+
         $extension = $language->extension ?? '';
 
         // An explicit null means this runtime gets no barrier: see the
@@ -522,20 +539,56 @@ class AutoJudgeService
             'memory_kb' => $this->addressSpaceLimitKbFor($language, $memoryLimit),
         ]);
 
-        $result = Process::timeout($timeLimit + 5)
-            ->path($runDir)
-            ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
-            ->run($command);
+        // Issue #86 -- outermost, so the cgroup is joined before bwrap
+        // starts and covers everything inside it. A no-op where no
+        // delegated subtree exists.
+        $cgroupName = 'run_'.$run->id.'_'.getmypid();
+        $command = $this->cgroup->confine($command, $cgroupName, $memoryLimit);
 
-        $this->assertSandboxStarted($result);
+        // Released in a finally, because the two ways out of this block
+        // that are not a return both throw: Process::run() raises
+        // ProcessTimedOutException when the backstop fires, and
+        // assertSandboxStarted() raises when bwrap never started. Releasing
+        // only on the happy path would leave the cgroup behind on exactly
+        // the runs most likely to still have a process inside it -- and a
+        // cgroup with a live process in it is holding the memory this is
+        // supposed to bound. create() reuses a stale directory only when
+        // the same name recurs, and the name carries the pid, so after a
+        // worker is recycled it never does.
+        try {
+            $result = Process::timeout($timeLimit + 5)
+                ->path($runDir)
+                ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
+                ->run($command);
+
+            $this->assertSandboxStarted($result);
+        } finally {
+            $cgroupUsage = $this->cgroup->release($cgroupName);
+        }
 
         $exitCode = $result->exitCode();
         $peakRssKb = $this->peakRssKb($rssPath);
 
-        // Issue #86 -- the memory verdict, decided by measurement rather
-        // than by how the process happened to die. An allocation that fails
-        // and one that gets killed look identical from the outside; the
-        // peak does not. This is what gives every language an MLE,
+        // Issue #86 -- the hard evidence, where a cgroup was available: the
+        // kernel either killed the run for its memory or held it at the
+        // ceiling. Checked before peak RSS because it is the cap that was
+        // actually enforced, while %M is a measurement of what the run got
+        // away with.
+        if ($this->cgroup->exceeded($cgroupUsage, $memoryLimit, $exitCode === 0)) {
+            return [
+                'success' => false,
+                'verdict' => 'MLE',
+                'message' => 'Memory Limit Exceeded',
+                'stdout' => $result->output(),
+                'stderr' => $result->errorOutput(),
+            ];
+        }
+
+        // Issue #86 -- the fallback, and the only verdict available where
+        // no cgroup could be delegated: measurement rather than how the
+        // process happened to die. An allocation that fails and one that
+        // gets killed look identical from the outside; the peak does not.
+        // This is what gives every language an MLE even unprivileged,
         // including the ones no rlimit can cap.
         if ($peakRssKb !== null && $peakRssKb > $memoryLimit * 1024) {
             return [

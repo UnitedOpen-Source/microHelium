@@ -181,6 +181,12 @@ class AutoJudgeServiceTest extends TestCase
         config([
             'autojudge.use_bwrap' => true,
             'autojudge.bwrap_path' => '/bin/sh',
+            // Issue #86: pinned absent, so these tests describe the
+            // no-cgroup fallback whether or not the machine running them
+            // has a delegated subtree. The address-space barrier is only
+            // applied when there is no resident cap to be had, and the
+            // judge image itself has one.
+            'autojudge.cgroup_root' => '/sys/fs/cgroup/nao-delegado',
         ]);
 
         return new AutoJudgeService();
@@ -298,11 +304,11 @@ class AutoJudgeServiceTest extends TestCase
         $method = new \ReflectionMethod($service, 'addressSpaceLimitKbFor');
         $limit = 256;
 
-        // Issue #86: `ulimit -v` now applies to everything, as
-        // limit + grace, because it is a crash barrier and not the
-        // measurement. The grace numbers are DMOJ's shipped table; Node's
-        // 1024 MB is the same figure we arrived at independently when V8
-        // refused to boot below roughly 1 GB of address space.
+        // Issue #86: with no cgroup to be had, `ulimit -v` applies to
+        // everything as limit + grace, because it is a crash barrier and
+        // not the measurement. The grace numbers are DMOJ's shipped table;
+        // Node's 1024 MB is the same figure we arrived at independently
+        // when V8 refused to boot below roughly 1 GB of address space.
         foreach ([
             'c_gcc13' => 64,
             'py3' => 128,
@@ -335,6 +341,120 @@ class AutoJudgeServiceTest extends TestCase
                 "{$extension} must not get an address-space barrier"
             );
         }
+    }
+
+    public function test_a_cgroup_memory_cap_replaces_the_address_space_barrier_entirely()
+    {
+        // Issue #86. Stacking them buys nothing: the barrier sits at
+        // limit+grace and memory.max at the limit, so the cgroup always
+        // binds first -- measured on the judge image, a Python hog at a
+        // 256 MB limit is OOM-killed at exactly 256 MB with `ulimit -v
+        // 393216` and without it alike. What the barrier can still do is
+        // fail a runtime that reserves address space it never touches,
+        // which is why the JVM rows are null to begin with.
+        config([
+            'autojudge.use_bwrap' => true,
+            'autojudge.bwrap_path' => '/bin/sh',
+            // Any writable directory delegates as far as isAvailable() is
+            // concerned; whether the kernel enforces it is
+            // JudgeSandboxConfinementTest's question.
+            'autojudge.cgroup_root' => sys_get_temp_dir(),
+        ]);
+
+        $service = new AutoJudgeService();
+        $method = new \ReflectionMethod($service, 'addressSpaceLimitKbFor');
+
+        foreach (['c_gcc13', 'py3', 'go', 'js_node24', 'java21', 'kt'] as $extension) {
+            $this->assertNull(
+                $method->invoke($service, (object) ['extension' => $extension], 256),
+                "{$extension} must lose its address-space barrier once a resident cap is available"
+            );
+        }
+    }
+
+    /**
+     * Issue #86 -- the per-run cgroup must be released even when the run
+     * blows up, because the two ways out of executeProgram() that are not a
+     * return both throw: Process::run() raises ProcessTimedOutException
+     * when the backstop timeout fires, and assertSandboxStarted() raises
+     * when bwrap never started.
+     *
+     * Those are exactly the runs most likely to still have a process inside
+     * the cgroup, and a cgroup with a live process in it is holding the
+     * memory the cap exists to bound. The name carries the pid, so
+     * create()'s reuse of a stale directory never gets a second chance at
+     * it once the worker is recycled.
+     */
+    public function test_the_cgroup_is_released_even_when_the_run_throws()
+    {
+        config([
+            'autojudge.use_bwrap' => true,
+            'autojudge.bwrap_path' => '/bin/sh',
+        ]);
+
+        // Every process this service starts -- the run and the sandbox
+        // probe assertSandboxStarted() consults -- reports that bwrap could
+        // not start, which is what makes it throw.
+        Process::fake([
+            '*' => Process::result(output: '', errorOutput: 'bwrap: Creating new namespace failed: Operation not permitted', exitCode: 1),
+        ]);
+
+        $limiter = new class extends \App\Services\CgroupMemoryLimiter
+        {
+            public array $confined = [];
+
+            public array $released = [];
+
+            public function __construct()
+            {
+                parent::__construct('/sys/fs/cgroup/irrelevante');
+            }
+
+            public function isAvailable(): bool
+            {
+                return true;
+            }
+
+            public function confine(string $command, string $name, int $memoryLimitMb): string
+            {
+                $this->confined[] = $name;
+
+                return $command;
+            }
+
+            public function release(string $name): ?array
+            {
+                $this->released[] = $name;
+
+                return null;
+            }
+        };
+
+        $service = new AutoJudgeService($limiter);
+
+        $run = $this->runFixture();
+        $runDir = sys_get_temp_dir().'/mh_leak_'.getmypid();
+        @mkdir($runDir, 0755, true);
+
+        try {
+            $this->callProtected($service, 'executeProgram', [$run, $runDir, '/dev/null', $runDir.'/out.txt']);
+            $this->fail('executeProgram was expected to throw when the sandbox cannot start.');
+        } catch (\App\Exceptions\SandboxUnavailableException) {
+            // The point of the test is what happened on the way out.
+        } finally {
+            @unlink($runDir.'/out.txt');
+            foreach (glob($runDir.'/*') ?: [] as $leftover) {
+                @unlink($leftover);
+            }
+            @rmdir($runDir);
+        }
+
+        $this->assertNotEmpty($limiter->confined, 'The run should have been confined to a cgroup at all.');
+        $this->assertSame(
+            $limiter->confined,
+            $limiter->released,
+            'Every cgroup this run created should have been released, including on the throwing path.'
+        );
     }
 
     public function test_the_peak_memory_measurement_keeps_its_output_away_from_the_submissions()
@@ -523,6 +643,34 @@ class AutoJudgeServiceTest extends TestCase
         $this->assertFalse(Storage::disk('local')->exists("app/workdir/runs/{$run->id}"));
     }
     
+    /**
+     * A run with just enough attached to it for executeProgram() to build a
+     * command: a problem for the limits and a language for the command.
+     */
+    private function runFixture(): Run
+    {
+        $contest = Contest::factory()->create();
+        $user = User::factory()->create();
+        $problem = Problem::factory()->create(['contest_id' => $contest->id]);
+        $language = Language::factory()->create([
+            'contest_id' => $contest->id,
+            'compile_command' => 'g++',
+            'run_command' => './a.out',
+        ]);
+
+        return Run::factory()->create([
+            'user_id' => $user->user_id,
+            'contest_id' => $contest->id,
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+        ]);
+    }
+
+    private function callProtected(object $target, string $method, array $arguments): mixed
+    {
+        return (new \ReflectionMethod($target, $method))->invokeArgs($target, $arguments);
+    }
+
     private function createTestData()
     {
         $contest = Contest::factory()->create();

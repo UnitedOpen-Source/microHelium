@@ -154,7 +154,16 @@ ENV AUTOJUDGE_ENABLED=true
 ENV AUTOJUDGE_TIME_LIMIT=10
 ENV AUTOJUDGE_MEMORY_LIMIT=512
 
-# Switch to judge user
-USER judge
+# Issue #86 -- the container starts as root and the entrypoint drops to
+# judge, instead of `USER judge` doing it. A cgroup v2 subtree can only be
+# delegated to uid 1000 from root, and it has to exist before the judge
+# process starts so that process can already be inside it: the kernel only
+# allows a migration when the caller can write the cgroup.procs of the
+# common ancestor of source and destination. Nothing after this line runs
+# as root -- see docker/judge/entrypoint.sh, which also degrades to a plain
+# privilege drop wherever the delegation is not possible.
+COPY --chmod=755 docker/judge/entrypoint.sh /usr/local/bin/judge-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/judge-entrypoint"]
 
 CMD ["php", "artisan", "autojudge:start", "--sleep=5"]
