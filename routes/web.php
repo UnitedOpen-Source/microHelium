@@ -315,6 +315,13 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 
     // Contest Management Actions
     Route::post('/contest/{id}/activate', function ($id) {
+        // Issue #43: global activation must never be able to turn the
+        // technical practice contest into the running event.
+        if (DB::table('contests')->where('id', $id)->value('is_practice')) {
+            return redirect()->route('backend.configurations')
+                ->with('error', 'O contest tecnico do Treino Livre nao pode ser ativado como competicao.');
+        }
+
         // Deactivate all contests first
         DB::table('contests')->update(['is_active' => false]);
         // Activate the selected one
@@ -496,3 +503,4 @@ require __DIR__.'/frontend_api_webcast.php';
 require __DIR__.'/frontend_api_similarity.php';
 require __DIR__.'/frontend_api_bank_governance.php';
 require __DIR__.'/frontend_api_managed_accounts.php';
+require __DIR__.'/frontend_api_practice.php';

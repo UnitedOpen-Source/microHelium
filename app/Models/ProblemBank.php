@@ -53,6 +53,23 @@ class ProblemBank extends Model
         return $this->hasMany(ProblemBankOwnershipTransfer::class);
     }
 
+    /**
+     * Issue #43 -- every practice publication this entry has ever had,
+     * open or closed (docs/specs/43-practice.md).
+     */
+    public function practicePublications(): HasMany
+    {
+        return $this->hasMany(PracticePublication::class);
+    }
+
+    public function activePracticePublication(): ?PracticePublication
+    {
+        return $this->practicePublications()
+            ->whereNull('unpublished_at')
+            ->latest('published_at')
+            ->first();
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

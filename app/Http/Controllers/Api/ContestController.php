@@ -14,7 +14,11 @@ class ContestController extends Controller
 {
     public function index(): JsonResponse
     {
+        // Issue #43: the technical practice contest is excluded from the
+        // public selector for everyone, admins included -- it is reached
+        // through /practice, not by picking it as an event.
         $contests = Contest::query()
+            ->competition()
             ->when(!auth()->user()?->isAdmin(), fn($q) => $q->where('is_public', true))
             ->withCount(['problems', 'users', 'runs'])
             ->orderByDesc('created_at')
@@ -101,6 +105,12 @@ class ContestController extends Controller
 
     public function activate(Contest $contest): JsonResponse
     {
+        // Issue #43: global activation must never be able to turn the
+        // practice contest into the running event.
+        if ($contest->is_practice) {
+            abort(422, 'O contest tecnico do Treino Livre nao pode ser ativado como competicao.');
+        }
+
         $contest->update(['is_active' => true]);
 
         return response()->json(['message' => 'Contest activated', 'contest' => $contest]);

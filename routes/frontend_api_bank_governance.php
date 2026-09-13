@@ -19,4 +19,11 @@ Route::prefix('api/frontend')->middleware(['auth'])->group(function () {
         ->name('api.frontend.bank-governance.index');
     Route::patch('/bank-governance/{bank}', [BankGovernanceController::class, 'update'])
         ->name('api.frontend.bank-governance.update');
+
+    // Issue #43 -- publish/withdraw this entry in the practice library
+    // (docs/specs/43-practice.md). Authorized by
+    // ProblemBankPolicy::publishToPractice(), which is admin-only while the
+    // disclosure policy for material from still-active events is open.
+    Route::post('/bank-governance/{bank}/practice', [BankGovernanceController::class, 'practice'])
+        ->name('api.frontend.bank-governance.practice');
 });
