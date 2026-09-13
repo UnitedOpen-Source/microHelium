@@ -152,37 +152,94 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Languages where the memory limit is enforced with `ulimit -v`
+    | Address-space grace per language (MB)
     |--------------------------------------------------------------------------
     |
-    | Issue #86. Until now resident memory was capped only by the
-    | per-language {memory} placeholder in run_command -- which exists for
-    | Java and Kotlin (-Xmx) and for nothing else. Measured in the judge
-    | image, a C submission allocating in a loop reached 4 GB and kept
-    | going; under `ulimit -v 262144` the same program fails its malloc at
-    | 240 MB, and the Python equivalent raises MemoryError.
+    | Issue #86. Where `ulimit -v` is applied it is `memory_limit + grace`,
+    | and it is a CRASH BARRIER rather than the measurement: the verdict
+    | comes from peak RSS (see rss_time_path below). That split is DMOJ's
+    | design.
     |
-    | It is a list rather than a blanket setting because `ulimit -v` caps
-    | ADDRESS SPACE, not resident memory, and runtimes that reserve large
-    | virtual ranges at startup die under it no matter how little they
-    | actually touch. Measured in the same image at a 256 MB cap:
+    | DMOJ's shipped address_grace table was the starting point and holds
+    | for Go (768) and Node (1024) -- their Node figure is the same 1 GB we
+    | arrived at independently. It does NOT hold for the JVM and .NET on
+    | this image, which need several times more; those are measured below
+    | and given no barrier at all.
     |
-    |     C, C++, Pascal, Rust, Python, Ruby, PHP   run normally
-    |     Java / Kotlin    "Error occurred during initialization of VM"
-    |     Go               "failed to reserve page summary memory"
-    |     Node / TypeScript  silent failure below ~1 GB of address space
+    | The grace exists because `ulimit -v` caps ADDRESS SPACE, and the JVM,
+    | Go and V8 reserve large virtual ranges at startup: without headroom
+    | they refuse to boot no matter how little memory they actually touch.
+    | Our own measurement said V8 fails silently below roughly 1 GB of
+    | address space; DMOJ ships 1024 MB for Node. Same number, found
+    | independently.
     |
-    | So the JVM languages keep -Xmx, and Go, Node, TypeScript and C# keep
-    | today's behaviour until their own runtime flags are wired up or
-    | cgroups land -- see #86, which stays open for the unified answer.
-    |
-    | An extension missing from this list is never worse off than before:
-    | it simply gets no rlimit.
+    | A language not listed here gets `default`.
     |
     */
-    'memory_rlimit_languages' => array_filter(explode(',', (string) env(
-        'AUTOJUDGE_MEMORY_RLIMIT_LANGUAGES',
-        'c_gcc13,c_clang17,c99_gcc,cpp_gpp13,cpp14_gpp,cpp17_gpp,cpp_clang,'
-        .'pas_fpc,pas_gpc,rs,py3,py2,pypy3,php,rb,perl,lua'
-    ))),
+    'memory_grace_mb' => [
+        'default' => (int) env('AUTOJUDGE_MEMORY_GRACE_MB', 64),
+
+        // Measured here, at a 256 MB problem limit. DMOJ's numbers hold for
+        // Go and Node; the JVM and .NET on this image need far more than
+        // DMOJ ships, so they are handled differently below.
+        'go' => 768,
+        'js_node24' => 1024,
+        'js_node22' => 1024,
+        'js_node20' => 1024,
+        'ts' => 1024,
+        'py3' => 128,
+        'py2' => 128,
+        'pypy3' => 128,
+        'rb' => 64,
+
+        // null = no address-space barrier at all, and that is deliberate.
+        // Measured on this image, the smallest `ulimit -v` each of these
+        // will even boot under, for a 256 MB problem limit:
+        //
+        //     java     2048 MB   "Could not allocate compressed class
+        //                         space: 1073741824 bytes" below that
+        //     kotlin   4096 MB   (java -jar with the bundled runtime)
+        //     C#       3072 MB   "GC heap initialization failed with
+        //                         error 0x8007000E" below that
+        //
+        // A barrier seven to fifteen times the limit bounds nothing worth
+        // bounding. These keep their own runtime caps instead -- -Xmx and
+        // DOTNET_GCHeapHardLimit, wired up in #104 -- and the MLE verdict
+        // comes from measured peak RSS either way, which is the whole
+        // point of measuring rather than inferring.
+        'java21' => null,
+        'java17' => null,
+        'kt' => null,
+        'scala' => null,
+        'groovy' => null,
+        'clj' => null,
+        'cs_dotnet' => null,
+        'cs_mono' => null,
+        'fs_dotnet' => null,
+        'vb' => null,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Peak-memory measurement
+    |--------------------------------------------------------------------------
+    |
+    | Issue #86 -- where the MLE verdict actually comes from. The run is
+    | wrapped in `time -f`, whose %M is the peak resident set size in KB,
+    | and a run whose peak exceeds the problem's memory limit is MLE
+    | regardless of how it died.
+    |
+    | This is how DMOJ produces MLE with no cgroups and no privileges at
+    | all. cgroup v2's memory.max would be a harder cap, but it costs a
+    | privileged judge container (the isolate manual: "If you still want to
+    | use containers, you are on your own and you probably have to make
+    | them privileged") and it still does not guarantee an OOM kill -- an
+    | allocation that simply returns NULL looks like any other crash there
+    | too. Tracked in #86.
+    |
+    | If the binary is absent the run is judged exactly as before, without
+    | an MLE verdict: a missing measurement must not break judging.
+    |
+    */
+    'rss_time_path' => env('AUTOJUDGE_TIME_PATH', '/usr/bin/time'),
 ];

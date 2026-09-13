@@ -13,6 +13,12 @@ use Illuminate\Support\Facades\Process;
 
 class AutoJudgeService
 {
+    /**
+     * Marks the peak-RSS line `time -f` writes, so it can be told apart
+     * from anything else that reaches that stream.
+     */
+    private const RSS_PREFIX = 'MHRSS';
+
     public string $workDir;
     protected int $defaultTimeLimit;
     protected int $defaultMemoryLimit;
@@ -23,7 +29,9 @@ class AutoJudgeService
     protected int $runMaxFileKb;
     protected int $runMaxProcesses;
 
-    protected array $memoryRlimitLanguages;
+    protected array $memoryGraceMb;
+
+    protected string $rssTimePath;
     protected ?bool $sandboxProbeFailed = null;
 
     public function __construct()
@@ -37,7 +45,8 @@ class AutoJudgeService
         $this->compileMaxFileKb = (int) config('autojudge.compile_max_file_kb', 262144);
         $this->runMaxFileKb = (int) config('autojudge.run_max_file_kb', 32768);
         $this->runMaxProcesses = (int) config('autojudge.run_max_processes', 256);
-        $this->memoryRlimitLanguages = config('autojudge.memory_rlimit_languages', []);
+        $this->memoryGraceMb = config('autojudge.memory_grace_mb', ['default' => 64]);
+        $this->rssTimePath = (string) config('autojudge.rss_time_path', '/usr/bin/time');
     }
 
     /**
@@ -146,29 +155,78 @@ class AutoJudgeService
     }
 
     /**
-     * The `ulimit -v` value for this language, or null when it must not get
-     * one.
+     * The `ulimit -v` value for this language: the problem's memory limit
+     * plus a per-language grace.
      *
-     * `ulimit -v` caps ADDRESS SPACE. For a C, C++, Pascal, Rust, Python,
-     * Ruby or PHP program that is close enough to a memory cap to be worth
-     * having -- measured in the judge image, a C malloc loop runs past 4 GB
-     * unbounded and fails at 240 MB under a 256 MB cap, and the Python
-     * equivalent raises MemoryError. For the JVM, Go and V8 it is not a cap
-     * at all: they reserve large virtual ranges at startup and refuse to
-     * boot under one, whatever they actually touch. Those keep their own
-     * runtime flag -- the {memory} placeholder in run_command, which is
-     * Java's -Xmx today.
-     *
-     * A language absent from autojudge.memory_rlimit_languages is no worse
-     * off than before this existed: it simply gets no rlimit.
+     * This is a crash barrier, not the measurement. `ulimit -v` caps
+     * ADDRESS SPACE, and the JVM, Go and V8 reserve large virtual ranges at
+     * startup -- without headroom they refuse to boot however little they
+     * actually touch. The verdict comes from peak RSS instead
+     * (peakRssKb()), which is how DMOJ produces an MLE with no cgroups and
+     * no privileges; the grace numbers are DMOJ's own shipped table.
      */
-    protected function memoryRlimitKbFor(object $language, int $memoryLimitMb): ?int
+    protected function addressSpaceLimitKbFor(object $language, int $memoryLimitMb): ?int
     {
-        if (!in_array($language->extension ?? '', $this->memoryRlimitLanguages, true)) {
+        $extension = $language->extension ?? '';
+
+        // An explicit null means this runtime gets no barrier: see the
+        // measurements in config/autojudge.php for why a JVM or .NET one
+        // would have to be seven to fifteen times the limit to let the
+        // runtime start, at which point it bounds nothing.
+        if (array_key_exists($extension, $this->memoryGraceMb) && $this->memoryGraceMb[$extension] === null) {
             return null;
         }
 
-        return max(1, $memoryLimitMb) * 1024;
+        $grace = (int) ($this->memoryGraceMb[$extension] ?? $this->memoryGraceMb['default'] ?? 64);
+
+        return (max(1, $memoryLimitMb) + $grace) * 1024;
+    }
+
+    /**
+     * Wraps a run so its peak resident set size is recorded.
+     *
+     * `time -f '%M'` writes the peak RSS in KB to ITS OWN stderr, which is
+     * why the measured command is re-nested in its own `bash -c`: the
+     * submission's stderr is already merged into the output file by the
+     * caller's redirections, and mixing the measurement into that file
+     * would corrupt the diff.
+     *
+     * If the binary is absent the command is returned untouched -- a
+     * missing measurement must not stop a contest.
+     */
+    protected function withPeakRssMeasurement(string $command, string $rssPath): string
+    {
+        if (! @is_executable($this->rssTimePath)) {
+            return $command;
+        }
+
+        return sprintf(
+            '%s -f %s bash -c %s 2> %s',
+            escapeshellarg($this->rssTimePath),
+            escapeshellarg(self::RSS_PREFIX.' %M'),
+            escapeshellarg($command),
+            escapeshellarg($rssPath)
+        );
+    }
+
+    /**
+     * Peak RSS in KB for the run just finished, or null when it was not
+     * measured.
+     */
+    protected function peakRssKb(string $rssPath): ?int
+    {
+        if (! is_file($rssPath)) {
+            return null;
+        }
+
+        $contents = (string) @file_get_contents($rssPath);
+        @unlink($rssPath);
+
+        if (preg_match('/'.preg_quote(self::RSS_PREFIX, '/').'\s+(\d+)/', $contents, $matches) !== 1) {
+            return null;
+        }
+
+        return (int) $matches[1];
     }
 
     /**
@@ -450,13 +508,18 @@ class AutoJudgeService
         // the application root the sandbox does not mount. Bind this one
         // file -- not the problems tree, which would hand submitted code
         // every problem's hidden test data.
+        // Issue #86: measured inside the sandbox, so the peak belongs to the
+        // submission and not to bwrap or the judge.
+        $rssPath = $runDir.'/.mhrss_'.$run->id;
+        $command = $this->withPeakRssMeasurement($command, $rssPath);
+
         $command = $this->wrapWithBwrap($command, $runDir, [
             'allow_net' => false,
             'ro_binds' => [$inputFile, $this->judgeRuntimePath(), file_exists($runScript) ? $runScript : null],
             'cpu_seconds' => $timeLimit,
             'file_size_kb' => $this->runMaxFileKb,
             'max_processes' => $this->runMaxProcesses,
-            'memory_kb' => $this->memoryRlimitKbFor($language, $memoryLimit),
+            'memory_kb' => $this->addressSpaceLimitKbFor($language, $memoryLimit),
         ]);
 
         $result = Process::timeout($timeLimit + 5)
@@ -467,12 +530,30 @@ class AutoJudgeService
         $this->assertSandboxStarted($result);
 
         $exitCode = $result->exitCode();
+        $peakRssKb = $this->peakRssKb($rssPath);
 
-        // Interpret exit codes. 152 is 128+SIGXCPU, how the sandbox's
-        // `ulimit -t` reports a program that burned through its CPU budget;
-        // without it that lands in the generic branch below as a Runtime
-        // Error instead of a Time Limit Exceeded.
-        if ($exitCode === 137 || $exitCode === 9 || $exitCode === 152) {
+        // Issue #86 -- the memory verdict, decided by measurement rather
+        // than by how the process happened to die. An allocation that fails
+        // and one that gets killed look identical from the outside; the
+        // peak does not. This is what gives every language an MLE,
+        // including the ones no rlimit can cap.
+        if ($peakRssKb !== null && $peakRssKb > $memoryLimit * 1024) {
+            return [
+                'success' => false,
+                'verdict' => 'MLE',
+                'message' => 'Memory Limit Exceeded',
+                'stdout' => $result->output(),
+                'stderr' => $result->errorOutput(),
+            ];
+        }
+
+        // Interpret exit codes. 152 is 128+SIGXCPU, how a shell reports a
+        // program that burned through its `ulimit -t` budget; 24 is the
+        // same thing reported by `time`, which returns the raw signal
+        // number rather than 128+n. Without both, a CPU kill lands in the
+        // generic branch below as a Runtime Error instead of a Time Limit
+        // Exceeded.
+        if (in_array($exitCode, [137, 9, 152, 24], true)) {
             return [
                 'success' => false,
                 'verdict' => 'TLE',
@@ -482,9 +563,10 @@ class AutoJudgeService
             ];
         }
 
-        // 128+SIGXFSZ -- the program blew the sandbox's `ulimit -f` output
-        // budget. Reported distinctly so it is not mistaken for a crash.
-        if ($exitCode === 153) {
+        // SIGXFSZ -- the program blew the sandbox's `ulimit -f` output
+        // budget. 153 from a shell, 25 raw from `time`. Reported distinctly
+        // so it is not mistaken for a crash.
+        if ($exitCode === 153 || $exitCode === 25) {
             return [
                 'success' => false,
                 'verdict' => 'RE',
