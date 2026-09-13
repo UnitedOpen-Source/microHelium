@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Judgehost\PayloadController;
+use App\Http\Controllers\Judgehost\ResultController;
 use App\Http\Controllers\Judgehost\WorkController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,3 +18,18 @@ use Illuminate\Support\Facades\Route;
 Route::post('/api/judgehost/register', [WorkController::class, 'register']);
 Route::post('/api/judgehost/fetch-work', [WorkController::class, 'fetchWork']);
 Route::post('/api/judgehost/runs/{run}/give-back', [WorkController::class, 'giveBackRun'])->whereNumber('run');
+
+// The bytes and the verdict. Every one of these names a run in its URL and
+// is scoped to the machine currently holding it (App\Http\Controllers\
+// Judgehost\HoldsRun) -- a judgehost reads a contestant's source and a
+// problem's hidden test data only while it is actually judging that run,
+// and never afterwards.
+Route::get('/api/judgehost/runs/{run}/source', [PayloadController::class, 'source'])->whereNumber('run');
+Route::get('/api/judgehost/runs/{run}/testcases', [PayloadController::class, 'testCases'])->whereNumber('run');
+Route::get('/api/judgehost/runs/{run}/testcases/{testCase}/{kind}', [PayloadController::class, 'testCaseFile'])
+    ->whereNumber('run')->whereNumber('testCase')->whereIn('kind', ['input', 'output']);
+Route::post('/api/judgehost/runs/{run}/result', [ResultController::class, 'store'])->whereNumber('run');
+
+// The verdict vocabulary for a contest -- answers are per contest and
+// installations rename them, so an agent must not hardcode BOCA's.
+Route::get('/api/judgehost/contests/{contest}/answers', [ResultController::class, 'vocabulary'])->whereNumber('contest');

@@ -762,6 +762,24 @@ class AutoJudgeService
 
     protected function updateRunWithResult(Run $run, array $result): void
     {
+        $this->recordVerdict($run, $result);
+    }
+
+    /**
+     * Write a verdict and everything that has to happen because of it.
+     *
+     * Public because issue #53's judgehosts report their results over HTTP
+     * rather than by being this process. A verdict that arrived from another
+     * machine has to land through the same code as a local one: the
+     * scoreboard recompute, the balloon Score::updateScore() raises on a
+     * first solve, and the contest-log entry are not optional extras --
+     * writing the columns without them produces a run that looks judged and
+     * a scoreboard that disagrees with it.
+     *
+     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null}  $result
+     */
+    public function recordVerdict(Run $run, array $result): void
+    {
         $answer = Answer::where('contest_id', $run->contest_id)
             ->where('short_name', $result['verdict'])
             ->first();
@@ -770,7 +788,7 @@ class AutoJudgeService
             'status' => 'judged',
             'answer_id' => $answer?->id,
             'auto_judge_end' => now(),
-            'auto_judge_result' => $result['message'],
+            'auto_judge_result' => $result['message'] ?? null,
             'auto_judge_stdout' => substr($result['stdout'] ?? '', 0, 65535),
             'auto_judge_stderr' => substr($result['stderr'] ?? '', 0, 65535),
             'judged_time' => $run->contest->getContestTime(),
