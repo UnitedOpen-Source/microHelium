@@ -49,7 +49,6 @@ class BackendRoutesTest extends TestCase
         $backendRoutes = [
             '/backend/exercises',
             '/backend/users',
-            '/backend/teams',
             '/backend/configurations',
             '/backend/contest-wizard',
         ];
@@ -149,7 +148,6 @@ class BackendRoutesTest extends TestCase
         $backendRoutes = [
             '/backend/exercises',
             '/backend/users',
-            '/backend/teams',
             '/backend/configurations',
             '/backend/contest-wizard',
             '/backend/problem-bank',

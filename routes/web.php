@@ -4,7 +4,6 @@ use App\Http\Controllers\Backend\ConfigurationController;
 use App\Http\Controllers\Backend\ContestWizardController;
 use App\Http\Controllers\Backend\ProblemBankController;
 use App\Http\Controllers\Backend\ProblemManagementController;
-use App\Http\Controllers\Backend\TeamController;
 use App\Http\Controllers\Backend\UserController;
 use App\Http\Controllers\ClarificationController;
 use App\Http\Controllers\HomeController;
@@ -269,10 +268,6 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::put('/users/{user}', [UserController::class, 'update'])->name('backend.users.update');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('backend.users.destroy');
 
-    // Teams Management
-    Route::get('/teams', [TeamController::class, 'index'])->name('backend.teams');
-    Route::post('/teams', [TeamController::class, 'store']);
-    Route::delete('/teams/{id}', [TeamController::class, 'destroy'])->name('backend.teams.destroy');
 
     // Site Management (multi-site coordination -- see issue #18)
     Route::get('/sites', [App\Http\Controllers\Backend\SiteController::class, 'index'])->name('backend.sites');
