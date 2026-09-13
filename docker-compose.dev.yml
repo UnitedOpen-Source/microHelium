@@ -94,7 +94,11 @@ services:
 
   # Node.js for Vite
   node:
-    image: node:20-alpine
+    # Issue #101: tests/Frontend/vue-loader.js uses module.registerHooks(),
+    # which only exists from Node 22.15. On Node 20 features.test.js dies at
+    # import time and eleven of the twenty-six frontend tests never run --
+    # while `node --test` reports one failed file, not eleven missing tests.
+    image: node:22-alpine
     container_name: microhelium-node
     working_dir: /var/www/html
     volumes:
