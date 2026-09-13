@@ -372,7 +372,13 @@ class AutoJudgeService
         }
 
         // Step 2: Run test cases
-        $testCases = $problem->testCases()->orderBy('number')->get();
+        // Issue #116: use the relation when it is already loaded, the same
+        // idiom Problem::limitOverrideFor() uses. A judgehost agent holds
+        // its test cases from an HTTP payload and has no database to query;
+        // with the relation set, executeJudging() touches none.
+        $testCases = $problem->relationLoaded('testCases')
+            ? $problem->testCases->sortBy('number')->values()
+            : $problem->testCases()->orderBy('number')->get();
         if ($testCases->isEmpty()) {
             return [
                 'verdict' => 'CS',
