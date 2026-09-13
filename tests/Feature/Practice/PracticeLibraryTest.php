@@ -34,8 +34,8 @@ class PracticeLibraryTest extends TestCase
     private function bank(array $attributes = []): ProblemBank
     {
         return ProblemBank::create(array_merge([
-            'code' => 'SOMA'.rand(1000, 9999),
-            'name' => 'Soma '.rand(1000, 9999),
+            'code' => 'SOMA'.$this->uniqueSuffix(),
+            'name' => 'Soma '.$this->uniqueSuffix(),
             'description' => 'Some dois inteiros.',
             'input_description' => 'Dois inteiros a e b.',
             'output_description' => 'A soma de a e b.',

@@ -22,8 +22,8 @@ class BankGovernanceApiTest extends TestCase
     private function bank(array $attributes = []): ProblemBank
     {
         return ProblemBank::create(array_merge([
-            'code' => 'CODE'.rand(10000, 99999),
-            'name' => 'Problema '.rand(10000, 99999),
+            'code' => 'CODE'.$this->uniqueSuffix(),
+            'name' => 'Problema '.$this->uniqueSuffix(),
             'description' => 'desc',
             'input_description' => 'in',
             'output_description' => 'out',

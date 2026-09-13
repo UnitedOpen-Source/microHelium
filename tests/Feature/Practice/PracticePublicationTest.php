@@ -20,8 +20,8 @@ class PracticePublicationTest extends TestCase
     private function bank(array $attributes = []): ProblemBank
     {
         return ProblemBank::create(array_merge([
-            'code' => 'CODE'.rand(10000, 99999),
-            'name' => 'Problema '.rand(10000, 99999),
+            'code' => 'CODE'.$this->uniqueSuffix(),
+            'name' => 'Problema '.$this->uniqueSuffix(),
             'description' => 'Some a e b.',
             'input_description' => 'Dois inteiros.',
             'output_description' => 'A soma.',
