@@ -2,6 +2,7 @@
 
 namespace App\Services\Judgehost;
 
+use App\Http\Middleware\AuthenticateJudgehost;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -129,14 +130,35 @@ class JudgehostClient
 
     private function url(string $path): string
     {
-        return $this->server.'/api/judgehost'.$path;
+        return $this->server.'/api/remote-judges/v1'.$path;
+    }
+
+    /**
+     * Issue #123 -- the fencing token for the claim currently being worked.
+     *
+     * Held here rather than passed at every call site so no route that
+     * names a run can forget it: without it the server cannot tell this
+     * process from an older one of the same machine that never noticed it
+     * was replaced.
+     */
+    private ?string $claimToken = null;
+
+    public function useClaim(?string $claimToken): void
+    {
+        $this->claimToken = $claimToken;
     }
 
     private function request(): PendingRequest
     {
-        return Http::withToken($this->token)
+        $request = Http::withToken($this->token)
             ->timeout($this->timeout)
             ->acceptJson();
+
+        if ($this->claimToken !== null && $this->claimToken !== '') {
+            $request = $request->withHeaders([AuthenticateJudgehost::CLAIM_TOKEN_HEADER => $this->claimToken]);
+        }
+
+        return $request;
     }
 
     /**

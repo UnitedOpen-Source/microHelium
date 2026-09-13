@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Run;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Issue #53 -- handing runs out to judge machines, and taking them back.
@@ -59,6 +60,13 @@ class JudgeWorkQueue
                 'status' => 'judging',
                 'judgehost_id' => $judgehost->id,
                 'claimed_at' => now(),
+                // Issue #123 -- the fencing token for this claim. Identity
+                // has to reach "which claim", not stop at "which machine":
+                // two processes of one judgehost present the same
+                // credential, so without this a hung agent that is
+                // restarted can report over the run its replacement is
+                // judging.
+                'claim_token' => Str::random(48),
             ]);
 
             return $run->fresh();
@@ -82,6 +90,9 @@ class JudgeWorkQueue
                 'status' => 'pending',
                 'judgehost_id' => null,
                 'claimed_at' => null,
+                // The claim is over, so its token stops being current. A
+                // process still holding it is exactly what this refuses.
+                'claim_token' => null,
             ]);
     }
 
@@ -104,6 +115,7 @@ class JudgeWorkQueue
                 'status' => 'pending',
                 'judgehost_id' => null,
                 'claimed_at' => null,
+                'claim_token' => null,
             ]);
     }
 
@@ -145,10 +157,20 @@ class JudgeWorkQueue
         $problem = $run->problem;
         $language = $run->language;
 
+        $leaseSeconds = (int) config('judgehost.lease_seconds', 600);
+
         return [
             'run_id' => $run->id,
             'run_number' => $run->run_number,
             'contest_id' => $run->contest_id,
+            // Issue #123. The agent sends this back on every request that
+            // names the run; a token from a claim that is over is refused.
+            'claim_token' => $run->claim_token,
+            // And when it stops being current on its own, so an agent can
+            // tell a judging that overran from one that is still worth
+            // reporting.
+            'lease_expires_at' => optional($run->claimed_at)->copy()->addSeconds($leaseSeconds)?->toIso8601String(),
+            'lease_seconds' => $leaseSeconds,
             'problem' => [
                 'id' => $problem->id,
                 'short_name' => $problem->short_name,

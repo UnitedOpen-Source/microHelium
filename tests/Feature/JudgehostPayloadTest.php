@@ -39,6 +39,8 @@ class JudgehostPayloadTest extends TestCase
 
     private Answer $wrong;
 
+    private const CLAIM = 'claim-token-for-tests-0123456789';
+
     /** @var list<string> package directories to remove after the test */
     private array $packageDirs = [];
 
@@ -81,9 +83,24 @@ class JudgehostPayloadTest extends TestCase
         parent::tearDown();
     }
 
-    private function as(string $token): array
+    /**
+     * Issue #123: every request that names a run carries the token of the
+     * claim that granted it, alongside the machine's credential.
+     */
+    private function as(string $token, ?string $claimToken = null): array
     {
-        return ['Authorization' => 'Bearer '.$token];
+        $headers = ['Authorization' => 'Bearer '.$token];
+
+        if ($claimToken !== null) {
+            $headers['X-Claim-Token'] = $claimToken;
+        }
+
+        return $headers;
+    }
+
+    private function claimed(string $token, string $claimToken = self::CLAIM): array
+    {
+        return $this->as($token, $claimToken);
     }
 
     private function submission(?Problem $problem = null): Run
@@ -119,7 +136,12 @@ class JudgehostPayloadTest extends TestCase
     private function heldBy(Judgehost $judgehost, ?Problem $problem = null): Run
     {
         $run = $this->submission($problem);
-        $run->update(['status' => 'judging', 'judgehost_id' => $judgehost->id, 'claimed_at' => now()]);
+        $run->update([
+            'status' => 'judging',
+            'judgehost_id' => $judgehost->id,
+            'claimed_at' => now(),
+            'claim_token' => self::CLAIM,
+        ]);
 
         return $run->fresh();
     }
@@ -147,7 +169,7 @@ class JudgehostPayloadTest extends TestCase
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $response = $this->get("/api/judgehost/runs/{$run->id}/source", $this->as($token));
+        $response = $this->get("/api/remote-judges/v1/runs/{$run->id}/source", $this->claimed($token));
 
         $response->assertOk();
         $this->assertSame("int main(){}\n", $response->streamedContent());
@@ -161,7 +183,7 @@ class JudgehostPayloadTest extends TestCase
         [, $otherToken] = Judgehost::issue('judge-02');
         $run = $this->heldBy($holder);
 
-        $this->get("/api/judgehost/runs/{$run->id}/source", $this->as($otherToken))->assertForbidden();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/source", $this->claimed($otherToken))->assertForbidden();
     }
 
     public function test_a_host_cannot_read_the_source_of_an_unclaimed_run(): void
@@ -169,7 +191,7 @@ class JudgehostPayloadTest extends TestCase
         [, $token] = Judgehost::issue('judge-01');
         $run = $this->submission();
 
-        $this->get("/api/judgehost/runs/{$run->id}/source", $this->as($token))->assertForbidden();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/source", $this->claimed($token))->assertForbidden();
     }
 
     public function test_giving_a_run_back_also_gives_up_its_source(): void
@@ -177,12 +199,12 @@ class JudgehostPayloadTest extends TestCase
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $this->get("/api/judgehost/runs/{$run->id}/source", $this->as($token))->assertOk();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/source", $this->claimed($token))->assertOk();
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/give-back", [], $this->as($token))->assertOk();
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back", [], $this->claimed($token))->assertOk();
 
         // Access follows the lease, not the history of having held it.
-        $this->get("/api/judgehost/runs/{$run->id}/source", $this->as($token))->assertForbidden();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/source", $this->claimed($token))->assertForbidden();
     }
 
     public function test_the_source_needs_a_credential_at_all(): void
@@ -190,7 +212,7 @@ class JudgehostPayloadTest extends TestCase
         [$host] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $this->get("/api/judgehost/runs/{$run->id}/source")->assertUnauthorized();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/source")->assertUnauthorized();
     }
 
     // --- test cases -------------------------------------------------------
@@ -201,7 +223,7 @@ class JudgehostPayloadTest extends TestCase
         $run = $this->heldBy($host);
         $case = $this->problemCase($this->problem, 1, "3 4\n", "7\n");
 
-        $response = $this->getJson("/api/judgehost/runs/{$run->id}/testcases", $this->as($token));
+        $response = $this->getJson("/api/remote-judges/v1/runs/{$run->id}/testcases", $this->claimed($token));
 
         $response->assertOk()
             ->assertJsonPath('data.0.id', $case->id)
@@ -218,8 +240,8 @@ class JudgehostPayloadTest extends TestCase
         $run = $this->heldBy($host);
         $case = $this->problemCase($this->problem, 1, "3 4\n", "7\n");
 
-        $in = $this->get("/api/judgehost/runs/{$run->id}/testcases/{$case->id}/input", $this->as($token));
-        $out = $this->get("/api/judgehost/runs/{$run->id}/testcases/{$case->id}/output", $this->as($token));
+        $in = $this->get("/api/remote-judges/v1/runs/{$run->id}/testcases/{$case->id}/input", $this->claimed($token));
+        $out = $this->get("/api/remote-judges/v1/runs/{$run->id}/testcases/{$case->id}/output", $this->claimed($token));
 
         $in->assertOk();
         $out->assertOk();
@@ -240,9 +262,9 @@ class JudgehostPayloadTest extends TestCase
 
         $run = $this->heldBy($host);
 
-        $this->get("/api/judgehost/runs/{$run->id}/testcases/{$secret->id}/input", $this->as($token))
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/testcases/{$secret->id}/input", $this->claimed($token))
             ->assertForbidden();
-        $this->get("/api/judgehost/runs/{$run->id}/testcases/{$secret->id}/output", $this->as($token))
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/testcases/{$secret->id}/output", $this->claimed($token))
             ->assertForbidden();
     }
 
@@ -253,9 +275,9 @@ class JudgehostPayloadTest extends TestCase
         $run = $this->heldBy($holder);
         $case = $this->problemCase($this->problem, 1, "3 4\n", "7\n");
 
-        $this->get("/api/judgehost/runs/{$run->id}/testcases/{$case->id}/input", $this->as($otherToken))
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/testcases/{$case->id}/input", $this->claimed($otherToken))
             ->assertForbidden();
-        $this->getJson("/api/judgehost/runs/{$run->id}/testcases", $this->as($otherToken))
+        $this->getJson("/api/remote-judges/v1/runs/{$run->id}/testcases", $this->claimed($otherToken))
             ->assertForbidden();
     }
 
@@ -291,7 +313,7 @@ class JudgehostPayloadTest extends TestCase
         $this->assertNull($manifest['compile']);
         $this->assertNull($manifest['run']);
 
-        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare", $this->claimed($token))
             ->assertOk();
     }
 
@@ -305,7 +327,7 @@ class JudgehostPayloadTest extends TestCase
 
         $this->assertSame(['compile' => null, 'run' => null, 'compare' => null], $manifest);
 
-        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare", $this->claimed($token))
             ->assertNotFound();
     }
 
@@ -320,7 +342,7 @@ class JudgehostPayloadTest extends TestCase
         $run = $this->heldBy($host);
 
         foreach (['compile', 'run', 'compare'] as $kind) {
-            $response = $this->get("/api/judgehost/runs/{$run->id}/package/{$kind}", $this->as($token));
+            $response = $this->get("/api/remote-judges/v1/runs/{$run->id}/package/{$kind}", $this->claimed($token));
             $response->assertOk();
             $this->assertSame("{$kind} me\n", $response->streamedContent());
             $this->assertSame(hash('sha256', "{$kind} me\n"), $response->headers->get('X-Script-Sha256'));
@@ -334,7 +356,7 @@ class JudgehostPayloadTest extends TestCase
         $this->packageScripts($this->problem, ['compare' => "secret checker\n"]);
         $run = $this->heldBy($holder);
 
-        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($otherToken))
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare", $this->claimed($otherToken))
             ->assertForbidden();
     }
 
@@ -344,10 +366,10 @@ class JudgehostPayloadTest extends TestCase
         $this->packageScripts($this->problem, ['compare' => "secret checker\n"]);
         $run = $this->heldBy($host);
 
-        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))->assertOk();
-        $this->postJson("/api/judgehost/runs/{$run->id}/give-back", [], $this->as($token))->assertOk();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare", $this->claimed($token))->assertOk();
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back", [], $this->claimed($token))->assertOk();
 
-        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))->assertForbidden();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare", $this->claimed($token))->assertForbidden();
     }
 
     /**
@@ -365,7 +387,7 @@ class JudgehostPayloadTest extends TestCase
 
         // The held run's own problem defines no compare script, so there is
         // nothing to serve -- and certainly not the other problem's.
-        $response = $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token));
+        $response = $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare", $this->claimed($token));
 
         $response->assertNotFound();
         $this->assertStringNotContainsString('other problems checker', (string) $response->getContent());
@@ -377,7 +399,7 @@ class JudgehostPayloadTest extends TestCase
         $this->packageScripts($this->problem, ['compare' => "x\n"]);
         $run = $this->heldBy($host);
 
-        $this->get("/api/judgehost/runs/{$run->id}/package/compare")->assertUnauthorized();
+        $this->get("/api/remote-judges/v1/runs/{$run->id}/package/compare")->assertUnauthorized();
     }
 
     // --- the verdict ------------------------------------------------------
@@ -387,11 +409,11 @@ class JudgehostPayloadTest extends TestCase
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", [
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", [
             'verdict' => 'YES',
             'message' => 'Accepted',
             'stdout' => '7',
-        ], $this->as($token))->assertOk()->assertJsonPath('data.answer_id', $this->accepted->id);
+        ], $this->claimed($token))->assertOk()->assertJsonPath('data.answer_id', $this->accepted->id);
 
         $run->refresh();
         $this->assertSame('judged', $run->status);
@@ -415,7 +437,7 @@ class JudgehostPayloadTest extends TestCase
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'NO'], $this->as($token))->assertOk();
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'NO'], $this->claimed($token))->assertOk();
 
         $run->refresh();
         // A judged run must never also look leased -- the reaper would
@@ -430,7 +452,7 @@ class JudgehostPayloadTest extends TestCase
         [, $otherToken] = Judgehost::issue('judge-02');
         $run = $this->heldBy($holder);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'YES'], $this->as($otherToken))
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'YES'], $this->claimed($otherToken))
             ->assertForbidden();
 
         $this->assertSame('judging', $run->fresh()->status);
@@ -453,24 +475,28 @@ class JudgehostPayloadTest extends TestCase
         app(JudgeWorkQueue::class)->expireStaleLeases();
         $run->refresh()->update(['status' => 'judging', 'judgehost_id' => $fast->id, 'claimed_at' => now()]);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'YES'], $this->as($slowToken))
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'YES'], $this->as($slowToken))
             ->assertForbidden();
 
         $this->assertSame('judging', $run->fresh()->status);
         $this->assertSame($fast->id, $run->fresh()->judgehost_id);
     }
 
-    public function test_the_same_run_cannot_be_answered_twice(): void
+    public function test_a_repeated_report_from_the_same_claim_replays_instead_of_overwriting(): void
     {
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'YES'], $this->as($token))->assertOk();
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'YES'], $this->claimed($token))->assertOk();
 
-        // The lease is gone with the first answer, so the second is refused
-        // before it can overwrite the verdict.
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'NO'], $this->as($token))
-            ->assertForbidden();
+        // Issue #123: the same claim reporting again is a replay, not a
+        // conflict -- the network can drop after the server wrote the
+        // verdict. What it must never do is let the second call change it,
+        // even when the second call says something different.
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'NO'], $this->claimed($token))
+            ->assertOk()
+            ->assertJsonPath('data.replayed', true)
+            ->assertJsonPath('data.verdict', 'YES');
 
         $this->assertSame($this->accepted->id, $run->fresh()->answer_id);
     }
@@ -492,7 +518,7 @@ class JudgehostPayloadTest extends TestCase
         // Judged by someone else; the lease was never cleared.
         $run->update(['status' => 'judged', 'answer_id' => $this->wrong->id]);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'YES'], $this->as($token))
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'YES'], $this->claimed($token))
             ->assertStatus(409);
 
         $run->refresh();
@@ -505,7 +531,7 @@ class JudgehostPayloadTest extends TestCase
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->heldBy($host);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'MAYBE'], $this->as($token))
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'MAYBE'], $this->claimed($token))
             ->assertStatus(422)
             ->assertJsonValidationErrors('verdict');
 
@@ -522,7 +548,7 @@ class JudgehostPayloadTest extends TestCase
         $elsewhere = Contest::factory()->create();
         Answer::factory()->create(['contest_id' => $elsewhere->id, 'short_name' => 'ZZ']);
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/result", ['verdict' => 'ZZ'], $this->as($token))
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'ZZ'], $this->claimed($token))
             ->assertStatus(422)
             ->assertJsonValidationErrors('verdict');
     }
@@ -531,7 +557,7 @@ class JudgehostPayloadTest extends TestCase
     {
         [, $token] = Judgehost::issue('judge-01');
 
-        $response = $this->getJson("/api/judgehost/contests/{$this->contest->id}/answers", $this->as($token));
+        $response = $this->getJson("/api/remote-judges/v1/contests/{$this->contest->id}/answers", $this->claimed($token));
 
         $response->assertOk();
         $this->assertEqualsCanonicalizing(
@@ -542,6 +568,6 @@ class JudgehostPayloadTest extends TestCase
 
     public function test_the_vocabulary_still_needs_a_credential(): void
     {
-        $this->getJson("/api/judgehost/contests/{$this->contest->id}/answers")->assertUnauthorized();
+        $this->getJson("/api/remote-judges/v1/contests/{$this->contest->id}/answers")->assertUnauthorized();
     }
 }

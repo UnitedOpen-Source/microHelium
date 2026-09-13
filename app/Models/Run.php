@@ -27,6 +27,8 @@ class Run extends Model
         'status',
         'judgehost_id',
         'claimed_at',
+        'claim_token',
+        'reported_claim_token',
         'reconcile_attempts',
         'judge_id',
         'judge_site_id',

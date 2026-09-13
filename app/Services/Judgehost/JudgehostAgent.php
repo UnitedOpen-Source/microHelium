@@ -77,7 +77,18 @@ class JudgehostAgent
         $runId = (int) $payload['run_id'];
         $this->say('info', "Run #{$runId} recebido.");
 
-        $this->judgeOne($runId, $payload);
+        // Issue #123 -- everything said about this run from here on carries
+        // the token of the claim that granted it, and stops carrying it the
+        // moment the run is done. A process that hung through its lease
+        // holds a token that is no longer current, and the server refuses
+        // it rather than letting it overwrite a live judging.
+        $this->client->useClaim($payload['claim_token'] ?? null);
+
+        try {
+            $this->judgeOne($runId, $payload);
+        } finally {
+            $this->client->useClaim(null);
+        }
 
         return true;
     }

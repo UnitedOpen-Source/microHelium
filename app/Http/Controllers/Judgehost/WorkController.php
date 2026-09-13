@@ -77,7 +77,8 @@ class WorkController extends Controller
     {
         $this->assertHolds($request, $run);
 
-        $run->update(['status' => 'pending', 'judgehost_id' => null, 'claimed_at' => null]);
+        // The claim is over, so its token stops being current (#123).
+        $run->update(['status' => 'pending', 'judgehost_id' => null, 'claimed_at' => null, 'claim_token' => null]);
 
         return response()->json(['data' => ['run_id' => $run->id, 'status' => 'pending']]);
     }

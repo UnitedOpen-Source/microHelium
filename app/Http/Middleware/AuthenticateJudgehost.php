@@ -28,6 +28,17 @@ class AuthenticateJudgehost
 {
     public const ATTRIBUTE = 'judgehost';
 
+    /**
+     * Issue #123 -- the header carrying the fencing token of the claim a
+     * request is about.
+     *
+     * Defined on this class rather than on the HoldsRun trait that enforces
+     * it, because PHP does not let a trait constant be read through the
+     * trait name: the agent could not reference it, and two copies of the
+     * same string is exactly how a protocol constant drifts.
+     */
+    public const CLAIM_TOKEN_HEADER = 'X-Claim-Token';
+
     public function handle(Request $request, Closure $next): Response
     {
         $judgehost = Judgehost::authenticate($request->bearerToken());

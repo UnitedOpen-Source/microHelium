@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Judgehost;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\AuthenticateJudgehost;
 use App\Models\Answer;
 use App\Models\Run;
 use App\Services\AutoJudgeService;
@@ -50,6 +51,16 @@ class ResultController extends Controller
      */
     public function store(Request $request, Run $run): JsonResponse
     {
+        // Issue #123 -- a report that already landed is replayed, not
+        // refused. The network can drop after the server has written the
+        // verdict and before the agent hears so, and an agent that retries
+        // then is not doing anything wrong. Checked before assertHolds()
+        // because a judged run no longer has a judgehost_id to match, and
+        // the claim token is what identifies the reporter at that point.
+        if ($replay = $this->alreadyReported($request, $run)) {
+            return $replay;
+        }
+
         $judgehost = $this->assertHolds($request, $run);
 
         $data = $request->validate([
@@ -79,7 +90,18 @@ class ResultController extends Controller
             // `judged` never also looks leased. Written quietly: the
             // verdict itself is the event worth logging, and
             // recordVerdict() logs it.
-            $fresh->forceFill(['judgehost_id' => null, 'claimed_at' => null])->saveQuietly();
+            //
+            // The token MOVES rather than being dropped: the claim is over,
+            // so it stops being current, but it stays recorded as the one
+            // whose verdict landed. That is what lets a retried report be
+            // recognised as the same one (#123) without also making a run
+            // judged by hand look like it was reported by whoever holds it.
+            $fresh->forceFill([
+                'judgehost_id' => null,
+                'claimed_at' => null,
+                'reported_claim_token' => $fresh->claim_token,
+                'claim_token' => null,
+            ])->saveQuietly();
 
             $this->judge->recordVerdict($fresh, [
                 'verdict' => $data['verdict'],
@@ -97,6 +119,35 @@ class ResultController extends Controller
                 'status' => $verdict->status,
                 'verdict' => $data['verdict'],
                 'answer_id' => $verdict->answer_id,
+            ],
+        ]);
+    }
+
+    /**
+     * Issue #123 -- the same claim reporting the same run twice.
+     *
+     * Only the claim that actually produced the verdict can replay it. A
+     * run judged by a jury member while a host held it recorded no claim at
+     * all, so the host's late answer still gets the ordinary refusal -- the
+     * case that separates "you already told me this" from "someone else
+     * decided while you were working".
+     */
+    private function alreadyReported(Request $request, Run $run): ?JsonResponse
+    {
+        $reported = (string) ($run->reported_claim_token ?? '');
+        $presented = (string) ($request->header(AuthenticateJudgehost::CLAIM_TOKEN_HEADER) ?? '');
+
+        if ($run->status !== 'judged' || $reported === '' || $presented === '' || ! hash_equals($reported, $presented)) {
+            return null;
+        }
+
+        return response()->json([
+            'data' => [
+                'run_id' => $run->id,
+                'status' => $run->status,
+                'verdict' => $run->answer?->short_name,
+                'answer_id' => $run->answer_id,
+                'replayed' => true,
             ],
         ]);
     }

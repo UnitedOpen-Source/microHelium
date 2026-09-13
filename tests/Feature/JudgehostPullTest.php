@@ -30,6 +30,8 @@ class JudgehostPullTest extends TestCase
 
     private Language $language;
 
+    private Answer $answer;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -38,7 +40,7 @@ class JudgehostPullTest extends TestCase
         $this->site = Site::factory()->create(['contest_id' => $this->contest->id]);
         $this->problem = Problem::factory()->create(['contest_id' => $this->contest->id, 'auto_judge' => true]);
         $this->language = Language::factory()->create(['contest_id' => $this->contest->id]);
-        Answer::factory()->create(['contest_id' => $this->contest->id, 'is_accepted' => true]);
+        $this->answer = Answer::factory()->create(['contest_id' => $this->contest->id, 'is_accepted' => true]);
     }
 
     private function host(string $name = 'judge-01'): array
@@ -76,9 +78,9 @@ class JudgehostPullTest extends TestCase
     {
         [, $token] = $this->host();
 
-        $this->postJson('/api/judgehost/fetch-work')->assertUnauthorized();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as('nao-e-um-token'))->assertUnauthorized();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token))->assertStatus(204);
+        $this->postJson('/api/remote-judges/v1/fetch-work')->assertUnauthorized();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as('nao-e-um-token'))->assertUnauthorized();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertStatus(204);
     }
 
     public function test_a_disabled_host_is_refused_exactly_like_an_unknown_one(): void
@@ -88,7 +90,7 @@ class JudgehostPullTest extends TestCase
 
         // A decommissioned machine still holding its credential learns
         // nothing about why it stopped working.
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token))->assertUnauthorized();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertUnauthorized();
     }
 
     public function test_the_raw_token_is_never_stored_or_returned(): void
@@ -107,7 +109,7 @@ class JudgehostPullTest extends TestCase
         [$judgehost, $token] = $this->host();
         $run = $this->pendingRun();
 
-        $response = $this->postJson('/api/judgehost/fetch-work', [], $this->as($token))->assertOk();
+        $response = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertOk();
 
         $this->assertSame($run->id, $response->json('data.run_id'));
         $this->assertSame($this->language->extension, $response->json('data.language.extension'));
@@ -128,8 +130,8 @@ class JudgehostPullTest extends TestCase
         // run and returned it without claiming, so two workers asking at
         // the same moment both judged it. Harmless with one worker; wrong
         // with fifty.
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($first))->assertOk();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($second))->assertStatus(204);
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($first))->assertOk();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($second))->assertStatus(204);
 
         $this->assertSame(1, Run::where('status', 'judging')->count());
     }
@@ -139,7 +141,7 @@ class JudgehostPullTest extends TestCase
         [, $token] = $this->host();
 
         // The agent's signal to back off.
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token))->assertStatus(204);
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertStatus(204);
     }
 
     public function test_a_problem_with_auto_judge_off_is_not_handed_out(): void
@@ -148,7 +150,7 @@ class JudgehostPullTest extends TestCase
         $this->problem->update(['auto_judge' => false]);
         $this->pendingRun();
 
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token))->assertStatus(204);
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertStatus(204);
     }
 
     // --- giving back ------------------------------------------------------
@@ -158,13 +160,13 @@ class JudgehostPullTest extends TestCase
         [, $token] = $this->host();
         $run = $this->pendingRun();
 
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token))->assertOk();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertOk();
 
         // DOMjudge's idiom, and why its judgehosts survive a restart: the
         // agent calls this on boot, on endpoint error, and after any failed
         // fetch, so work it might be holding is released by the only party
         // that knows it was lost.
-        $response = $this->postJson('/api/judgehost/register', [], $this->as($token))->assertOk();
+        $response = $this->postJson('/api/remote-judges/v1/register', [], $this->as($token))->assertOk();
 
         $this->assertSame(1, $response->json('data.reclaimed'));
         $this->assertSame('pending', $run->fresh()->status);
@@ -177,12 +179,12 @@ class JudgehostPullTest extends TestCase
         [, $theirs] = $this->host('judge-02');
         $this->pendingRun();
 
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($theirs))->assertOk();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($theirs))->assertOk();
 
         // In DOMjudge the hostname is read from the request body and the
         // password is shared, so one credential can have another host's
         // in-flight work given back. Here identity comes from the token.
-        $response = $this->postJson('/api/judgehost/register', [], $this->as($mine))->assertOk();
+        $response = $this->postJson('/api/remote-judges/v1/register', [], $this->as($mine))->assertOk();
 
         $this->assertSame(0, $response->json('data.reclaimed'));
         $this->assertSame(1, Run::where('status', 'judging')->count());
@@ -192,11 +194,11 @@ class JudgehostPullTest extends TestCase
     {
         [$judgehost, $token] = $this->host();
         $run = $this->pendingRun();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token));
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token));
 
         $run->update(['status' => 'judged']);
 
-        $this->assertSame(0, $this->postJson('/api/judgehost/register', [], $this->as($token))->json('data.reclaimed'));
+        $this->assertSame(0, $this->postJson('/api/remote-judges/v1/register', [], $this->as($token))->json('data.reclaimed'));
         $this->assertSame('judged', $run->fresh()->status);
     }
 
@@ -204,9 +206,104 @@ class JudgehostPullTest extends TestCase
     {
         [, $token] = $this->host();
         $run = $this->pendingRun();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token));
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
 
-        $this->postJson("/api/judgehost/runs/{$run->id}/give-back", [], $this->as($token))->assertOk();
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/give-back",
+            [],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertOk();
+
+        $this->assertSame('pending', $run->fresh()->status);
+    }
+
+    /**
+     * Issue #123 -- the hole that "which machine" alone leaves open.
+     *
+     * A restart is the thing a daemon does most, and it is where this bites:
+     * process A claims a run and hangs, the operator restarts, process B
+     * registers (which gives the run back) and claims the SAME run, and
+     * then A wakes up. Both present the same credential, because they are
+     * the same machine, and before the fencing token the server accepted
+     * A's stale verdict -- then rejected B's correct one as a conflict.
+     */
+    public function test_a_stale_process_of_the_same_host_cannot_report_over_the_live_one(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $stale = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        // The agent is restarted: it registers, which puts the run back,
+        // and picks the same run up again under a new claim.
+        $this->postJson('/api/remote-judges/v1/register', [], $this->as($token))->assertOk();
+        $live = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        $this->assertNotSame($stale, $live, 'Each claim must get its own token.');
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $this->as($token) + ['X-Claim-Token' => $stale],
+        )->assertForbidden();
+
+        // Still being judged by the process that actually holds it.
+        $this->assertSame('judging', $run->fresh()->status);
+        $this->assertNull($run->fresh()->answer_id);
+
+        // And the live process is still able to finish.
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $this->as($token) + ['X-Claim-Token' => $live],
+        )->assertOk();
+
+        $this->assertSame('judged', $run->fresh()->status);
+    }
+
+    /**
+     * The same token, once its claim is over, is no better than a stranger's.
+     */
+    public function test_a_token_from_a_finished_claim_stops_working(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/give-back",
+            [],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertOk();
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/give-back",
+            [],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertForbidden();
+    }
+
+    public function test_an_expired_lease_retires_the_claim_token_with_it(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        $run->fresh()->update(['claimed_at' => now()->subMinutes(30)]);
+        app(JudgeWorkQueue::class)->expireStaleLeases();
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertForbidden();
 
         $this->assertSame('pending', $run->fresh()->status);
     }
@@ -216,12 +313,12 @@ class JudgehostPullTest extends TestCase
         [, $mine] = $this->host('judge-01');
         [, $theirs] = $this->host('judge-02');
         $run = $this->pendingRun();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($theirs));
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($theirs));
 
         // DOMjudge's file endpoints filter on the testcase or submission id
         // alone, so one judgehost credential reads every hidden test case
         // and every contestant's source in the system. Not inherited.
-        $this->postJson("/api/judgehost/runs/{$run->id}/give-back", [], $this->as($mine))->assertForbidden();
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back", [], $this->as($mine))->assertForbidden();
         $this->assertSame('judging', $run->fresh()->status);
     }
 
@@ -233,13 +330,13 @@ class JudgehostPullTest extends TestCase
         [, $alive] = $this->host('judge-vivo');
         $run = $this->pendingRun();
 
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($dead))->assertOk();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($dead))->assertOk();
         Run::whereKey($run->id)->update(['claimed_at' => now()->subSeconds(601)]);
 
         // This is the half a give-back-on-register protocol cannot cover: a
         // machine that dies never comes back to give anything back.
         // DOMjudge#2476 is what the gap looks like at a World Finals.
-        $response = $this->postJson('/api/judgehost/fetch-work', [], $this->as($alive))->assertOk();
+        $response = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($alive))->assertOk();
 
         $this->assertSame($run->id, $response->json('data.run_id'));
     }
@@ -250,18 +347,18 @@ class JudgehostPullTest extends TestCase
         [, $other] = $this->host('judge-02');
         $this->pendingRun();
 
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($working))->assertOk();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($working))->assertOk();
 
         // Expiring a live judging would hand the same run to a second
         // machine, which is worse than waiting.
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($other))->assertStatus(204);
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($other))->assertStatus(204);
     }
 
     public function test_the_lease_length_is_configurable(): void
     {
         [, $token] = $this->host();
         $run = $this->pendingRun();
-        $this->postJson('/api/judgehost/fetch-work', [], $this->as($token));
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token));
         Run::whereKey($run->id)->update(['claimed_at' => now()->subSeconds(30)]);
 
         $this->assertSame(0, app(JudgeWorkQueue::class)->expireStaleLeases(600));
