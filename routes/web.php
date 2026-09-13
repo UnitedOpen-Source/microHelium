@@ -262,6 +262,11 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     // Users Management
     Route::get('/users', [UserController::class, 'index'])->name('backend.users');
     Route::post('/users', [UserController::class, 'store']);
+    // Issue #100 -- editing an account was not possible at all; the only
+    // way to fix a typo was to delete it, and deleting cascades to its
+    // runs, scores, tasks and logs.
+    Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('backend.users.edit');
+    Route::put('/users/{user}', [UserController::class, 'update'])->name('backend.users.update');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('backend.users.destroy');
 
     // Teams Management
