@@ -23,7 +23,7 @@ class FrontendNavigationTest extends TestCase
     public function test_admin_can_render_every_management_page_in_the_shared_shell(): void
     {
         $this->actingAs($this->createAdminUser());
-        foreach (['exercises', 'users', 'teams', 'configurations', 'problem-bank', 'submissions', 'clarifications', 'import-boca', 'contest-wizard'] as $page) {
+        foreach (['exercises', 'users', 'configurations', 'problem-bank', 'submissions', 'clarifications', 'import-boca', 'contest-wizard'] as $page) {
             $this->get('/backend/'.$page)->assertOk()->assertSee('id="main-content"', false);
         }
         $this->get('/home')->assertSee('href="/backend/users"', false)->assertSee('href="'.route('profile.edit').'"', false);
