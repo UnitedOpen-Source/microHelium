@@ -75,7 +75,9 @@ class ManagedAccountsController extends Controller
         // "Reconsultar depois de ações confirmadas"), and this table is
         // small enough (one row per contest/site, not per managed account)
         // that a correctness-risking cache isn't worth it here.
-        $contests = Contest::query()->with(['sites' => fn ($q) => $q->orderBy('name')])->orderBy('name')->get()
+        // Issue #43: accounts are enrolled in events, never in the
+        // technical practice contest.
+        $contests = Contest::query()->competition()->with(['sites' => fn ($q) => $q->orderBy('name')])->orderBy('name')->get()
             ->map(fn (Contest $contest) => [
                 'id' => $contest->id,
                 'name' => $contest->name,

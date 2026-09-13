@@ -5,8 +5,11 @@ namespace App\Http\Controllers\FrontendApi;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
+use App\Models\PracticePublication;
 use App\Models\ProblemBank;
 use App\Models\ProblemBankOwnershipTransfer;
+use App\Services\Practice\PracticePublisher;
+use App\Support\IdempotencyStore;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,10 +25,11 @@ use Illuminate\Validation\ValidationException;
  * Registered on the web session guard + CSRF, not routes/api.php's
  * auth:sanctum group -- see routes/frontend_api_bank_governance.php.
  *
- * `practice_status`/`can_publish` are deliberately always
- * "unpublished"/false: issue #43 (Treino Livre), which owns actual
- * publication, is not implemented yet. This is not a stub -- it is the
- * correct, honest answer given nothing can be published today.
+ * `practice_status`/`can_publish` and the `practice` action are issue #43
+ * (docs/specs/43-practice.md): publication is a versioned snapshot into the
+ * practice library, handled by PracticePublisher. `can_publish` is
+ * admin-only while the disclosure policy for material from still-active
+ * events is undecided -- see ProblemBankPolicy::publishToPractice().
  */
 class BankGovernanceController extends Controller
 {
@@ -85,9 +89,17 @@ class BankGovernanceController extends Controller
                     'id' => $org->id,
                     'name' => $org->name,
                 ])->values(),
-                'items' => collect($paginated->items())
-                    ->map(fn (ProblemBank $bank) => $this->present($bank, $user, $organizationIds))
-                    ->values(),
+                'items' => (function () use ($paginated, $user, $organizationIds) {
+                    $items = collect($paginated->items());
+                    // Resolved once for the page, then passed down: a memo on
+                    // $this would outlive the request, because Laravel caches
+                    // the controller instance on the Route object.
+                    $publications = $this->activePublications($items);
+
+                    return $items
+                        ->map(fn (ProblemBank $bank) => $this->present($bank, $user, $organizationIds, $publications))
+                        ->values();
+                })(),
                 'meta' => [
                     'current_page' => $paginated->currentPage(),
                     'last_page' => $paginated->lastPage(),
@@ -177,11 +189,13 @@ class BankGovernanceController extends Controller
         })->orderBy('name')->get();
     }
 
-    private function present(ProblemBank $bank, $user, SupportCollection $editableOrgIds): array
+    private function present(ProblemBank $bank, $user, SupportCollection $editableOrgIds, SupportCollection $publications): array
     {
         $canTransfer = $user->isAdmin();
         $canEdit = $canTransfer
             || ($bank->owning_org_id !== null && $editableOrgIds->contains($bank->owning_org_id));
+
+        $publication = $publications->get($bank->id);
 
         return [
             'id' => $bank->id,
@@ -190,15 +204,78 @@ class BankGovernanceController extends Controller
             'organization_name' => $bank->organization?->name,
             'tags' => array_values($bank->tags ?? []),
             'version' => (string) $bank->version,
-            // #43 (Treino Livre) owns real publication; nothing is
-            // publishable yet, so this is always false/"unpublished".
-            'practice_status' => 'unpublished',
+            // Issue #43. "published" means there is an open publication;
+            // "outdated" means there is one, but the bank has moved on since
+            // -- the library is still serving the older snapshot, which is
+            // the intended behaviour, not a fault ("editar o banco depois não
+            // altera desafios ou resultados existentes").
+            'practice_status' => match (true) {
+                $publication === null => 'unpublished',
+                $publication->version !== (string) $bank->version => 'outdated',
+                default => 'published',
+            },
+            'practice_problem_id' => $publication?->problem_id,
             'capabilities' => [
                 'can_edit' => $canEdit,
                 'can_transfer' => $canTransfer,
-                'can_publish' => false,
+                'can_publish' => $user->can('publishToPractice', $bank),
             ],
         ];
+    }
+
+    /**
+     * One query for the whole page instead of one per row.
+     *
+     * @param  SupportCollection<int, ProblemBank>  $banks
+     * @return SupportCollection<int, PracticePublication>  keyed by bank id
+     */
+    private function activePublications(SupportCollection $banks): SupportCollection
+    {
+        return PracticePublication::query()
+            ->whereNull('unpublished_at')
+            ->whereIn('problem_bank_id', $banks->pluck('id')->all() ?: [-1])
+            ->orderBy('published_at')
+            ->get()
+            ->keyBy('problem_bank_id');
+    }
+
+    /**
+     * POST /api/frontend/bank-governance/{bank}/practice
+     *
+     * Issue #43 -- publish or withdraw this entry in the practice library.
+     */
+    public function practice(Request $request, ProblemBank $bank, PracticePublisher $publisher): JsonResponse
+    {
+        return IdempotencyStore::handle($request, 'bank-governance.practice', function () use ($request, $bank, $publisher) {
+            $user = $request->user();
+
+            if (! $user->can('publishToPractice', $bank)) {
+                abort(403, 'Você não tem permissão para publicar este problema no Treino Livre.');
+            }
+
+            $published = $request->input('published');
+            if (! is_bool($published)) {
+                $this->fail('published', 'Informe se o problema deve ficar publicado.');
+            }
+
+            $version = $request->input('version');
+            if (! is_string($version) && ! is_numeric($version)) {
+                $this->fail('version', 'Versão ausente ou inválida. Atualize a página.');
+            }
+            $version = (string) $version;
+
+            $publication = $published
+                ? $publisher->publish($bank, $version, $user)
+                : $publisher->unpublish($bank, $version, $user);
+
+            return response()->json([
+                'data' => [
+                    'published' => $publication !== null && $publication->isActive(),
+                    'practice_problem_id' => $publication?->problem_id,
+                    'version' => $publication?->version ?? $version,
+                ],
+            ]);
+        });
     }
 
     private function normalizeOwner(mixed $raw): ?int

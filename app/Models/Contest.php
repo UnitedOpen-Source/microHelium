@@ -21,6 +21,7 @@ class Contest extends Model
         'max_file_size',
         'is_active',
         'is_public',
+        'is_practice',
         'unlock_key',
     ];
 
@@ -28,7 +29,28 @@ class Contest extends Model
         'start_time' => 'datetime',
         'is_active' => 'boolean',
         'is_public' => 'boolean',
+        'is_practice' => 'boolean',
     ];
+
+    /**
+     * Issue #43 -- everything that means "a competition" must exclude the
+     * technical practice contest: active-contest selection, the public
+     * selector, the clock, global activation, event CSV, tasks/balloons and
+     * event ranking (docs/specs/43-practice.md).
+     *
+     * Deliberately a scope rather than a global scope: a global one would
+     * also apply to $run->contest, and AutoJudgeService needs that
+     * relationship to resolve for practice runs too.
+     */
+    public function scopeCompetition($query)
+    {
+        return $query->where('is_practice', false);
+    }
+
+    public function scopePractice($query)
+    {
+        return $query->where('is_practice', true);
+    }
 
     public function sites(): HasMany
     {

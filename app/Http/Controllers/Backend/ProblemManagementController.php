@@ -23,7 +23,11 @@ class ProblemManagementController extends Controller
 {
     public function index(Request $request): View
     {
-        $contests = Contest::orderByDesc('created_at')->get();
+        // Issue #43: the practice contest is not selectable here. Its
+        // problems are versioned snapshots owned by PracticePublisher;
+        // editing them by hand would silently diverge the library from the
+        // bank material it claims to be a snapshot of.
+        $contests = Contest::query()->competition()->orderByDesc('created_at')->get();
 
         $contestId = (int) $request->query('contest_id', 0);
         // A requested id that doesn't match any contest (stale bookmark,

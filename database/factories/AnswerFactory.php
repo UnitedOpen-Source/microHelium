@@ -20,7 +20,13 @@ class AnswerFactory extends Factory
         return [
             'contest_id' => Contest::factory(),
             'name' => $this->faker->words(2, true),
-            'short_name' => strtoupper($this->faker->lexify('??')),
+            // Unique, not merely random: answers are unique on
+            // (contest_id, short_name), and a test that creates several
+            // answers in one contest -- SimilarityTest::acceptedRun() does,
+            // once per run -- collided often enough on two random letters
+            // (26^2) to fail CI intermittently. faker's unique() guarantees
+            // no repeat for the lifetime of the test run.
+            'short_name' => strtoupper($this->faker->unique()->lexify('???')),
             'is_accepted' => false,
         ];
     }

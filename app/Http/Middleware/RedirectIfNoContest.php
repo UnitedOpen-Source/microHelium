@@ -34,8 +34,13 @@ class RedirectIfNoContest
             return $next($request);
         }
 
-        // Check if there's any contest (active or not)
-        $hasContest = Contest::exists();
+        // Check if there's any contest (active or not).
+        //
+        // Issue #43: the technical practice contest does not count. It is
+        // created the first time something is published to the practice
+        // library, and an admin who has only that still has no event
+        // configured -- sending them to the wizard is the right answer.
+        $hasContest = Contest::query()->competition()->exists();
 
         if (!$hasContest) {
             // Redirect admin to setup wizard

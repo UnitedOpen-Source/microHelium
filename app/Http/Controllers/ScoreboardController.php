@@ -144,6 +144,7 @@ class ScoreboardController extends Controller
             return Contest::find($user->contest_id);
         }
 
-        return Contest::where('is_active', true)->first();
+        // Issue #43: practice runs never reach an event scoreboard.
+        return Contest::query()->competition()->where('is_active', true)->first();
     }
 }

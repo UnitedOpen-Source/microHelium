@@ -72,7 +72,12 @@ class BankGovernanceApiTest extends TestCase
         $this->assertNull($legacyItem['organization_name']);
         $this->assertTrue($legacyItem['capabilities']['can_edit']);
         $this->assertTrue($legacyItem['capabilities']['can_transfer']);
-        $this->assertFalse($legacyItem['capabilities']['can_publish']);
+        // Issue #43 made practice publication real, and admin-only while the
+        // disclosure policy for material from still-active events is open
+        // (ProblemBankPolicy::publishToPractice). Nothing is published yet in
+        // this fixture, so the status is still "unpublished" -- but an admin
+        // can now publish it, where before #43 nobody could.
+        $this->assertTrue($legacyItem['capabilities']['can_publish']);
         $this->assertSame('unpublished', $legacyItem['practice_status']);
 
         $itemAJson = collect($data['items'])->firstWhere('id', $itemA->id);
