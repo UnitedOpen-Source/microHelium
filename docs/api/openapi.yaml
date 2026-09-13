@@ -1408,6 +1408,67 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
+  /remote-judges/v1/runs/{run}/heartbeat:
+    post:
+      tags: [Judgehost]
+      summary: Tell the server a judging is still running (issue #124)
+      description: >
+        Without this, a judging longer than the lease is reaped mid-flight and handed to
+        another machine, which judges it and is reaped in turn -- the run is never
+        finished, only repeatedly abandoned. Raising `lease_seconds` instead is not the
+        same trade: the lease is also how long a run stays stuck when a machine really
+        does die, so a lease long enough for the worst judging is a lease too long for a
+        crash.
+        Only `claimed_at` moves. It cannot change a status or a verdict, so the worst a
+        confused agent can do with it is keep a run it already holds.
+        The agent beats at about a third of the lease. PHP gives it no thread to beat
+        from, so the judging loop yields between test cases instead: the longest silence
+        is one test case, which is why the lease must exceed roughly three times the worst
+        single test case.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: X-Claim-Token
+          in: header
+          required: true
+          schema: { type: string }
+          description: >
+            Issue #123. The claim_token fetch-work returned for this run. A process that
+            lost its claim must not be able to hold a run open for the process that has it.
+      responses:
+        "200":
+          description: The lease was extended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      run_id: { type: integer }
+                      lease_seconds: { type: integer }
+                      lease_expires_at: { type: string, format: date-time }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: The run is not assigned to the caller, or the claim token is not current
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "409":
+          description: The run is no longer being judged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
   /remote-judges/v1/runs/{run}/result:
     post:
       tags: [Judgehost]

@@ -324,6 +324,113 @@ class JudgehostPullTest extends TestCase
 
     // --- the lease --------------------------------------------------------
 
+    // --- heartbeat (#124) -------------------------------------------------
+
+    public function test_a_heartbeat_keeps_a_long_judging_from_being_reaped(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        // Long enough to be reaped, if nothing said otherwise.
+        $run->fresh()->update(['claimed_at' => now()->subMinutes(30)]);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/heartbeat",
+            [],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertOk();
+
+        $this->assertSame(0, app(JudgeWorkQueue::class)->expireStaleLeases());
+        $this->assertSame('judging', $run->fresh()->status);
+
+        // And the machine that kept beating can still finish.
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertOk();
+    }
+
+    /**
+     * Without the heartbeat the same judging is lost -- this is the
+     * behaviour #124 exists to change, kept so the pair stays honest.
+     */
+    public function test_without_a_heartbeat_that_same_judging_is_reaped(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token));
+        $run->fresh()->update(['claimed_at' => now()->subMinutes(30)]);
+
+        $this->assertSame(1, app(JudgeWorkQueue::class)->expireStaleLeases());
+        $this->assertSame('pending', $run->fresh()->status);
+    }
+
+    public function test_a_heartbeat_from_a_retired_claim_is_refused(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $stale = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        // Restarted: the run goes back and is claimed again.
+        $this->postJson('/api/remote-judges/v1/register', [], $this->as($token))->assertOk();
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token));
+
+        // A process that lost its claim must not be able to hold the run
+        // open for the process that has it.
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/heartbeat",
+            [],
+            $this->as($token) + ['X-Claim-Token' => $stale],
+        )->assertForbidden();
+    }
+
+    public function test_a_heartbeat_cannot_reopen_a_judged_run(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertOk();
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/heartbeat",
+            [],
+            $this->as($token) + ['X-Claim-Token' => $claim],
+        )->assertStatus(403);
+
+        $this->assertSame('judged', $run->fresh()->status);
+        $this->assertNull($run->fresh()->claimed_at);
+    }
+
+    public function test_another_host_cannot_heartbeat_your_run(): void
+    {
+        [, $mine] = $this->host('judge-01');
+        [, $theirs] = $this->host('judge-02');
+        $run = $this->pendingRun();
+
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($mine))
+            ->json('data.claim_token');
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/heartbeat",
+            [],
+            $this->as($theirs) + ['X-Claim-Token' => $claim],
+        )->assertForbidden();
+    }
+
     public function test_a_run_held_past_the_lease_goes_back_to_the_queue(): void
     {
         [, $dead] = $this->host('judge-morto');

@@ -9,6 +9,7 @@ use App\Models\Run;
 use App\Models\Score;
 use App\Models\TestCase;
 use App\Models\Problem;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 
 class AutoJudgeService
@@ -35,6 +36,20 @@ class AutoJudgeService
 
     protected string $rssTimePath;
     protected ?bool $sandboxProbeFailed = null;
+
+    /**
+     * Issue #124 -- called after compilation and after each test case.
+     *
+     * A judgehost has to tell the server it is still working, and PHP gives
+     * it no thread to do that from: judging is one blocking loop, and a
+     * handler that never yields starves whatever is supposed to renew its
+     * lease. So instead of a background beater, the loop yields here. The
+     * longest an agent can go silent is therefore one test case, not one
+     * whole judging.
+     *
+     * @var (\Closure(string, int): void)|null
+     */
+    protected ?\Closure $onProgress = null;
 
     protected CgroupMemoryLimiter $cgroup;
 
@@ -371,9 +386,36 @@ class AutoJudgeService
      *
      * @return array{verdict: string, message?: string, stdout?: string, stderr?: string}
      */
-    public function judgeWithoutPersisting(Run $run): array
+    public function judgeWithoutPersisting(Run $run, ?\Closure $onProgress = null): array
     {
-        return $this->executeJudging($run);
+        $previous = $this->onProgress;
+        $this->onProgress = $onProgress;
+
+        try {
+            return $this->executeJudging($run);
+        } finally {
+            $this->onProgress = $previous;
+        }
+    }
+
+    /**
+     * Issue #124 -- a judging that is still going.
+     *
+     * Never allowed to break the judging: a lease that cannot be renewed
+     * means a run gets reaped and redone, which is bad; an exception here
+     * would lose the judging outright, which is worse.
+     */
+    protected function reportProgress(string $stage, int $index): void
+    {
+        if ($this->onProgress === null) {
+            return;
+        }
+
+        try {
+            ($this->onProgress)($stage, $index);
+        } catch (\Throwable $e) {
+            Log::warning('Judge progress callback failed: '.$e->getMessage());
+        }
     }
 
     protected function executeJudging(Run $run): array
@@ -384,6 +426,7 @@ class AutoJudgeService
 
         // Step 1: Compile
         $compileResult = $this->compile($run, $runDir);
+        $this->reportProgress('compiled', 0);
         if (!$compileResult['success']) {
             return [
                 'verdict' => 'CE',
@@ -410,8 +453,13 @@ class AutoJudgeService
             ];
         }
 
-        foreach ($testCases as $testCase) {
+        foreach ($testCases as $index => $testCase) {
             $testResult = $this->runTestCase($run, $runDir, $testCase);
+
+            // Yielded between test cases rather than during one: a test case
+            // is bounded by its own time limit, so this bounds how long a
+            // judgehost can go without renewing its lease (#124).
+            $this->reportProgress('test_case', (int) $index + 1);
 
             if (!$testResult['success']) {
                 return $testResult;

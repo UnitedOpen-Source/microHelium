@@ -36,6 +36,10 @@ Route::get('/api/remote-judges/v1/runs/{run}/testcases/{testCase}/{kind}', [Payl
     ->whereNumber('run')->whereNumber('testCase')->whereIn('kind', ['input', 'output']);
 Route::get('/api/remote-judges/v1/runs/{run}/package/{kind}', [PayloadController::class, 'packageScript'])
     ->whereNumber('run')->whereIn('kind', ['compile', 'run', 'compare']);
+// Issue #124 -- "still working on it". Bounded by the same claim token as
+// everything else, so a process that lost its claim cannot hold a run open
+// for a process that has it.
+Route::post('/api/remote-judges/v1/runs/{run}/heartbeat', [WorkController::class, 'heartbeat'])->whereNumber('run');
 Route::post('/api/remote-judges/v1/runs/{run}/result', [ResultController::class, 'store'])->whereNumber('run');
 
 // The verdict vocabulary for a contest -- answers are per contest and

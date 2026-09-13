@@ -364,6 +364,76 @@ SH);
         $this->assertSame('pending', $run->fresh()->status);
     }
 
+    /**
+     * Issue #124 -- the agent has to actually beat while it judges, not
+     * merely be able to.
+     *
+     * PHP has no thread to beat from, so this only works because the
+     * judging loop yields between test cases. If anyone removes that hook,
+     * the endpoint still exists and still passes its own tests, and the
+     * agent silently stops using it -- which is why this test watches the
+     * wire rather than the endpoint.
+     */
+    public function test_the_agent_beats_while_it_judges(): void
+    {
+        [, $token] = Judgehost::issue('judge-01');
+        $this->pendingRun("read a b\necho \$((a + b))\n", "3 4\n", "7\n");
+
+        // Lease of 3s means the beat interval is 1s, and the first beat
+        // fires after compilation regardless.
+        config(['judgehost.lease_seconds' => 3]);
+
+        $beats = 0;
+        Http::fake(function (ClientRequest $request) use (&$beats) {
+            if (str_contains($request->url(), '/heartbeat')) {
+                $beats++;
+            }
+
+            $response = $this->dispatch($request);
+
+            return Http::response($this->bodyOf($response), $response->getStatusCode(), $response->headers->all());
+        });
+
+        $this->agentFor($token)->tick();
+
+        $this->assertGreaterThan(0, $beats, 'The agent judged without ever telling the server it was alive.');
+    }
+
+    /**
+     * A claim lost mid-judging is not a reason to abandon the work -- the
+     * judging is already paid for -- but it must not be reported either,
+     * and the server refusing it is what makes that safe.
+     */
+    public function test_a_claim_lost_during_judging_does_not_corrupt_the_verdict(): void
+    {
+        [$host, $token] = Judgehost::issue('judge-01');
+        $run = $this->pendingRun("read a b\necho \$((a + b))\n", "3 4\n", "7\n");
+
+        Http::fake(function (ClientRequest $request) use ($run) {
+            // The reaper takes the run back the moment judging starts.
+            if (str_contains($request->url(), '/heartbeat')) {
+                $run->fresh()->update([
+                    'status' => 'pending',
+                    'judgehost_id' => null,
+                    'claimed_at' => null,
+                    'claim_token' => null,
+                ]);
+            }
+
+            $response = $this->dispatch($request);
+
+            return Http::response($this->bodyOf($response), $response->getStatusCode(), $response->headers->all());
+        });
+
+        $this->agentFor($token)->tick();
+
+        // Back in the queue for whoever can finish it, with no verdict
+        // written by the machine that lost it.
+        $run->refresh();
+        $this->assertSame('pending', $run->status);
+        $this->assertNull($run->answer_id);
+    }
+
     public function test_nothing_to_do_backs_off_instead_of_hammering_the_server(): void
     {
         [, $token] = Judgehost::issue('judge-01');
