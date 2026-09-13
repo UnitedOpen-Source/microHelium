@@ -67,6 +67,46 @@ class WorkController extends Controller
     }
 
     /**
+     * POST /api/remote-judges/v1/runs/{run}/heartbeat
+     *
+     * Issue #124 -- "still working on it".
+     *
+     * Without this a judging longer than the lease is reaped mid-flight and
+     * handed to another machine, which judges it and is reaped in turn: the
+     * run is never finished, only repeatedly abandoned. Raising
+     * lease_seconds instead is not the same trade -- the lease is also how
+     * long a run stays stuck when a machine really does die, so a lease
+     * long enough for the worst judging is a lease too long for a crash.
+     * Separating the two is the whole point of a heartbeat.
+     *
+     * Only claimed_at moves. It cannot change a status or a verdict, so the
+     * worst a compromised or confused agent can do with it is keep a run it
+     * already holds -- which the lease was granting anyway.
+     */
+    public function heartbeat(Request $request, Run $run): JsonResponse
+    {
+        $this->assertHolds($request, $run);
+
+        abort_unless(
+            $run->status === 'judging',
+            409,
+            'Esta submissao nao esta mais em julgamento.'
+        );
+
+        $run->forceFill(['claimed_at' => now()])->saveQuietly();
+
+        $leaseSeconds = (int) config('judgehost.lease_seconds', 600);
+
+        return response()->json([
+            'data' => [
+                'run_id' => $run->id,
+                'lease_seconds' => $leaseSeconds,
+                'lease_expires_at' => now()->addSeconds($leaseSeconds)->toIso8601String(),
+            ],
+        ]);
+    }
+
+    /**
      * POST /api/judgehost/runs/{run}/give-back
      *
      * For a host that knows it cannot finish a specific run -- a language

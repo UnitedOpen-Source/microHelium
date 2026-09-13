@@ -114,7 +114,7 @@ class JudgehostAgent
         }
 
         try {
-            $verdict = $this->judge->judgeWithoutPersisting($run);
+            $verdict = $this->judge->judgeWithoutPersisting($run, $this->heartbeatFor($runId, $payload));
         } catch (Throwable $e) {
             $this->say('error', "Run #{$runId} falhou ao julgar: {$e->getMessage()}");
             $this->giveBackQuietly($runId);
@@ -136,6 +136,50 @@ class JudgehostAgent
         }
 
         $this->say('info', "Run #{$runId} julgado: {$verdict['verdict']}.");
+    }
+
+    /**
+     * Issue #124 -- the callback the judging loop yields to.
+     *
+     * PHP gives this process no thread to beat from: judging is one
+     * blocking loop, and a handler that never yields starves whatever is
+     * meant to renew its lease. So AutoJudgeService yields after
+     * compilation and after each test case instead, and the longest this
+     * agent can go silent is one test case rather than one whole judging.
+     *
+     * That bounds it, so the lease has to be longer than roughly three
+     * times the worst single test case -- the usual "renew at a third of
+     * the lease" rule. With the default 600s lease that holds for any time
+     * limit up to about 195s, which is far beyond what a contest sets.
+     *
+     * Rate-limited rather than beating on every test case: a problem with
+     * 200 quick cases would otherwise be 200 requests nobody needs.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function heartbeatFor(int $runId, array $payload): Closure
+    {
+        $leaseSeconds = max(1.0, (float) ($payload['lease_seconds'] ?? config('judgehost.lease_seconds', 600)));
+        $interval = $leaseSeconds / 3;
+        $last = microtime(true);
+
+        return function (string $stage, int $index) use ($runId, $interval, &$last): void {
+            $now = microtime(true);
+
+            if ($stage !== 'compiled' && ($now - $last) < $interval) {
+                return;
+            }
+
+            $last = $now;
+
+            // A false here means the claim is gone. The judging carries on
+            // -- stopping it saves nothing, the work is already done -- and
+            // the report will be refused, which is correct and already
+            // handled.
+            if (! $this->client->heartbeat($runId)) {
+                $this->say('warn', "Run #{$runId}: o claim expirou durante o julgamento.");
+            }
+        };
     }
 
     /**

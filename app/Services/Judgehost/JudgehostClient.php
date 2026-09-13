@@ -68,6 +68,26 @@ class JudgehostClient
         return $response->throw()->json('data');
     }
 
+    /**
+     * Issue #124 -- tell the server this run is still being worked on.
+     *
+     * Returns false when the server says the claim is over, which is the
+     * agent's cue that finishing is pointless: the run has been reaped and
+     * given to someone else.
+     */
+    public function heartbeat(int $runId): bool
+    {
+        $response = $this->request()->post($this->url("/runs/{$runId}/heartbeat"));
+
+        if (in_array($response->status(), [403, 409], true)) {
+            return false;
+        }
+
+        $response->throw();
+
+        return true;
+    }
+
     public function giveBack(int $runId): void
     {
         $this->request()->post($this->url("/runs/{$runId}/give-back"))->throw();
