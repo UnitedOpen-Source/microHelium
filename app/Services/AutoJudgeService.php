@@ -22,6 +22,8 @@ class AutoJudgeService
     protected int $compileMaxFileKb;
     protected int $runMaxFileKb;
     protected int $runMaxProcesses;
+
+    protected array $memoryRlimitLanguages;
     protected ?bool $sandboxProbeFailed = null;
 
     public function __construct()
@@ -35,6 +37,7 @@ class AutoJudgeService
         $this->compileMaxFileKb = (int) config('autojudge.compile_max_file_kb', 262144);
         $this->runMaxFileKb = (int) config('autojudge.run_max_file_kb', 32768);
         $this->runMaxProcesses = (int) config('autojudge.run_max_processes', 256);
+        $this->memoryRlimitLanguages = config('autojudge.memory_rlimit_languages', []);
     }
 
     /**
@@ -55,6 +58,10 @@ class AutoJudgeService
      *                           needs no rewriting. Missing paths are skipped.
      *   cpu_seconds (int)    -- `ulimit -t` inside the sandbox.
      *   file_size_kb (int)   -- `ulimit -f` inside the sandbox.
+     *   max_processes (int)  -- `ulimit -u` inside the sandbox.
+     *   memory_kb (int)      -- `ulimit -v` inside the sandbox. Address
+     *                           space, not resident memory, so only for the
+     *                           languages measured to tolerate it.
      */
     public function wrapWithBwrap(string $command, string $runDir, array $options = []): string
     {
@@ -139,13 +146,33 @@ class AutoJudgeService
     }
 
     /**
-     * Resource limits applied inside the sandbox, as a `bash -c` prologue.
+     * The `ulimit -v` value for this language, or null when it must not get
+     * one.
      *
-     * Deliberately no `ulimit -v`: the JVM, Go and Rust runtimes reserve
-     * large virtual address ranges at startup and die under an address-space
-     * cap no matter how little they actually touch. Resident memory stays
-     * with the per-language {memory} flag (Java's -Xmx and friends); a
-     * real resident-memory cap needs cgroups, tracked in #86.
+     * `ulimit -v` caps ADDRESS SPACE. For a C, C++, Pascal, Rust, Python,
+     * Ruby or PHP program that is close enough to a memory cap to be worth
+     * having -- measured in the judge image, a C malloc loop runs past 4 GB
+     * unbounded and fails at 240 MB under a 256 MB cap, and the Python
+     * equivalent raises MemoryError. For the JVM, Go and V8 it is not a cap
+     * at all: they reserve large virtual ranges at startup and refuse to
+     * boot under one, whatever they actually touch. Those keep their own
+     * runtime flag -- the {memory} placeholder in run_command, which is
+     * Java's -Xmx today.
+     *
+     * A language absent from autojudge.memory_rlimit_languages is no worse
+     * off than before this existed: it simply gets no rlimit.
+     */
+    protected function memoryRlimitKbFor(object $language, int $memoryLimitMb): ?int
+    {
+        if (!in_array($language->extension ?? '', $this->memoryRlimitLanguages, true)) {
+            return null;
+        }
+
+        return max(1, $memoryLimitMb) * 1024;
+    }
+
+    /**
+     * Resource limits applied inside the sandbox, as a `bash -c` prologue.
      */
     protected function rlimitPrologue(array $options): string
     {
@@ -164,6 +191,11 @@ class AutoJudgeService
         // legitimately fans out across cores.
         if (!empty($options['max_processes'])) {
             $prologue .= 'ulimit -u ' . (int) $options['max_processes'] . '; ';
+        }
+
+        // Issue #86 -- only for the languages memoryRlimitKbFor() allows.
+        if (!empty($options['memory_kb'])) {
+            $prologue .= 'ulimit -v ' . (int) $options['memory_kb'] . '; ';
         }
 
         return $prologue;
@@ -424,6 +456,7 @@ class AutoJudgeService
             'cpu_seconds' => $timeLimit,
             'file_size_kb' => $this->runMaxFileKb,
             'max_processes' => $this->runMaxProcesses,
+            'memory_kb' => $this->memoryRlimitKbFor($language, $memoryLimit),
         ]);
 
         $result = Process::timeout($timeLimit + 5)

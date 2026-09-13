@@ -272,6 +272,42 @@ class AutoJudgeServiceTest extends TestCase
         $this->assertStringNotContainsString('/no/such/file', $command);
     }
 
+    public function test_the_memory_rlimit_is_applied_only_to_languages_that_tolerate_it()
+    {
+        $service = $this->sandboxingService();
+        $method = new \ReflectionMethod($service, 'memoryRlimitKbFor');
+
+        // Measured in the judge image: these run normally under a 256 MB
+        // address-space cap.
+        foreach (['c_gcc13', 'cpp_gpp13', 'pas_fpc', 'rs', 'py3', 'rb', 'php'] as $extension) {
+            $this->assertSame(
+                256 * 1024,
+                $method->invoke($service, (object) ['extension' => $extension], 256),
+                "{$extension} should get an address-space cap"
+            );
+        }
+
+        // And these refuse to boot under one, whatever they actually touch:
+        // "Error occurred during initialization of VM" for the JVM,
+        // "failed to reserve page summary memory" for Go, a silent failure
+        // below ~1 GB for V8. They keep the {memory} run_command flag.
+        foreach (['java21', 'kt', 'go', 'js_node24', 'ts', 'cs_dotnet'] as $extension) {
+            $this->assertNull(
+                $method->invoke($service, (object) ['extension' => $extension], 256),
+                "{$extension} must not get an address-space cap"
+            );
+        }
+    }
+
+    public function test_sandbox_applies_a_memory_rlimit_when_one_is_given()
+    {
+        $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1', [
+            'memory_kb' => 262144,
+        ]);
+
+        $this->assertStringContainsString("bash -c 'ulimit -v 262144; echo hello'", $command);
+    }
+
     public function test_sandbox_applies_cpu_and_file_size_rlimits()
     {
         $command = $this->sandboxingService()->wrapWithBwrap('echo hello', '/tmp/run_1', [
