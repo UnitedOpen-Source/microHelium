@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Judgehost;
+use App\Models\Language;
+use App\Models\Problem;
 use App\Models\Run;
 use Illuminate\Support\Facades\DB;
 
@@ -106,6 +108,32 @@ class JudgeWorkQueue
     }
 
     /**
+     * Issue #120 -- the custom scripts this problem uses for this language.
+     *
+     * Keyed by the hook, null where the problem does not override it. The
+     * digest is what makes the agent's cache safe: scripts are per problem
+     * and per language, so a host judging many runs of one problem fetches
+     * each script once, and a re-imported package invalidates it by itself.
+     *
+     * @return array<string, array{sha256: string, bytes: int}|null>
+     */
+    public function packageManifest(Problem $problem, Language $language): array
+    {
+        $extension = (string) $language->extension;
+
+        $paths = [
+            'compile' => $problem->getCompileScriptPath($extension),
+            'run' => $problem->getRunScriptPath($extension),
+            'compare' => $problem->getCompareScriptPath($extension),
+        ];
+
+        return array_map(fn (string $path) => is_file($path) ? [
+            'sha256' => hash_file('sha256', $path),
+            'bytes' => filesize($path),
+        ] : null, $paths);
+    }
+
+    /**
      * Everything a judge machine needs to know about a run to judge it,
      * short of the file bytes -- those come from their own endpoints, each
      * scoped to the host actually holding the run.
@@ -127,6 +155,18 @@ class JudgeWorkQueue
                 'time_limit' => $problem->getTimeLimitFor($language),
                 'memory_limit' => $problem->getMemoryLimitFor($language),
                 'test_case_count' => $problem->testCases()->count(),
+                // Issue #120. Three hooks in AutoJudgeService come out of the
+                // problem package on disk -- compile, run and compare -- and
+                // every one of them is applied behind a file_exists() that
+                // falls through to the default when the file is not there. A
+                // judgehost has no package, so without this it would compare
+                // exact strings on a problem with a tolerance checker and
+                // mark a correct submission WA, in silence and in favour of
+                // the wrong answer.
+                //
+                // So the payload states which ones exist, and the agent must
+                // fetch them before judging -- or give the run back.
+                'package' => $this->packageManifest($problem, $language),
             ],
             'language' => [
                 'id' => $language->id,
