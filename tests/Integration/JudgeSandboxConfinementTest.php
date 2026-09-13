@@ -2,6 +2,7 @@
 
 namespace Tests\Integration;
 
+use App\Models\Run;
 use App\Services\AutoJudgeService;
 use App\Services\CgroupMemoryLimiter;
 use Illuminate\Contracts\Process\ProcessResult;
@@ -316,6 +317,101 @@ class JudgeSandboxConfinementTest extends TestCase
             array_map('trim', explode("\n", $result->output())),
             fn ($line) => $line !== ''
         )));
+    }
+
+    /**
+     * Issue #115 -- compilation gets a resident-memory ceiling too.
+     *
+     * #86 capped the RUN and left this step unbounded, which is backwards:
+     * compilation is the one that runs toolchains over untrusted source.
+     * A C++ submission can blow a compiler up from the source alone --
+     * template metaprogramming, recursive macros, an enormous array
+     * literal -- and before this it took the whole judge machine with it.
+     *
+     * Driven through runCompileStep() with a shell that allocates, rather
+     * than through a real compiler, for the same reason the rest of this
+     * file is toolchain-free: it has to run anywhere bwrap and cgroups
+     * exist, without the multi-gigabyte judge image.
+     */
+    public function test_a_compilation_that_runs_away_on_memory_is_stopped()
+    {
+        $limiter = new CgroupMemoryLimiter;
+
+        if (! $limiter->isAvailable()) {
+            $this->markTestSkipped('no delegated cgroup v2 subtree (is the judge container privileged?)');
+        }
+
+        config(['autojudge.compile_memory_mb' => 64]);
+        $service = new AutoJudgeService;
+
+        // Doubling a shell variable, because the cap is on RESIDENT
+        // memory and the string has to actually be held: a pipeline of the
+        // same total size streams through in constant memory and is
+        // correctly not stopped. 2^28 bytes, so it crosses 64 MB well
+        // before it finishes.
+        $hog = $this->service->wrapWithBwrap(
+            'x=y; i=0; while [ $i -lt 28 ]; do x=$x$x; i=$((i+1)); done; echo ${#x}',
+            $this->runDir,
+            ['cpu_seconds' => 20]
+        );
+
+        $result = $this->callProtected($service, 'runCompileStep', [
+            $hog, $this->runDir, 'compile_test_'.getmypid(),
+        ]);
+
+        $this->assertFalse($result['success'], 'A compilation over the ceiling must not be reported as successful.');
+
+        // The team has to be told why. An OOM kill leaves the compiler's
+        // own diagnostics empty, and "Compilation Error" with no message is
+        // the least useful thing a judge can say.
+        $this->assertStringContainsString('limite de memoria', $result['stderr']);
+        $this->assertStringContainsString('64 MB', $result['stderr']);
+    }
+
+    public function test_a_compilation_within_the_ceiling_is_left_alone()
+    {
+        $limiter = new CgroupMemoryLimiter;
+
+        if (! $limiter->isAvailable()) {
+            $this->markTestSkipped('no delegated cgroup v2 subtree (is the judge container privileged?)');
+        }
+
+        // The other half of the pair: a ceiling that fails honest
+        // compilations is worse than no ceiling, because it rejects correct
+        // submissions with a verdict the team cannot act on.
+        config(['autojudge.compile_memory_mb' => 64]);
+        $service = new AutoJudgeService;
+
+        $result = $this->callProtected($service, 'runCompileStep', [
+            $this->service->wrapWithBwrap('echo compiled', $this->runDir, ['cpu_seconds' => 20]),
+            $this->runDir,
+            'compile_ok_'.getmypid(),
+        ]);
+
+        $this->assertTrue($result['success']);
+        $this->assertStringNotContainsString('limite de memoria', $result['stderr']);
+    }
+
+    /**
+     * The cgroup a compilation runs in must not be the one its run uses,
+     * or releasing the first would tear down the second.
+     */
+    public function test_compilation_and_execution_do_not_share_a_cgroup()
+    {
+        $service = new AutoJudgeService;
+
+        $run = new Run;
+        $run->id = 4242;
+
+        $this->assertSame(
+            'compile_4242_'.getmypid(),
+            $this->callProtected($service, 'compileCgroupName', [$run])
+        );
+    }
+
+    private function callProtected(object $target, string $method, array $arguments): mixed
+    {
+        return (new \ReflectionMethod($target, $method))->invokeArgs($target, $arguments);
     }
 
     private function sandbox(string $command, array $options = []): ProcessResult

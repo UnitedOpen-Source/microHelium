@@ -26,6 +26,8 @@ class AutoJudgeService
     protected bool $useBwrap;
     protected array $sandboxPaths;
     protected int $compileMaxFileKb;
+
+    protected int $compileMemoryMb;
     protected int $runMaxFileKb;
     protected int $runMaxProcesses;
 
@@ -47,6 +49,7 @@ class AutoJudgeService
         $this->useBwrap = config('autojudge.use_bwrap', true);
         $this->sandboxPaths = config('autojudge.sandbox_paths', ['/usr', '/bin', '/sbin', '/lib', '/lib64', '/etc', '/opt', '/go']);
         $this->compileMaxFileKb = (int) config('autojudge.compile_max_file_kb', 262144);
+        $this->compileMemoryMb = (int) config('autojudge.compile_memory_mb', 2048);
         $this->runMaxFileKb = (int) config('autojudge.run_max_file_kb', 32768);
         $this->runMaxProcesses = (int) config('autojudge.run_max_processes', 256);
         $this->memoryGraceMb = config('autojudge.memory_grace_mb', ['default' => 64]);
@@ -430,27 +433,7 @@ class AutoJudgeService
             'file_size_kb' => $this->compileMaxFileKb,
         ]);
 
-        // npm/npx (TypeScript), dotnet and go all write caches under $HOME;
-        // PHP-FPM doesn't set HOME for the worker user, so without this
-        // they'd try to write to a HOME they can't access (or none at all)
-        // and fail with a permission/lookup error unrelated to the
-        // submitted code. $runDir is already writable and unique per run.
-        // Under the sandbox these come from --setenv instead (--clearenv
-        // wipes the inherited environment); they are kept here because the
-        // same code path runs unsandboxed when use_bwrap is off.
-        $result = Process::timeout($this->defaultTimeLimit * 2)
-            ->path($runDir)
-            ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
-            ->run($command);
-
-        $this->assertSandboxStarted($result);
-
-        return [
-            'success' => $result->successful(),
-            'stdout' => $result->output(),
-            'stderr' => $result->errorOutput(),
-            'exit_code' => $result->exitCode(),
-        ];
+        return $this->runCompileStep($command, $runDir, $this->compileCgroupName($run));
     }
 
     protected function buildCompileCommand(object $language, string $runDir, string $filename): string
@@ -798,19 +781,79 @@ class AutoJudgeService
             'file_size_kb' => $this->compileMaxFileKb,
         ]);
 
-        $result = Process::timeout($this->defaultTimeLimit * 2)
-            ->path($runDir)
-            ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
-            ->run($command);
+        return $this->runCompileStep($command, $runDir, $this->compileCgroupName($run));
+    }
 
-        $this->assertSandboxStarted($result);
+    /**
+     * Issue #115 -- run one compilation step under a resident-memory
+     * ceiling.
+     *
+     * Shared by the default compile command and by a problem's custom
+     * compile script, because a custom script runs the same toolchains over
+     * the same untrusted source and there is no reason for it to be the
+     * unbounded one.
+     *
+     * The environment below is why this is a method and not an inline
+     * wrap: npm/npx (TypeScript), dotnet and go all write caches under
+     * $HOME, PHP-FPM does not set HOME for the worker user, and without it
+     * they fail with a permission error unrelated to the submitted code.
+     * Under the sandbox these come from --setenv instead (--clearenv wipes
+     * the inherited environment); they are kept here because the same code
+     * path runs unsandboxed when use_bwrap is off.
+     */
+    protected function runCompileStep(string $command, string $runDir, string $cgroupName): array
+    {
+        $command = $this->cgroup->confine($command, $cgroupName, $this->compileMemoryMb);
+
+        // Released in a finally for the same reason the run's cgroup is
+        // (#86): Process::run() throws when the backstop timeout fires and
+        // assertSandboxStarted() throws when bwrap never started, and those
+        // are the runs most likely to have left a process inside.
+        try {
+            $result = Process::timeout($this->defaultTimeLimit * 2)
+                ->path($runDir)
+                ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
+                ->run($command);
+
+            $this->assertSandboxStarted($result);
+        } finally {
+            $usage = $this->cgroup->release($cgroupName);
+        }
+
+        $succeeded = $result->exitCode() === 0;
+
+        // A compiler killed for memory is a Compilation Error, not an MLE:
+        // MLE is a verdict about the contestant's algorithm, and nothing
+        // has run yet. Saying so explicitly matters because the OOM killer
+        // leaves a compiler's own diagnostics empty or truncated, and
+        // "Compilation Error" with no message is the least useful thing a
+        // judge can tell a team.
+        if ($this->cgroup->exceeded($usage, $this->compileMemoryMb, $succeeded)) {
+            return [
+                'success' => false,
+                'stdout' => $result->output(),
+                'stderr' => trim($result->errorOutput()."\n"
+                    ."A compilacao excedeu o limite de memoria de {$this->compileMemoryMb} MB e foi interrompida."),
+                'exit_code' => $result->exitCode(),
+            ];
+        }
 
         return [
-            'success' => $result->exitCode() === 0,
+            'success' => $succeeded,
             'stdout' => $result->output(),
             'stderr' => $result->errorOutput(),
             'exit_code' => $result->exitCode(),
         ];
+    }
+
+    /**
+     * Distinct from the run's cgroup name so a compilation and a run of the
+     * same submission never collide -- and carrying the pid, so two workers
+     * judging different runs never do either.
+     */
+    protected function compileCgroupName(Run $run): string
+    {
+        return 'compile_'.$run->id.'_'.getmypid();
     }
 
     protected function updateRunWithResult(Run $run, array $result): void
