@@ -272,6 +272,26 @@ class AutoJudgeServiceTest extends TestCase
         $this->assertStringNotContainsString('/no/such/file', $command);
     }
 
+    public function test_the_runtimes_that_reject_an_rlimit_carry_their_own_memory_flag()
+    {
+        // Issue #102. Node, TypeScript and C# cannot take `ulimit -v` -- they
+        // reserve a large virtual range at startup -- so their cap has to
+        // come from the runtime itself, through the {memory} placeholder the
+        // run command already supports.
+        $defaults = collect(\App\Models\Language::getDefaultLanguages())->keyBy('extension');
+
+        $this->assertStringContainsString('--max-old-space-size={memory}', $defaults['js_node24']['run_command']);
+        $this->assertStringContainsString('--max-old-space-size={memory}', $defaults['ts']['run_command']);
+        // The .NET knob is an environment variable in hex bytes, so it is
+        // set inside run.sh from this argument rather than on the command.
+        $this->assertStringContainsString('{memory}', $defaults['cs_dotnet']['run_command']);
+
+        // Go is deliberately absent: GOMEMLIMIT is a soft limit by design
+        // and live data walks straight past it -- measured at 640 MB under a
+        // 256 MiB GOMEMLIMIT with GOGC=off. It needs cgroups (#86).
+        $this->assertStringNotContainsString('{memory}', $defaults['go']['run_command']);
+    }
+
     public function test_the_memory_rlimit_is_applied_only_to_languages_that_tolerate_it()
     {
         $service = $this->sandboxingService();
