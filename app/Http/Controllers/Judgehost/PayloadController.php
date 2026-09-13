@@ -8,6 +8,7 @@ use App\Models\TestCase;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -121,6 +122,47 @@ class PayloadController extends Controller
             sprintf('%d.%s', $testCase->number, $kind === 'input' ? 'in' : 'out'),
             ['Content-Type' => 'application/octet-stream']
         );
+    }
+
+    /**
+     * GET /api/judgehost/runs/{run}/package/{kind}
+     *
+     * Issue #120 -- one of the problem's custom scripts for the held run's
+     * language: compile, run or compare.
+     *
+     * Without these a judgehost judges by the default rules a problem
+     * explicitly overrode. The compare script is the one that matters
+     * most: a problem with a tolerance checker, judged by exact string
+     * comparison, marks correct submissions WA -- silently, with no error
+     * anywhere, and in favour of the wrong answer.
+     *
+     * Scoped exactly like the test data, and read through the same
+     * manifest the payload was built from, so a path can never be composed
+     * from anything the caller sent.
+     */
+    public function packageScript(Request $request, Run $run, string $kind): BinaryFileResponse
+    {
+        $this->assertHolds($request, $run);
+
+        abort_unless(in_array($kind, ['compile', 'run', 'compare'], true), 404);
+
+        $problem = $run->problem;
+        $language = $run->language;
+
+        abort_if($problem === null || $language === null, 404);
+
+        $path = match ($kind) {
+            'compile' => $problem->getCompileScriptPath((string) $language->extension),
+            'run' => $problem->getRunScriptPath((string) $language->extension),
+            'compare' => $problem->getCompareScriptPath((string) $language->extension),
+        };
+
+        abort_unless(is_file($path), 404, 'Este problema nao define um script deste tipo para esta linguagem.');
+
+        return response()->file($path, [
+            'Content-Type' => 'application/octet-stream',
+            'X-Script-Sha256' => (string) hash_file('sha256', $path),
+        ]);
     }
 
     private function sizeOf(?string $path): ?int

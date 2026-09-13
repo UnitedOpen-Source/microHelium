@@ -39,6 +39,9 @@ class JudgehostPayloadTest extends TestCase
 
     private Answer $wrong;
 
+    /** @var list<string> package directories to remove after the test */
+    private array $packageDirs = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -60,6 +63,22 @@ class JudgehostPayloadTest extends TestCase
             'short_name' => 'NO',
             'is_accepted' => false,
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        // Storage::fake() does not cover these: the package path is a real
+        // storage_path(), which is how Problem::getPackagePath() resolves it.
+        foreach ($this->packageDirs as $dir) {
+            foreach (glob($dir.'/*') ?: [] as $file) {
+                @unlink($file);
+            }
+            @rmdir($dir);
+            @rmdir(dirname($dir));
+            @rmdir(dirname($dir, 2));
+        }
+
+        parent::tearDown();
     }
 
     private function as(string $token): array
@@ -238,6 +257,127 @@ class JudgehostPayloadTest extends TestCase
             ->assertForbidden();
         $this->getJson("/api/judgehost/runs/{$run->id}/testcases", $this->as($otherToken))
             ->assertForbidden();
+    }
+
+    // --- the problem package (#120) ---------------------------------------
+
+    /**
+     * A problem's package directory, with whichever custom scripts the test
+     * asks for. This is the real layout Problem::getPackagePath() resolves,
+     * not a stand-in: storage/app/problems/{contest}/{basename}/{hook}/{ext}.
+     */
+    private function packageScripts(Problem $problem, array $scripts): void
+    {
+        foreach ($scripts as $hook => $body) {
+            $dir = storage_path("app/problems/{$problem->contest_id}/{$problem->basename}/{$hook}");
+            @mkdir($dir, 0755, true);
+            file_put_contents($dir.'/'.$this->language->extension, $body);
+            $this->packageDirs[] = $dir;
+        }
+    }
+
+    public function test_the_payload_declares_which_custom_scripts_the_problem_uses(): void
+    {
+        [$host, $token] = Judgehost::issue('judge-01');
+        $this->packageScripts($this->problem, ['compare' => "#!/bin/sh\nexit 0\n"]);
+        $run = $this->heldBy($host);
+
+        $manifest = app(JudgeWorkQueue::class)
+            ->workPayload($run->fresh())['problem']['package'];
+
+        // Stated, not guessed: an agent has to know a compare script exists
+        // before it can decide it is safe to judge.
+        $this->assertSame(hash('sha256', "#!/bin/sh\nexit 0\n"), $manifest['compare']['sha256']);
+        $this->assertNull($manifest['compile']);
+        $this->assertNull($manifest['run']);
+
+        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))
+            ->assertOk();
+    }
+
+    public function test_a_problem_with_no_custom_scripts_declares_none(): void
+    {
+        [$host, $token] = Judgehost::issue('judge-01');
+        $run = $this->heldBy($host);
+
+        $manifest = app(JudgeWorkQueue::class)
+            ->workPayload($run->fresh())['problem']['package'];
+
+        $this->assertSame(['compile' => null, 'run' => null, 'compare' => null], $manifest);
+
+        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))
+            ->assertNotFound();
+    }
+
+    public function test_the_holder_can_fetch_each_kind_of_script(): void
+    {
+        [$host, $token] = Judgehost::issue('judge-01');
+        $this->packageScripts($this->problem, [
+            'compile' => "compile me\n",
+            'run' => "run me\n",
+            'compare' => "compare me\n",
+        ]);
+        $run = $this->heldBy($host);
+
+        foreach (['compile', 'run', 'compare'] as $kind) {
+            $response = $this->get("/api/judgehost/runs/{$run->id}/package/{$kind}", $this->as($token));
+            $response->assertOk();
+            $this->assertSame("{$kind} me\n", $response->streamedContent());
+            $this->assertSame(hash('sha256', "{$kind} me\n"), $response->headers->get('X-Script-Sha256'));
+        }
+    }
+
+    public function test_another_host_cannot_read_the_package(): void
+    {
+        [$holder] = Judgehost::issue('judge-01');
+        [, $otherToken] = Judgehost::issue('judge-02');
+        $this->packageScripts($this->problem, ['compare' => "secret checker\n"]);
+        $run = $this->heldBy($holder);
+
+        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($otherToken))
+            ->assertForbidden();
+    }
+
+    public function test_giving_the_run_back_gives_up_the_package_too(): void
+    {
+        [$host, $token] = Judgehost::issue('judge-01');
+        $this->packageScripts($this->problem, ['compare' => "secret checker\n"]);
+        $run = $this->heldBy($host);
+
+        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))->assertOk();
+        $this->postJson("/api/judgehost/runs/{$run->id}/give-back", [], $this->as($token))->assertOk();
+
+        $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token))->assertForbidden();
+    }
+
+    /**
+     * A checker is a hidden artefact of the problem, exactly like the test
+     * data: holding one run must not be a key to another problem's.
+     */
+    public function test_the_package_is_scoped_to_the_held_runs_problem(): void
+    {
+        [$host, $token] = Judgehost::issue('judge-01');
+
+        $otherProblem = Problem::factory()->create(['contest_id' => $this->contest->id, 'auto_judge' => true]);
+        $this->packageScripts($otherProblem, ['compare' => "other problems checker\n"]);
+
+        $run = $this->heldBy($host);
+
+        // The held run's own problem defines no compare script, so there is
+        // nothing to serve -- and certainly not the other problem's.
+        $response = $this->get("/api/judgehost/runs/{$run->id}/package/compare", $this->as($token));
+
+        $response->assertNotFound();
+        $this->assertStringNotContainsString('other problems checker', (string) $response->getContent());
+    }
+
+    public function test_the_package_needs_a_credential(): void
+    {
+        [$host] = Judgehost::issue('judge-01');
+        $this->packageScripts($this->problem, ['compare' => "x\n"]);
+        $run = $this->heldBy($host);
+
+        $this->get("/api/judgehost/runs/{$run->id}/package/compare")->assertUnauthorized();
     }
 
     // --- the verdict ------------------------------------------------------

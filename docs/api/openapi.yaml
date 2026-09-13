@@ -1078,6 +1078,20 @@ paths:
                           time_limit: { type: integer }
                           memory_limit: { type: integer }
                           test_case_count: { type: integer }
+                          package:
+                            type: object
+                            description: >
+                              Issue #120. Which of the problem's custom scripts apply to this
+                              run's language, null where it does not override the hook. An
+                              agent that sees a non-null hook MUST fetch it before judging, or
+                              give the run back: AutoJudgeService applies each behind a
+                              file_exists() that falls through to the default, so judging
+                              without the compare script marks a correct submission WA in
+                              silence.
+                            properties:
+                              compile: { $ref: "#/components/schemas/PackageScriptRef" }
+                              run: { $ref: "#/components/schemas/PackageScriptRef" }
+                              compare: { $ref: "#/components/schemas/PackageScriptRef" }
                       language:
                         type: object
                         properties:
@@ -1289,6 +1303,57 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
+  /judgehost/runs/{run}/package/{kind}:
+    get:
+      tags: [Judgehost]
+      summary: One of the problem's custom scripts for a held run (issue #120)
+      description: >
+        The compile, run or compare script the problem overrides for this
+        run's language. Without these a judgehost judges by the default rules
+        a problem explicitly replaced -- and the compare hook is the one that
+        matters most, since a problem with a tolerance checker judged by exact
+        string comparison marks correct submissions WA, silently and in favour
+        of the wrong answer.
+        Scoped exactly like the test data, and resolved from the held run's
+        own problem, so a path is never composed from anything the caller
+        sent. 404 when the problem does not override that hook.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [compile, run, compare] }
+      responses:
+        "200":
+          description: The script bytes
+          headers:
+            X-Script-Sha256:
+              schema: { type: string }
+              description: sha256 of the body, matching the fetch-work manifest
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: This run is not currently assigned to the calling judgehost
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: No such run, or the problem does not override this hook for this language
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
   /judgehost/runs/{run}/result:
     post:
       tags: [Judgehost]
@@ -1488,6 +1553,18 @@ components:
                   items: { type: string }
 
   schemas:
+    PackageScriptRef:
+      type: object
+      nullable: true
+      description: >
+        Issue #120. A custom script the problem defines for the run's
+        language, or null when it does not override that hook. The digest is
+        what makes an agent's cache safe: scripts are per problem and per
+        language, so a host judging many runs of one problem fetches each
+        once, and a re-imported package invalidates it by itself.
+      properties:
+        sha256: { type: string }
+        bytes: { type: integer }
     ErrorMessage:
       type: object
       properties:

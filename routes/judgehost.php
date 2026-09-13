@@ -28,6 +28,8 @@ Route::get('/api/judgehost/runs/{run}/source', [PayloadController::class, 'sourc
 Route::get('/api/judgehost/runs/{run}/testcases', [PayloadController::class, 'testCases'])->whereNumber('run');
 Route::get('/api/judgehost/runs/{run}/testcases/{testCase}/{kind}', [PayloadController::class, 'testCaseFile'])
     ->whereNumber('run')->whereNumber('testCase')->whereIn('kind', ['input', 'output']);
+Route::get('/api/judgehost/runs/{run}/package/{kind}', [PayloadController::class, 'packageScript'])
+    ->whereNumber('run')->whereIn('kind', ['compile', 'run', 'compare']);
 Route::post('/api/judgehost/runs/{run}/result', [ResultController::class, 'store'])->whereNumber('run');
 
 // The verdict vocabulary for a contest -- answers are per contest and
