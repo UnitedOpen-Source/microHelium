@@ -9,8 +9,6 @@ return [
 
     'enabled' => env('AUTOJUDGE_ENABLED', true),
 
-
-
     /*
     |--------------------------------------------------------------------------
     | Default Time Limit
@@ -60,8 +58,6 @@ return [
     |
     */
     'compile_timeout' => env('AUTOJUDGE_COMPILE_TIMEOUT', 30),
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -285,4 +281,33 @@ return [
     |
     */
     'cgroup_root' => env('AUTOJUDGE_CGROUP_ROOT', '/sys/fs/cgroup/judge'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Compilation memory ceiling
+    |--------------------------------------------------------------------------
+    |
+    | Issue #115. #86 capped the RUN's resident memory and left compilation
+    | with no memory ceiling at all -- and compilation is the step that runs
+    | toolchains over untrusted source, which is the premise
+    | docs/specs/49-judge-isolation.md is built on.
+    |
+    | A compiler is the easiest program in the pipeline to blow up from
+    | source alone: C++ template metaprogramming (-ftemplate-depth bounds
+    | recursion depth, not memory), recursive macros, a single enormous array
+    | literal. Without a ceiling one such submission takes the whole judge
+    | machine down -- and with distributed judging (#53) that is a partner's
+    | machine, not ours.
+    |
+    | Deliberately much larger than a problem's memory_limit: that number is
+    | about the contestant's algorithm, and a legitimate compile of a big
+    | C++ translation unit with heavy templates routinely needs more than the
+    | program it produces ever will. This is a ceiling against runaway, not a
+    | budget anyone should be judged against.
+    |
+    | Only applies where cgroup_root is live. With no delegated subtree this
+    | is a no-op, exactly like the run's cap.
+    |
+    */
+    'compile_memory_mb' => (int) env('AUTOJUDGE_COMPILE_MEMORY_MB', 2048),
 ];
