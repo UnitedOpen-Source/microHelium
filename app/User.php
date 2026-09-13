@@ -38,6 +38,12 @@ class User extends Authenticatable
         'contest_id',
         'site_id',
         'description',
+        // Issue #100: the column has existed since
+        // 2025_11_25_000007_update_users_table and was never fillable, so
+        // an Eloquent update silently dropped it. The create path writes
+        // through the query builder, which is why #89 worked and editing
+        // did not.
+        'icpc_id',
         'is_enabled',
         'birthdate',
         'managed_by',
