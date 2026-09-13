@@ -3,6 +3,9 @@
     "version": "2.0.0",
     "description": "Hackathon and Programming Contest Management Platform",
     "private": true,
+    "engines": {
+        "node": ">=22.15"
+    },
     "type": "module",
     "scripts": {
         "dev": "vite",
