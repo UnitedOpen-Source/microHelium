@@ -89,9 +89,11 @@
                         <label for="problem_id" class="block text-sm font-medium text-foreground">Problema</label>
                         <select name="problem_id" id="problem_id" class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                             <option value="">Geral</option>
-                            @foreach($exercises ?? [] as $exercise)
-                                <option value="{{ $exercise->exercise_id }}">
-                                    {{ chr(65 + $loop->index) }} - {{ $exercise->exerciseName }}
+                            {{-- Issue #106: os problemas da competição, não a
+                                 tabela legada de 2017 que nunca tem linhas. --}}
+                            @foreach($problems ?? [] as $problem)
+                                <option value="{{ $problem->id }}">
+                                    {{ $problem->short_name }} - {{ $problem->name }}
                                 </option>
                             @endforeach
                         </select>

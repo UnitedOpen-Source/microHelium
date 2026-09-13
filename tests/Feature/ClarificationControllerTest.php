@@ -32,7 +32,10 @@ class ClarificationControllerTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewIs('clarifications');
-        $response->assertViewHasAll(['clarifications', 'exercises']);
+        // Issue #106: was 'exercises', the 2017 Helium table the dropdown
+        // was filled from -- always empty on a real contest, so a team could
+        // only ever ask a "Geral" clarification.
+        $response->assertViewHasAll(['clarifications', 'problems']);
     }
 
     /**
