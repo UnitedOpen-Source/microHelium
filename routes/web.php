@@ -233,6 +233,13 @@ Route::post('/site/clarifications/{clarification}/answer', [SiteController::clas
 |--------------------------------------------------------------------------
 */
 
+// Issue #88 -- the contest audit log. Outside the admin-only backend group
+// on purpose: a judge or staff member auditing a disputed verdict needs it
+// too, scoped to their own contest and without the IP column.
+Route::get('/backend/logs', [App\Http\Controllers\Backend\ContestLogController::class, 'index'])
+    ->middleware(['auth', 'role:admin,judge,staff'])
+    ->name('backend.logs');
+
 Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
 
     // Problem Management (real Problem/TestCase rows -- see issue #34;
