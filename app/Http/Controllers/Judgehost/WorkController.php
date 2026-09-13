@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\Judgehost;
 
 use App\Http\Controllers\Controller;
-use App\Http\Middleware\AuthenticateJudgehost;
-use App\Models\Judgehost;
 use App\Models\Run;
 use App\Services\JudgeWorkQueue;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +17,8 @@ use Illuminate\Http\Request;
  */
 class WorkController extends Controller
 {
+    use HoldsRun;
+
     public function __construct(private JudgeWorkQueue $queue) {}
 
     /**
@@ -75,33 +75,10 @@ class WorkController extends Controller
      */
     public function giveBackRun(Request $request, Run $run): JsonResponse
     {
-        $judgehost = $this->judgehost($request);
-
-        $this->assertHolds($judgehost, $run);
+        $this->assertHolds($request, $run);
 
         $run->update(['status' => 'pending', 'judgehost_id' => null, 'claimed_at' => null]);
 
         return response()->json(['data' => ['run_id' => $run->id, 'status' => 'pending']]);
-    }
-
-    /**
-     * A host may only speak about a run it is actually holding.
-     *
-     * DOMjudge does not do this -- its get_files endpoints filter on the
-     * testcase or submission id alone, so one judgehost credential reads
-     * every hidden test case and every contestant's source in the system.
-     * Inheriting that would be inheriting a jury-equivalent capability
-     * handed to every judge machine.
-     */
-    private function assertHolds(Judgehost $judgehost, Run $run): void
-    {
-        if ($run->judgehost_id !== $judgehost->id) {
-            abort(403, 'Esta submissao nao esta atribuida a este judgehost.');
-        }
-    }
-
-    private function judgehost(Request $request): Judgehost
-    {
-        return $request->attributes->get(AuthenticateJudgehost::ATTRIBUTE);
     }
 }

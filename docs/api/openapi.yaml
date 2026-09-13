@@ -1144,6 +1144,265 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
+  /judgehost/runs/{run}/source:
+    get:
+      tags: [Judgehost]
+      summary: The source file of a held run (issue #53)
+      description: >
+        Streamed as octet-stream rather than base64 in JSON: a source file is
+        already at the submission size limit and encoding it inflates it by a
+        third for no gain. `X-Source-Sha256` repeats the digest fetch-work
+        gave, so the agent can verify what it received.
+        Scoped to the machine currently holding the run -- not to one that
+        held it earlier. Giving a run back gives up its source with it.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The source bytes
+          headers:
+            X-Source-Sha256:
+              schema: { type: string }
+              description: sha256 of the body, matching runs.source_hash
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: This run is not currently assigned to the calling judgehost
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: No such run, or its source file is missing from storage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /judgehost/runs/{run}/testcases:
+    get:
+      tags: [Judgehost]
+      summary: Index of the test cases for a held run's problem (issue #53)
+      description: >
+        The index, not the data. Digests and sizes let an agent cache test
+        cases across runs of the same problem -- the reason a judgehost is
+        worth keeping warm -- and fetch only what it does not already hold.
+        `bytes` is null when the file is missing from storage.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The problem's test cases, in order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        number: { type: integer }
+                        is_sample: { type: boolean }
+                        input:
+                          type: object
+                          properties:
+                            sha256: { type: string }
+                            bytes: { type: integer, nullable: true }
+                        output:
+                          type: object
+                          properties:
+                            sha256: { type: string }
+                            bytes: { type: integer, nullable: true }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: This run is not currently assigned to the calling judgehost
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /judgehost/runs/{run}/testcases/{testCase}/{kind}:
+    get:
+      tags: [Judgehost]
+      summary: One test case's input or expected output (issue #53)
+      description: >
+        `{testCase}` is checked against the held run's problem, not merely
+        looked up by id. Without that, holding one trivial run would be
+        enough to read the hidden test data of every problem in the system --
+        which is what DOMjudge's equivalent endpoint allows.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: testCase
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [input, output] }
+      responses:
+        "200":
+          description: The test-case bytes
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: >
+            The run is not assigned to the caller, or the test case belongs to
+            a different problem than the assigned run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "404":
+          description: No such run or test case, or the file is missing from storage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /judgehost/runs/{run}/result:
+    post:
+      tags: [Judgehost]
+      summary: Report the verdict for a held run (issue #53)
+      description: >
+        The one judgehost endpoint that changes the standings. The verdict
+        must be an answer short_name defined for this run's own contest --
+        answers are per contest and installations rename them, so a free-form
+        string would write answer_id = null and produce a run that is
+        `judged` with no verdict, which the scoreboard silently reads as
+        unsolved.
+        Accepted only while the run is still `judging` and still leased to
+        the caller, checked under a row lock in the same transaction as the
+        write: a host whose lease expired mid-judging has already had its
+        work handed to another machine, and its late answer must not
+        overwrite the verdict of the machine that actually holds it.
+        The verdict is recorded through the same path a local judging takes,
+        so the scoreboard recompute, the first-solve balloon, and the
+        contest-log entry all happen.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: run
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verdict]
+              properties:
+                verdict:
+                  type: string
+                  maxLength: 10
+                  description: An answers.short_name belonging to this run's contest
+                message: { type: string, nullable: true, maxLength: 65535 }
+                stdout: { type: string, nullable: true, maxLength: 65535 }
+                stderr: { type: string, nullable: true, maxLength: 65535 }
+      responses:
+        "200":
+          description: The verdict was recorded and the lease released
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      run_id: { type: integer }
+                      status: { type: string, example: judged }
+                      verdict: { type: string }
+                      answer_id: { type: integer, nullable: true }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "403":
+          description: This run is not currently assigned to the calling judgehost
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "409":
+          description: >
+            The run is no longer open -- already judged, or re-leased to
+            another machine between the claim and the answer
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /judgehost/contests/{contest}/answers:
+    get:
+      tags: [Judgehost]
+      summary: The verdict vocabulary of a contest (issue #53)
+      description: >
+        Answers are per contest and installations rename them, so an agent
+        must not hardcode BOCA's set. Not scoped to a held run: it is the
+        vocabulary, not anyone's work, and an agent needs it before it has
+        claimed anything.
+      security:
+        - judgehostToken: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The contest's answers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        short_name: { type: string }
+                        name: { type: string }
+                        is_accepted: { type: boolean }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
 components:
   securitySchemes:
     sanctum:
