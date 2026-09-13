@@ -26,6 +26,7 @@ RUN apk add --no-cache \
     libxml2-dev \
     postgresql-dev \
     linux-headers \
+    bubblewrap \
     $PHPIZE_DEPS \
     # Supervisor for queue workers
     supervisor \

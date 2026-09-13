@@ -25,6 +25,7 @@ RUN apk add --no-cache \
     libxml2-dev \
     postgresql-dev \
     linux-headers \
+    bubblewrap \
     $PHPIZE_DEPS \
     # Compilers for autojudge -- this list must cover every language
     # Language::getDefaultLanguages() marks is_active by default, or admins
