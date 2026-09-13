@@ -134,6 +134,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The image runs as its own `judge` user (uid 1000) while the runner
+      # owns the checkout as a different uid, so every write the suite makes
+      # under storage/ fails with "Permission denied" -- 241 errors, all of
+      # them "could not be opened". Widening the directories the suite writes
+      # to is the targeted fix; running the container as the runner's uid
+      # instead would stop matching how docker-compose.yml actually runs the
+      # autojudge service, which is the thing this job exists to verify.
+      - name: Let the judge user write to the mounted workspace
+        run: |
+          chmod -R a+rwX storage bootstrap/cache
+          chmod a+rwX .
+
       # --privileged matches how docker-compose.yml runs the autojudge
       # service, and is what lets bubblewrap create user namespaces. The
       # workspace is mounted over the image's own copy so the code under
