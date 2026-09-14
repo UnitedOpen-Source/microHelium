@@ -164,7 +164,11 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_problem_list_api_returns_exercises()
     {
-        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        // is_public is explicit because ContestFactory draws it from
+        // faker->boolean(50). This test asserts what a GUEST sees, and a
+        // guest sees a contest's problems only when it is public (#135), so
+        // leaving it to chance made this pass half the time.
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true, 'is_public' => true]);
         \App\Models\Problem::factory()->create(['contest_id' => $contest->id, 'short_name' => 'A', 'name' => 'Test Problem 1']);
         \App\Models\Problem::factory()->create(['contest_id' => $contest->id, 'short_name' => 'B', 'name' => 'Test Problem 2']);
 
@@ -183,7 +187,8 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_single_problem_detail_returns_correct_data()
     {
-        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        // Acts as a guest, so the contest has to be public (#135).
+        $contest = \App\Models\Contest::factory()->create(['is_active' => true, 'is_public' => true]);
         $problem = \App\Models\Problem::factory()->create([
             'contest_id' => $contest->id,
             'name' => 'Detailed Problem',
@@ -382,7 +387,8 @@ class ApiEndpointsTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $response = $this->get('/clarifications');
+        // Issue #135: reading the jury's answers requires an account.
+        $response = $this->actingAs($this->createTestUser())->get('/clarifications');
 
         $response->assertStatus(200)
             ->assertViewIs('clarifications')

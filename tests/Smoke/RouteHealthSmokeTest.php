@@ -38,7 +38,6 @@ class RouteHealthSmokeTest extends TestCase
             'health check' => ['/up'],
             'problems list' => ['/exercises'],
             'scoreboard' => ['/scoreboard'],
-            'clarifications' => ['/clarifications'],
             'help' => ['/ajuda'],
             'wizard landing' => ['/wizard'],
         ];
@@ -57,6 +56,9 @@ class RouteHealthSmokeTest extends TestCase
         return [
             'dashboard' => ['/home'],
             'submissions' => ['/submissions'],
+            // Issue #135: reading the jury's clarification answers is contest
+            // information for registered teams, not public.
+            'clarifications' => ['/clarifications'],
             'admin exercises' => ['/backend/exercises'],
             'admin problem bank' => ['/backend/problem-bank'],
             'admin users' => ['/backend/users'],
