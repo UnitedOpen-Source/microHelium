@@ -34,6 +34,36 @@ class JudgeWorkQueue
      */
     public function claimNext(Judgehost $judgehost): ?Run
     {
+        return $this->claimFor($judgehost);
+    }
+
+    /**
+     * Issue #126 -- the same atomic claim, for a worker on this machine.
+     *
+     * autojudge:start did not have one. getNextPendingRun() selects the
+     * oldest pending run and returns it, and judge() flips the status
+     * afterwards, so two workers asking in that window both get the same
+     * run and both judge it. Measured, not supposed: two calls in a row,
+     * with no judging in between, return the same id.
+     *
+     * That made "just run more local workers" -- the cheap alternative
+     * docs/specs/53-distributed-judging.md wanted measured BEFORE any of
+     * the distributed machinery was justified -- not actually a working
+     * configuration. It is one now, which is what makes that comparison
+     * possible at all.
+     *
+     * judgehost_id stays null: this run is being judged by this machine,
+     * not leased to anyone. expireStaleLeases() therefore leaves it alone,
+     * and runs:reconcile-stuck (#45) keeps covering a local worker that
+     * dies mid-judge, exactly as before.
+     */
+    public function claimNextLocally(): ?Run
+    {
+        return $this->claimFor(null);
+    }
+
+    private function claimFor(?Judgehost $judgehost): ?Run
+    {
         return DB::transaction(function () use ($judgehost) {
             // auto_judge can be overridden per language
             // (problem_language_limits), so the candidate set cannot be
@@ -58,7 +88,7 @@ class JudgeWorkQueue
 
             $run->update([
                 'status' => 'judging',
-                'judgehost_id' => $judgehost->id,
+                'judgehost_id' => $judgehost?->id,
                 'claimed_at' => now(),
                 // Issue #123 -- the fencing token for this claim. Identity
                 // has to reach "which claim", not stop at "which machine":
@@ -66,7 +96,7 @@ class JudgeWorkQueue
                 // credential, so without this a hung agent that is
                 // restarted can report over the run its replacement is
                 // judging.
-                'claim_token' => Str::random(48),
+                'claim_token' => $judgehost === null ? null : Str::random(48),
             ]);
 
             return $run->fresh();

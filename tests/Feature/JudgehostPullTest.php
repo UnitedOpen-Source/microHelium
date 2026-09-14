@@ -322,6 +322,65 @@ class JudgehostPullTest extends TestCase
         $this->assertSame('judging', $run->fresh()->status);
     }
 
+    // --- local workers (#126) ---------------------------------------------
+
+    /**
+     * Issue #126 -- two workers on ONE machine must not get the same run.
+     *
+     * They did. getNextPendingRun() selected the oldest pending run and
+     * judge() flipped the status afterwards, so anyone who scaled by
+     * starting a second autojudge:start got both of them judging the same
+     * submission -- capacity wasted rather than added, and two writers on
+     * one verdict.
+     *
+     * This matters beyond the bug: "just run more local workers" is the
+     * cheap alternative the spec wanted measured before any of the
+     * distributed machinery was justified, and it was not a working
+     * configuration to measure.
+     */
+    public function test_two_local_workers_never_get_the_same_run(): void
+    {
+        $this->pendingRun();
+
+        $queue = app(JudgeWorkQueue::class);
+
+        $first = $queue->claimNextLocally();
+        $second = $queue->claimNextLocally();
+
+        $this->assertNotNull($first);
+        $this->assertNull($second, 'A second local worker was handed a run that is already being judged.');
+    }
+
+    public function test_a_local_claim_is_not_a_lease_and_is_not_reaped(): void
+    {
+        $this->pendingRun();
+        $queue = app(JudgeWorkQueue::class);
+
+        $run = $queue->claimNextLocally();
+        $run->update(['claimed_at' => now()->subHours(2)]);
+
+        // runs:reconcile-stuck (#45) owns a local worker that died; the
+        // judgehost lease reaper must not also be touching it, or a long
+        // local judging would be yanked out from under the process doing it.
+        $this->assertSame(0, $queue->expireStaleLeases());
+        $this->assertSame('judging', $run->fresh()->status);
+        $this->assertNull($run->fresh()->judgehost_id);
+        $this->assertNull($run->fresh()->claim_token);
+    }
+
+    public function test_a_locally_claimed_run_is_not_offered_to_a_judgehost(): void
+    {
+        [$host] = $this->host();
+        $this->pendingRun();
+
+        app(JudgeWorkQueue::class)->claimNextLocally();
+
+        $this->assertNull(
+            app(JudgeWorkQueue::class)->claimNext($host),
+            'A judgehost was handed a run the local worker is already judging.'
+        );
+    }
+
     // --- the lease --------------------------------------------------------
 
     // --- heartbeat (#124) -------------------------------------------------

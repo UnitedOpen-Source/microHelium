@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\AutoJudgeService;
+use App\Services\JudgeWorkQueue;
 use Illuminate\Console\Command;
 
 class AutoJudgeCommand extends Command
@@ -14,7 +15,8 @@ class AutoJudgeCommand extends Command
     protected $description = 'Start the auto-judge daemon to process pending submissions';
 
     public function __construct(
-        protected AutoJudgeService $judgeService
+        protected AutoJudgeService $judgeService,
+        protected JudgeWorkQueue $queue,
     ) {
         parent::__construct();
     }
@@ -27,7 +29,11 @@ class AutoJudgeCommand extends Command
         $sleepTime = (int) $this->option('sleep');
 
         while (true) {
-            $run = $this->judgeService->getNextPendingRun();
+            // Issue #126 -- claimed under a row lock rather than merely
+            // selected. Without this two workers on one machine pick the
+            // same run and judge it twice, which made running more than one
+            // of them a way to waste capacity rather than add it.
+            $run = $this->queue->claimNextLocally();
 
             if ($run) {
                 $this->info("Processing run #{$run->run_number} (ID: {$run->id})");
