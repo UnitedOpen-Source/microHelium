@@ -25,7 +25,15 @@ use App\Models\Leaderboard;
 class IcpcReportBuilder
 {
     /**
-     * @return list<array{icpc_id:string,placement:int,solved:int,total_time:int,first_solve:int,team:string,has_icpc_id:bool}>
+     * Issue #144 added user_id/site_id to this shape. Nothing in the CSV
+     * changed -- csv() still writes the same five columns in the same order
+     * -- but the standings walk already has the User in hand, and the
+     * per-site report needs to know which site each placement belongs to in
+     * order to cut the "problemas resolvidos" histogram down to one room.
+     * Re-deriving that in a second aggregation would mean two places
+     * deciding what counts as a standings row.
+     *
+     * @return list<array{icpc_id:string,placement:int,solved:int,total_time:int,first_solve:int,team:string,has_icpc_id:bool,user_id:int,site_id:int|null}>
      */
     public function rows(Contest $contest): array
     {
@@ -50,6 +58,8 @@ class IcpcReportBuilder
                 'total_time' => (int) $entry['total_time'],
                 'first_solve' => $this->firstSolveMinute($entry['problems']),
                 'team' => (string) ($user->fullname ?? ''),
+                'user_id' => (int) $user->user_id,
+                'site_id' => $user->site_id !== null ? (int) $user->site_id : null,
             ];
         }
 

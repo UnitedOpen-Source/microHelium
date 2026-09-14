@@ -10,16 +10,53 @@ import ClarificationList from './components/ClarificationList.vue';
 import ContestTimer from './components/ContestTimer.vue';
 import ThemeToggle from './components/ThemeToggle.vue';
 
-const components = { Scoreboard, RunList, SubmitForm, ClarificationList, ContestTimer, ThemeToggle };
-const selectors = ['scoreboard', 'run-list', 'submit-form', 'clarification-list', 'contest-timer', 'theme-toggle'];
+/*
+ * Issue #144 found this dead in a built deployment.
+ *
+ * This loop used to read each island element's outerHTML and hand it to
+ * createApp() as a `template` string. A string template is compiled at
+ * RUNTIME, and Vue compiles it with `new Function` -- which issue #143's CSP
+ * (script-src 'self' plus a per-request nonce, no 'unsafe-eval') refuses.
+ * The mount threw an EvalError, and because the throw happened inside this
+ * module's top level it took everything after it down with it:
+ * initializeUI() never ran and the feature-page mount below never ran. Every
+ * page in the application renders <contest-timer> or <theme-toggle> from the
+ * layout, so this fired on every page load. Verified in a browser against a
+ * production build, not reasoned about.
+ *
+ * The islands never actually needed a compiler. Every use of them in
+ * resources/views is a bare, attribute-free element -- <contest-timer>
+ * </contest-timer> -- so the element names a component and nothing more.
+ * Mounting the component directly is what the markup already meant, and it
+ * uses only build-time compiled render functions, which the CSP is happy
+ * with. vite.config.js no longer aliases `vue` to the compiler-carrying
+ * esm-bundler build either, so a string template reintroduced here fails
+ * loudly instead of silently killing the page.
+ */
+const islands = {
+    scoreboard: Scoreboard,
+    'run-list': RunList,
+    'submit-form': SubmitForm,
+    'clarification-list': ClarificationList,
+    'contest-timer': ContestTimer,
+    'theme-toggle': ThemeToggle,
+};
 
-document.querySelectorAll(selectors.join(',')).forEach(element => {
-    const host = document.createElement('div');
-    host.className = 'vue-island';
-    const template = element.outerHTML;
-    element.replaceWith(host);
-    createApp({ components, template }).mount(host);
-});
+for (const [selector, component] of Object.entries(islands)) {
+    for (const element of document.querySelectorAll(selector)) {
+        const host = document.createElement('div');
+        host.className = 'vue-island';
+        element.replaceWith(host);
+        // One island failing must never stop the next one, nor the feature
+        // page below -- that is precisely how one EvalError blanked the
+        // whole application.
+        try {
+            createApp(component).mount(host);
+        } catch {
+            host.remove();
+        }
+    }
+}
 
 initializeUI();
 

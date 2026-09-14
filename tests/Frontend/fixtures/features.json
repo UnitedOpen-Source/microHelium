@@ -271,7 +271,8 @@
         "version": "1",
         "capabilities": {
           "can_edit": true,
-          "can_transfer": true, "can_publish": true
+          "can_transfer": true,
+          "can_publish": true
         },
         "practice_status": "unpublished"
       },
@@ -352,5 +353,191 @@
         ]
       }
     ]
+  },
+  "/api/frontend/reports/site": {
+    "generated_at": "2026-09-14T12:00:00+00:00",
+    "contest": {
+      "id": 1,
+      "name": "Maratona Regional",
+      "duration_minutes": 60,
+      "is_running": false,
+      "is_frozen": true
+    },
+    "scope": {
+      "site_id": 3,
+      "site_name": "Sede Centro",
+      "sites": [
+        {
+          "id": 3,
+          "name": "Sede Centro"
+        }
+      ],
+      "can_choose_site": false
+    },
+    "summary": {
+      "submissions": 12,
+      "judged": 10,
+      "pending": 2,
+      "accepted": 4,
+      "rejected": 6,
+      "acceptance_rate": 40.0,
+      "teams": 5,
+      "median_delay_seconds": 45,
+      "max_delay_seconds": 620,
+      "site_id": 3
+    },
+    "verdicts": [
+      {
+        "answer_id": 1,
+        "short_name": "AC",
+        "name": "Accepted",
+        "is_accepted": true,
+        "total": 4
+      },
+      {
+        "answer_id": 2,
+        "short_name": "WA",
+        "name": "Wrong Answer",
+        "is_accepted": false,
+        "total": 6
+      },
+      {
+        "answer_id": null,
+        "short_name": "FILA",
+        "name": "Aguardando julgamento",
+        "is_accepted": false,
+        "total": 2
+      }
+    ],
+    "problems": [
+      {
+        "problem_id": 1,
+        "short_name": "A",
+        "name": "Somatorio",
+        "submissions": 7,
+        "accepted": 4,
+        "solved_teams": 4,
+        "first_solve_minute": 12
+      },
+      {
+        "problem_id": 2,
+        "short_name": "B",
+        "name": "Intratavel",
+        "submissions": 5,
+        "accepted": 0,
+        "solved_teams": 0,
+        "first_solve_minute": null
+      }
+    ],
+    "timeline": [
+      {
+        "minute": 0,
+        "submissions": 3,
+        "accepted": 1
+      },
+      {
+        "minute": 15,
+        "submissions": 5,
+        "accepted": 2
+      },
+      {
+        "minute": 30,
+        "submissions": 0,
+        "accepted": 0
+      },
+      {
+        "minute": 45,
+        "submissions": 4,
+        "accepted": 1
+      }
+    ],
+    "judging_delay": [
+      {
+        "label": "Ate 1 min",
+        "total": 6
+      },
+      {
+        "label": "1 a 5 min",
+        "total": 3
+      },
+      {
+        "label": "5 a 15 min",
+        "total": 1
+      },
+      {
+        "label": "15 a 60 min",
+        "total": 0
+      },
+      {
+        "label": "Mais de 60 min",
+        "total": 0
+      }
+    ],
+    "solved_distribution": [
+      {
+        "solved": 0,
+        "teams": 1
+      },
+      {
+        "solved": 1,
+        "teams": 3
+      },
+      {
+        "solved": 2,
+        "teams": 1
+      }
+    ]
+  },
+  "/api/frontend/reports/judge-history": {
+    "generated_at": "2026-09-14T12:00:00+00:00",
+    "contest": {
+      "id": 1,
+      "name": "Maratona Regional",
+      "duration_minutes": 60,
+      "is_running": false,
+      "is_frozen": true
+    },
+    "scope": {
+      "judge_id": null,
+      "site_ids": null
+    },
+    "judges": [
+      {
+        "judge_id": 9,
+        "name": "Ana Juíza",
+        "judged": 6,
+        "accepted": 2,
+        "rejected": 4,
+        "median_delay_seconds": 42
+      }
+    ],
+    "summary": {
+      "judged": 10,
+      "manual": 6,
+      "automatic": 4,
+      "judges": 1
+    },
+    "items": [
+      {
+        "run_id": 101,
+        "run_number": 17,
+        "problem": "A - Somatorio",
+        "team": "Equipe Alfa",
+        "site": "Sede Centro",
+        "verdict": "Wrong Answer",
+        "verdict_short": "WA",
+        "is_accepted": false,
+        "judge": "Ana Juíza",
+        "submitted_minute": 21,
+        "judged_minute": 22,
+        "delay_seconds": 42,
+        "detail_url": "/submission/101"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "last_page": 1,
+      "total": 6
+    }
   }
 }

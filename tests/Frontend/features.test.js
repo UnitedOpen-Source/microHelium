@@ -2,11 +2,12 @@ import './vue-loader.js';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
 const dom = new JSDOM('<!doctype html><html><head><meta name="csrf-token" content="test-csrf"></head><body><main id="app"></main></body></html>', { url: 'https://microhelium.test/practice' });
-for (const key of ['window', 'document', 'location', 'history', 'Element', 'HTMLElement', 'Document', 'SVGElement', 'Node', 'Event']) globalThis[key] = dom.window[key];
+for (const key of ['window', 'document', 'location', 'history', 'Element', 'HTMLElement', 'Document', 'SVGElement', 'Node', 'Event', 'MutationObserver']) globalThis[key] = dom.window[key];
 const { createApp, nextTick } = await import('vue');
 const { request, localUrl } = await import('../../resources/js/features/api.js');
-const components = Object.fromEntries(await Promise.all(['Practice', 'Similarity', 'Webcast', 'JudgingHealth', 'BankGovernance', 'ManagedAccounts'].map(async name => [name, (await import(`../../resources/js/features/${name}.vue`)).default])));
+const components = Object.fromEntries(await Promise.all(['Practice', 'Similarity', 'Webcast', 'JudgingHealth', 'BankGovernance', 'ManagedAccounts', 'SiteReport', 'JudgeHistory'].map(async name => [name, (await import(`../../resources/js/features/${name}.vue`)).default])));
 const tick = async () => { await new Promise(resolve => setTimeout(resolve, 0)); await nextTick(); };
 const envelope = (data, status = 200) => new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } });
 let app;
@@ -15,6 +16,9 @@ async function mount(name, data, props = {}) { globalThis.fetch = async () => en
 function field(name, value) { const input = document.querySelector(`[name="${name}"]`); assert.ok(input, name); input.value = value; input.dispatchEvent(new Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); return input; }
 function submit(form = document.querySelector('form')) { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }
 const meta = { current_page: 1, last_page: 1, total: 0 };
+// Issue #144: the report screens are asserted against the same fixture
+// bodies the local preview server serves, so the two cannot drift apart.
+const fixtures = JSON.parse(readFileSync(new URL('./fixtures/features.json', import.meta.url), 'utf8'));
 
 test('API distinguishes denied, expired, unavailable and invalid responses without leaking server HTML', async () => {
     for (const status of [401, 403, 404, 409, 419, 422, 429, 503]) {
@@ -124,4 +128,38 @@ test('new webcast secret is shown only after confirmed creation and can be remov
     assert.equal(document.querySelector('input[readonly]').value, 'test-only-secret');
     [...document.querySelectorAll('button')].find(b => b.textContent === 'Já guardei, ocultar segredo').click(); await tick();
     assert.equal(document.querySelector('input[readonly]'), null);
+});
+
+/*
+ * Issue #144. jsdom has no 2d canvas context, so chart.js cannot draw here --
+ * which is exactly the point of the assertion: the report must still say
+ * everything it has to say in text. That is not only a test convenience, it
+ * is the requirement that nothing depend on colour alone, and the reason the
+ * chart is drawn inside a try/catch.
+ */
+test('report screens state every charted number in text, so a chart that cannot draw loses nothing', async () => {
+    const site = fixtures['/api/frontend/reports/site'];
+    await mount('SiteReport', site);
+    // The per-problem cut, including the problem nobody solved.
+    assert.match(document.body.textContent, /Ninguém resolveu/);
+    assert.match(document.body.textContent, /Sede Centro/);
+    // The freeze is stated out loud rather than left for the reader to guess.
+    assert.match(document.body.textContent, /placar público está congelado/);
+    // Every chart carries its own table of the same numbers.
+    const tables = document.querySelectorAll('.report-chart-data table');
+    assert.equal(tables.length, 5);
+    assert.match(tables[0].textContent, /15 min/);
+    // The site picker offers only what the server allowed.
+    assert.equal(document.querySelectorAll('select[name="site_id"] option').length, 1);
+});
+
+test('judge history names the judge, the team and the wait, and keeps the machine separate', async () => {
+    await mount('JudgeHistory', fixtures['/api/frontend/reports/judge-history']);
+    assert.match(document.body.textContent, /Ana Juíza/);
+    assert.match(document.body.textContent, /Equipe Alfa/);
+    // The verdict is readable as text, not only as a coloured badge.
+    assert.match(document.body.textContent, /WA — Wrong Answer/);
+    // Automatic judgments are counted apart from the person's total.
+    assert.match(document.body.textContent, /Automáticos/);
+    assert.equal(document.querySelector('a[href="/submission/101"]').textContent, '#17');
 });

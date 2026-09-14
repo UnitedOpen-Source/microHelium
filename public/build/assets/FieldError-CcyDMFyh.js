@@ -1,0 +1,1 @@
+import{g as e,u as t,w as n}from"./app-4IMlUAjp.js";var r=[`hidden`,`id`],i={__name:`FieldError`,props:{error:Object,name:String},setup(i){return(a,o)=>(e(),t(`p`,{hidden:!i.error?.errors?.[i.name],id:`${i.name}-error`,class:`field-error`},n(i.error?.errors?.[i.name]?.join(` `)),9,r))}};export{i as t};
