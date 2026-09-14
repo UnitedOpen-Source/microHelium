@@ -55,6 +55,10 @@ class JudgehostOverRealHttpTest extends BaseTestCase
     {
         parent::setUp();
 
+        // Before anything is initialised: skipping here means tearDown()
+        // runs against an object whose typed properties were never set.
+        $this->skipWithoutGnuTime();
+
         $this->workspace = sys_get_temp_dir().'/mh_e2e_'.getmypid().'_'.random_int(1000, 9999);
         @mkdir($this->workspace, 0755, true);
 
@@ -71,6 +75,17 @@ class JudgehostOverRealHttpTest extends BaseTestCase
 
     protected function tearDown(): void
     {
+        // A skip in setUp() still runs tearDown(), and at that point none of
+        // the typed properties below exist. Reading one is a fatal Error
+        // that reports as a failure and hides the skip that actually
+        // happened -- which is exactly the confusing signal this change set
+        // out to remove.
+        if (! isset($this->environmentName)) {
+            parent::tearDown();
+
+            return;
+        }
+
         $this->server?->stop(2);
 
         @unlink($this->environmentFile());
@@ -78,6 +93,40 @@ class JudgehostOverRealHttpTest extends BaseTestCase
         $this->removeTree($this->base().'/storage/app/e2e_judgehost');
 
         parent::tearDown();
+    }
+
+    /**
+     * The judge measures peak RSS with `/usr/bin/time -f` (see
+     * config/autojudge.php's rss_time_path), which is GNU time. BSD time --
+     * what macOS ships -- rejects -f, so the judged program never runs, the
+     * verdict comes back RE instead of AC, and this test fails for a reason
+     * that has nothing to do with the judgehost protocol it exists to test.
+     *
+     * Skipping rather than failing, because two people reading this suite
+     * independently reported that failure as a mysterious pre-existing
+     * break and spent time on it. A test that cannot run here should say
+     * so in one line.
+     *
+     * CI runs this inside the judge image, which has GNU time, so it does
+     * not skip there -- which matters, because that job runs with
+     * --fail-on-skipped and a silent skip would be worse than the failure.
+     */
+    private function skipWithoutGnuTime(): void
+    {
+        // config() is unavailable here on purpose: this class extends
+        // PHPUnit's TestCase, not Laravel's, so there is no container. The
+        // default from config/autojudge.php is inlined rather than booted.
+        $binary = getenv('AUTOJUDGE_TIME_PATH') ?: '/usr/bin/time';
+
+        $probe = new Process([$binary, '-f', '%M', 'true']);
+        $probe->run();
+
+        if (! $probe->isSuccessful()) {
+            $this->markTestSkipped(
+                "{$binary} does not support -f (GNU time), so the judge cannot measure peak RSS ".
+                'and every run comes back RE. Run this suite inside the judge image.'
+            );
+        }
     }
 
     private function base(): string
