@@ -31,7 +31,9 @@ class JudgehostAgent
         private WorkMaterialiser $materialiser,
         private AutoJudgeService $judge,
         ?Closure $log = null,
+        private ?MachineCapabilities $machine = null,
     ) {
+        $this->machine ??= new MachineCapabilities;
         $this->log = $log ?? static function (): void {};
         $this->backoff = $this->minBackoff();
     }
@@ -43,7 +45,12 @@ class JudgehostAgent
      */
     public function register(): array
     {
-        $registration = $this->client->register();
+        $registration = $this->client->register($this->describeThisMachine());
+
+        $this->say('info', sprintf(
+            'Linguagens que esta maquina consegue julgar: %s.',
+            $registration['languages'] ? implode(', ', $registration['languages']) : 'nenhuma declarada'
+        ));
 
         $this->say('info', sprintf(
             'Registrado como "%s" (id %d). Runs devolvidos: %d. Lease: %ds.',
@@ -54,6 +61,35 @@ class JudgehostAgent
         ));
 
         return $registration;
+    }
+
+    /**
+     * Issue #117 -- what this machine can run, found out rather than
+     * configured.
+     *
+     * Done at register, and only there, so a machine that had a runtime
+     * installed or removed corrects itself by restarting its agent rather
+     * than by anyone remembering to edit a list. A probe that fails takes
+     * nothing down with it: an agent that cannot ask which languages exist
+     * registers without declaring any, and the server treats that as "can
+     * judge anything", which is what agents older than this did.
+     *
+     * @return array<string, mixed>
+     */
+    private function describeThisMachine(): array
+    {
+        $described = array_filter([
+            'cpu_count' => $this->machine->cpuCount(),
+            'memory_mb' => $this->machine->memoryMb(),
+        ], fn ($value) => $value !== null);
+
+        try {
+            $described['languages'] = $this->machine->detect($this->client->languages());
+        } catch (Throwable $e) {
+            $this->say('warn', "Nao foi possivel descobrir as linguagens desta maquina: {$e->getMessage()}");
+        }
+
+        return $described;
     }
 
     /**

@@ -97,6 +97,13 @@ class JudgeWorkQueue
             $run = $candidates->first(
                 fn (Run $run) => $run->problem && $run->language
                     && $run->problem->isAutoJudgeEnabledFor($run->language)
+                    // Issue #117 -- and this machine has to be able to run
+                    // it. Filtered here rather than in SQL for the same
+                    // reason the auto-judge check is: the candidate set is
+                    // already loaded, and one PHP pass beats a join whose
+                    // fallback case (a host that has declared nothing) is
+                    // "everything matches".
+                    && ($judgehost === null || $judgehost->canJudge($run->language->extension))
             );
 
             if (! $run) {

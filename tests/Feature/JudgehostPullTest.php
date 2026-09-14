@@ -496,6 +496,135 @@ class JudgehostPullTest extends TestCase
             ->assertJsonValidationErrors('reason');
     }
 
+    // --- capabilities (#117) ----------------------------------------------
+
+    private function otherLanguageRun(string $extension): Run
+    {
+        $language = Language::factory()->create([
+            'contest_id' => $this->contest->id,
+            'extension' => $extension,
+            // languages is unique on (contest_id, name) too, and the suite
+            // creates one in setUp().
+            'name' => 'lang-'.$extension,
+        ]);
+
+        $run = $this->pendingRun();
+        $run->update(['language_id' => $language->id]);
+
+        return $run->fresh();
+    }
+
+    public function test_a_host_is_not_handed_a_language_it_cannot_run(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', ['languages' => ['py']], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.languages', ['py']);
+
+        $this->otherLanguageRun('kt');
+
+        // Before #117 this host took the run, failed, and handed it back --
+        // over and over, because nothing recorded that it could not do it.
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertNoContent();
+    }
+
+    public function test_a_host_is_handed_a_language_it_declared(): void
+    {
+        [, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', ['languages' => ['kt', 'py']], $this->as($token))
+            ->assertOk();
+
+        $run = $this->otherLanguageRun('kt');
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.run_id', $run->id);
+    }
+
+    /**
+     * An agent older than #117 declares nothing, and must not be taken out
+     * of service by upgrading the server. #125 already bounds what that
+     * costs: it gives the run back with a reason, and a run refused enough
+     * times stops being offered at all.
+     */
+    public function test_a_host_that_declares_nothing_can_still_judge_anything(): void
+    {
+        [, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', [], $this->as($token))->assertOk();
+        $run = $this->otherLanguageRun('kt');
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.run_id', $run->id);
+    }
+
+    public function test_registering_again_replaces_what_a_host_can_run(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', ['languages' => ['kt']], $this->as($token))->assertOk();
+        $this->otherLanguageRun('kt');
+
+        // The runtime was removed from the machine; restarting the agent is
+        // all it should take to stop being offered that work.
+        $this->postJson('/api/remote-judges/v1/register', ['languages' => ['py']], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.languages', ['py']);
+
+        $this->assertSame(['py'], $host->fresh()->capabilities->pluck('extension')->all());
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertNoContent();
+    }
+
+    public function test_the_local_worker_is_never_capability_filtered(): void
+    {
+        $this->otherLanguageRun('kt');
+
+        // The server has every toolchain the contest is configured for;
+        // capability is about what a REMOTE machine happens to have.
+        $this->assertNotNull(app(JudgeWorkQueue::class)->claimNextLocally());
+    }
+
+    public function test_a_host_can_ask_which_languages_it_might_be_given(): void
+    {
+        [, $token] = $this->host();
+
+        $response = $this->getJson('/api/remote-judges/v1/languages', $this->as($token));
+
+        $response->assertOk();
+        // The commands are what the agent probes -- extensions alone would
+        // make it guess which binary "kt" implies.
+        $this->assertNotEmpty($response->json('data.0.extension'));
+        $this->assertArrayHasKey('run_command', $response->json('data.0'));
+    }
+
+    public function test_the_language_list_needs_a_credential(): void
+    {
+        $this->getJson('/api/remote-judges/v1/languages')->assertUnauthorized();
+    }
+
+    public function test_hardware_is_recorded_but_never_used_to_route(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register',
+            ['languages' => ['kt'], 'cpu_count' => 8, 'memory_mb' => 16384], $this->as($token))->assertOk();
+
+        $host->refresh();
+        $this->assertSame(8, $host->cpu_count);
+        $this->assertSame(16384, $host->memory_mb);
+
+        // A slower host is still offered the work: routing by speed would
+        // invent machinery the field solves by policy, and hide a fairness
+        // problem instead of showing it.
+        $run = $this->otherLanguageRun('kt');
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.run_id', $run->id);
+    }
+
     // --- the lease --------------------------------------------------------
 
     // --- heartbeat (#124) -------------------------------------------------

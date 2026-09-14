@@ -44,9 +44,23 @@ class JudgehostClient
     /**
      * @return array{judgehost: array{id: int, name: string}, reclaimed: int, lease_seconds: int}
      */
-    public function register(): array
+    /**
+     * @param  array<string, mixed>  $capabilities
+     */
+    public function register(array $capabilities = []): array
     {
-        return $this->request()->post($this->url('/register'))->throw()->json('data');
+        return $this->request()->post($this->url('/register'), $capabilities)->throw()->json('data');
+    }
+
+    /**
+     * Issue #117 -- the languages this installation can ask for, with the
+     * commands the agent probes to find out which of them it has.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function languages(): array
+    {
+        return $this->request()->get($this->url('/languages'))->throw()->json('data', []);
     }
 
     /**

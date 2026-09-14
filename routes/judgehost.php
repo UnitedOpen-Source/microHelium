@@ -23,6 +23,10 @@ use Illuminate\Support\Facades\Route;
 // needs no inbound port.
 Route::post('/api/remote-judges/v1/register', [WorkController::class, 'register']);
 Route::post('/api/remote-judges/v1/fetch-work', [WorkController::class, 'fetchWork']);
+
+// Issue #117 -- what this installation can be asked to judge, so a machine
+// can report which of it it actually has.
+Route::get('/api/remote-judges/v1/languages', [WorkController::class, 'languages']);
 Route::post('/api/remote-judges/v1/runs/{run}/give-back', [WorkController::class, 'giveBackRun'])->whereNumber('run');
 
 // The bytes and the verdict. Every one of these names a run in its URL and
