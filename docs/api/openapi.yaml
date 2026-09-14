@@ -1151,6 +1151,24 @@ paths:
             Issue #123. The claim_token fetch-work returned for this run. A token from a
             claim that is over -- given back, expired, or superseded by a fresh claim -- is
             refused with 403 even when it comes from the machine the run is assigned to.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  enum: [linguagem_ausente, pacote_indisponivel, sandbox_falhou, transferencia_corrompida, nao_informado]
+                  description: >
+                    Issue #125. Why this machine could not finish. A closed set, because the
+                    point is for an organiser to tell "nobody here has Kotlin installed" from
+                    "the network is dropping test data", and free text does not aggregate.
+                detail:
+                  type: string
+                  maxLength: 500
+                  description: Human-readable detail, logged alongside the reason.
       responses:
         "200":
           description: The run is pending again
@@ -1164,6 +1182,17 @@ paths:
                     properties:
                       run_id: { type: integer }
                       status: { type: string, example: pending }
+                      reason: { type: string }
+                      attempts:
+                        type: integer
+                        description: How many times this run has been handed back in total.
+                      needs_attention:
+                        type: boolean
+                        description: >
+                          Issue #125. True once the run has been refused enough times that it
+                          stops being offered to judgehosts and is logged as an error rather
+                          than a warning. It stays available to the local worker, which has
+                          the problem package a remote host may be missing.
         "401":
           description: Missing, unknown, or disabled judgehost token (indistinguishable)
           content:

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Answer;
 use App\Models\Contest;
+use App\Models\ContestLog;
 use App\Models\Judgehost;
 use App\Models\Language;
 use App\Models\Problem;
@@ -412,7 +413,7 @@ class JudgehostPullTest extends TestCase
             'contest_id' => $this->contest->id,
             'type' => 'warning',
         ]);
-        $log = \App\Models\ContestLog::where('contest_id', $this->contest->id)->latest('id')->first();
+        $log = ContestLog::where('contest_id', $this->contest->id)->latest('id')->first();
         $this->assertStringContainsString('linguagem_ausente', $log->message);
         $this->assertStringContainsString('judge-ufscar-01', $log->message);
     }
@@ -455,7 +456,7 @@ class JudgehostPullTest extends TestCase
 
         // Escalated, not repeated: the first refusals are ordinary and
         // logging them all the same way buries the one that needs a human.
-        $log = \App\Models\ContestLog::where('contest_id', $this->contest->id)->latest('id')->first();
+        $log = ContestLog::where('contest_id', $this->contest->id)->latest('id')->first();
         $this->assertSame('error', $log->type);
         $this->assertStringContainsString('nenhum judgehost', $log->message);
     }
