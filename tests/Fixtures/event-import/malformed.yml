@@ -1,0 +1,67 @@
+# Arquivo deliberadamente quebrado, usado pelos testes do issue #147.
+# Cada entrada abaixo comenta o erro que ela existe para provocar; o
+# importador precisa relatar TODOS de uma vez, com a localizacao de cada
+# um, e nao gravar nada.
+version: 1
+
+contest:
+  name: "Regional Quebrada 2026"
+  # Erro: "freze_time" nao existe. E o erro que o issue descreve -- um
+  # campo escrito errado que passaria despercebido e congelaria o placar
+  # na hora errada.
+  freze_time: 45
+  # Erro: nao e um numero.
+  penalty: "vinte"
+
+sites:
+  # Erro: sede sem nome.
+  - chief_judge_name: "Coordenacao sem sede"
+
+  - name: "UFRGS"
+    # Erro: valor fora do dominio da coluna.
+    score_visibility: "somente_eu"
+    # Erro: sede desconhecida.
+    judges_for: ["Sede que nao existe"]
+
+  # Erro: nome repetido dentro do proprio arquivo.
+  - name: "UFRGS"
+    chief_judge_name: "Coordenacao duplicada"
+
+  - name: "UFSC"
+    # Erro: octeto invalido.
+    ip_address: "10.0.0.300"
+    # Erro: abaixo do minimo aceito pela tela de sedes.
+    max_judge_wait_time: 5
+
+languages:
+  - preset: "cpp_gpp13"
+  # Erro: mesma extensao da entrada anterior (UNIQUE em contest_id+extension).
+  - name: "C++ de novo"
+    extension: "cpp_gpp13"
+    compile_command: "g++ -o {output} {source}"
+    run_command: "./{executable}"
+  # Erro: o identificador vira caminho de arquivo no judge; "+" nao passa.
+  - name: "C mais mais"
+    extension: "c++"
+    compile_command: "g++ -o {output} {source}"
+    run_command: "./{executable}"
+  # Erro: preset inexistente.
+  - preset: "cobol_1959"
+
+problems:
+  - short_name: "A"
+    name: "Problema A"
+    basename: "problema-a"
+  # Erro: mesma letra do anterior (UNIQUE em contest_id+short_name).
+  - short_name: "A"
+    name: "Outro problema A"
+    basename: "problema-a2"
+  # Erro: basename vira diretorio em storage/app/problems.
+  - short_name: "C"
+    name: "Problema fuga"
+    basename: "../../../etc/passwd"
+  # Erro: cor fora do formato.
+  - short_name: "D"
+    name: "Problema colorido"
+    basename: "problema-d"
+    color_hex: "vermelho"

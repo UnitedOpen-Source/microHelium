@@ -1,0 +1,110 @@
+# Maratona SBC de Programacao 2026 -- Primeira Fase, regional sul.
+#
+# Este arquivo descreve a prova inteira: competicao, sedes, linguagens e
+# problemas. Ele mora no mesmo repositorio dos pacotes de problema e e
+# revisado em diff entre uma edicao e outra.
+#
+#   php artisan event:import regional.yml            # previa, nao grava nada
+#   php artisan event:import regional.yml --apply    # aplica
+#
+# O arquivo descreve o ESTADO FINAL: um campo omitido volta ao padrao.
+# Nada e removido -- sedes/problemas que existem no banco e nao estao aqui
+# sao apenas listados.
+version: 1
+
+contest:
+  name: "Maratona SBC 2026 -- Primeira Fase"
+  description: "Primeira fase da Maratona de Programacao da SBC, regional sul."
+  # Sempre com fuso explicito. Sem ele o horario passa a depender da
+  # configuracao do servidor, que nem sempre e a do lugar onde a prova
+  # acontece.
+  start_time: "2026-09-19T13:00:00-03:00"
+  duration: 300
+  freeze_time: 60
+  penalty: 20
+  max_file_size: 100
+  # Ativada a mao no dia, depois de conferir as sedes.
+  is_active: false
+  is_public: true
+
+sites:
+  - name: "UFRGS"
+    chief_judge_name: "Coordenacao UFRGS"
+    ip_address: "10.20.0.0/16"
+    max_judge_wait_time: 600
+    # Os juizes da UFRGS tambem julgam os runs destas duas sedes, que nao
+    # tem equipe de julgamento propria.
+    judges_for: ["UNIPAMPA Alegrete", "URI Erechim"]
+
+  - name: "UFSC"
+    chief_judge_name: "Coordenacao UFSC"
+    ip_address: "10.30.0.0/16"
+    max_judge_wait_time: 900
+
+  - name: "UTFPR Curitiba"
+    chief_judge_name: "Coordenacao UTFPR"
+    max_judge_wait_time: 900
+
+  - name: "UNIPAMPA Alegrete"
+    chief_judge_name: "Coordenacao UNIPAMPA"
+    # Sede pequena, sem juiz local: so ve o proprio placar e nao julga
+    # automaticamente.
+    score_visibility: "own_site"
+    auto_judge: false
+    max_judge_wait_time: 1800
+
+  - name: "URI Erechim"
+    chief_judge_name: "Coordenacao URI"
+    score_visibility: "own_site"
+    max_judge_wait_time: 1800
+
+  - name: "Sede remota (contingencia)"
+    # Criada desativada: so entra em uso se alguma sede cair no dia.
+    is_active: false
+    permit_logins: false
+    max_judge_wait_time: 900
+
+languages:
+  # `preset` puxa nome e comandos do catalogo de linguagens do microHelium,
+  # para nao repetir aqui a linha de compilacao que ja mora no codigo.
+  - preset: c_gcc13
+  - preset: cpp_gpp13
+  - preset: java21
+  - preset: py3
+  # Habilitada na maquina de julgamento mas nao oferecida as equipes nesta
+  # edicao.
+  - preset: kt
+    is_active: false
+
+problems:
+  - short_name: "A"
+    name: "Abrigo de Animais"
+    basename: "abrigo"
+    color_name: "Vermelho"
+    color_hex: "#EF4444"
+    time_limit: 1
+
+  - short_name: "B"
+    name: "Bilhetes da Rodoviaria"
+    basename: "bilhetes"
+    color_name: "Azul"
+    color_hex: "#3B82F6"
+    time_limit: 2
+
+  - short_name: "C"
+    name: "Corrida de Orientacao"
+    basename: "corrida"
+    color_name: "Verde"
+    color_hex: "#22C55E"
+    time_limit: 3
+    memory_limit: 512
+
+  - short_name: "D"
+    name: "Dominos Coloridos"
+    basename: "dominos"
+    color_name: "Amarelo"
+    color_hex: "#EAB308"
+    time_limit: 2
+    # Sem correcao automatica: o problema tem saida multipla e vai para o
+    # juiz humano.
+    auto_judge: false

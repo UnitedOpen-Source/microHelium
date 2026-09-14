@@ -13,3 +13,9 @@ CHANGELOG.md export-ignore
 tests/Fixtures/team-import/*.tab -text
 tests/Fixtures/team-import/*.tsv -text
 tests/Fixtures/team-import/*.txt -text
+
+# Issue #147: as fixtures de importacao de evento sao entrada de parser e os
+# testes casam trechos multilinha delas com "\n" literal. `* text=auto` acima
+# trocaria as quebras de linha no checkout e o casamento falharia (ou, pior,
+# passaria sem testar nada). -text mantem os bytes como foram commitados.
+tests/Fixtures/event-import/* -text
