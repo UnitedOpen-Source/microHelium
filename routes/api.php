@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Api\ContestController;
 use App\Http\Controllers\Api\ClarificationController;
+use App\Http\Controllers\Api\ContestController;
 use App\Http\Controllers\Api\ProblemController;
 use App\Http\Controllers\Api\RunController;
 use App\Http\Controllers\Api\ScoreboardController;
@@ -13,40 +13,128 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
+|
+| Issue #134 -- this file used to be one flat `auth:sanctum` group with
+| three `role:` exceptions bolted on. `auth:sanctum` answers "who are you",
+| never "may you", so every route that did not carry its own `role:` was
+| reachable by any account holding a token -- including the `team` token
+| every competitor is given. Reproduced, not inferred: a team could
+| DELETE /api/problems/{id}, POST /api/contests/{id}/deactivate and
+| DELETE /api/contests/{id} mid-contest, and pull the full problem package
+| (which carries the hidden input/ and output/ test data) from
+| GET /api/problems/{id}/export.
+|
+| The group is therefore split in two, and the split is the contract:
+|
+|   1. the competitor surface -- reads a team needs to play, plus the two
+|      writes that ARE a team's job (submit a run, ask a clarification);
+|   2. the staff surface -- everything that changes the shape of the event
+|      or discloses material a competitor must not see.
+|
+| Api\ProblemController and Api\ContestController still have no internal
+| authorization of their own, so the route is the whole of the check for
+| them: adding an action to one of those controllers without deciding which
+| of the two groups it belongs in is what created this bug. That decision is
+| now forced -- tests/Feature/Api/ApiRouteAuthorizationTest.php walks the
+| live route list and fails on any auth:sanctum route it has not been told
+| about, so a new route cannot quietly inherit the open half again.
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+    /*
+    |----------------------------------------------------------------------
+    | Competitor surface -- any authenticated account, team included
+    |----------------------------------------------------------------------
+    |
+    | Reads only, plus submitting a run and asking a clarification. Each
+    | controller here already narrows the rows it returns to the caller
+    | (Api\RunController::index()/show() and Api\ClarificationController::
+    | index()/show() fall back to "own rows, plus broadcasts" for anyone who
+    | is not admin/judge), so the role gate below would be the wrong tool:
+    | teams are supposed to reach these, just not to see each other.
+    */
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
-    Route::apiResource('contests', ContestController::class);
-    Route::post('/contests/{contest}/activate', [ContestController::class, 'activate']);
-    Route::post('/contests/{contest}/deactivate', [ContestController::class, 'deactivate']);
+    Route::apiResource('contests', ContestController::class)->only(['index', 'show']);
     Route::get('/contests/{contest}/status', [ContestController::class, 'status']);
 
-    Route::get('/clarifications/pending', [ClarificationController::class, 'pending']);
-    Route::apiResource('clarifications', ClarificationController::class);
-    Route::put('/clarifications/{clarification}/answer', [ClarificationController::class, 'answer'])
-        ->middleware('role:judge,admin');
+    // whereNumber, because /clarifications/pending (the judge queue, in the
+    // staff group below) would otherwise be swallowed by show()'s
+    // {clarification} placeholder and answered with a 404 -- the two used to
+    // be declared in one block where source order alone kept them apart, and
+    // splitting the group by audience took that guarantee away.
+    Route::apiResource('clarifications', ClarificationController::class)
+        ->only(['index', 'store', 'show'])
+        ->whereNumber('clarification');
 
-    Route::apiResource('problems', ProblemController::class);
+    Route::apiResource('problems', ProblemController::class)->only(['index', 'show']);
+    // The rendered statement, not the package: description/ only, never
+    // input/ or output/. This is the file the team is meant to read.
     Route::get('/problems/{problem}/download', [ProblemController::class, 'download']);
-    Route::get('/problems/{problem}/export', [ProblemController::class, 'exportPackage']);
 
-    Route::apiResource('runs', RunController::class);
+    // `only` here is not a narrowing of what was reachable before: the
+    // controller never defined update()/destroy(), so apiResource was
+    // publishing two routes whose only possible outcome was a 500. Runs are
+    // an append-only record of the contest anyway -- a wrong verdict is
+    // fixed by rejudging, not by editing or deleting the submission.
+    Route::apiResource('runs', RunController::class)->only(['index', 'store', 'show']);
     Route::get('/runs/{run}/source', [RunController::class, 'downloadSource']);
-    Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge'])
-        ->middleware('role:judge,admin');
-    Route::put('/runs/{run}/judge', [RunController::class, 'judge'])
-        ->middleware('role:judge,admin');
 
     Route::get('/contests/{contest}/scoreboard', [ScoreboardController::class, 'index']);
     Route::get('/contests/{contest}/my-score', [ScoreboardController::class, 'userScore']);
-    Route::get('/contests/{contest}/scoreboard/export', [ScoreboardController::class, 'export']);
-    Route::get('/contests/{contest}/statistics', [ScoreboardController::class, 'statistics']);
-});
 
+    /*
+    |----------------------------------------------------------------------
+    | Staff surface
+    |----------------------------------------------------------------------
+    |
+    | `role:` (App\Http\Middleware\CheckRole) is the mechanism already in
+    | use for judge()/rejudge()/answer(); the two gates below only differ in
+    | who they let through, following what routes/web.php already decided
+    | for the same operations on the web side.
+    */
+
+    // Judge or admin: the day-to-day work of running the event. Judges own
+    // the clarification queue and the problem set -- exporting a package
+    // (hidden test data included) is part of preparing and checking a
+    // problem, which is exactly why it cannot stay on the competitor side.
+    Route::middleware('role:judge,admin')->group(function () {
+        Route::get('/clarifications/pending', [ClarificationController::class, 'pending']);
+        Route::apiResource('clarifications', ClarificationController::class)->only(['destroy']);
+        Route::put('/clarifications/{clarification}/answer', [ClarificationController::class, 'answer']);
+
+        Route::apiResource('problems', ProblemController::class)->only(['store', 'update', 'destroy']);
+        Route::get('/problems/{problem}/export', [ProblemController::class, 'exportPackage']);
+
+        Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
+        Route::put('/runs/{run}/judge', [RunController::class, 'judge']);
+
+        // Both of these read the scoreboard WITHOUT the freeze applied --
+        // Api\ScoreboardController::export() calls Leaderboard::
+        // getScoreboard() with no frozen flag, and statistics() counts
+        // solves straight off the scores table. /contests/{contest}/
+        // scoreboard hides exactly that during the freeze, so leaving these
+        // two open to teams would hand back the standings the freeze is
+        // there to withhold. Same reasoning as the admin-only ICPC report
+        // in routes/frontend_api_icpc.php: a standings artifact belongs to
+        // whoever is running the contest.
+        Route::get('/contests/{contest}/scoreboard/export', [ScoreboardController::class, 'export']);
+        Route::get('/contests/{contest}/statistics', [ScoreboardController::class, 'statistics']);
+    });
+
+    // Admin only: the lifecycle of the event itself. Creating, editing,
+    // deleting and activating a contest is already admin-only on the web
+    // side (the `['auth', 'admin']` backend group in routes/web.php), and
+    // there is no reason the token API should be the looser door -- a judge
+    // judges the contest they were given, they do not end it.
+    Route::middleware('role:admin')->group(function () {
+        Route::apiResource('contests', ContestController::class)->only(['store', 'update', 'destroy']);
+        Route::post('/contests/{contest}/activate', [ContestController::class, 'activate']);
+        Route::post('/contests/{contest}/deactivate', [ContestController::class, 'deactivate']);
+    });
+});
 
 // Health check
 Route::get('/health', function () {
@@ -64,7 +152,7 @@ Route::get('/openapi.yaml', function () {
 Route::get('/contest/current', function () {
     $contest = Contest::where('is_active', true)->first();
 
-    if (!$contest) {
+    if (! $contest) {
         return response()->json(null);
     }
 

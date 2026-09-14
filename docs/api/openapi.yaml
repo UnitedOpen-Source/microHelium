@@ -57,6 +57,8 @@ paths:
       description: >
         Also creates a default "Main Site", the contest's default languages,
         and default answers (accepted/wrong-answer/etc.).
+        Admin only (issue #134): the contest lifecycle is
+        administrative, the same way the /backend contest screens are.
       requestBody:
         required: true
         content:
@@ -70,6 +72,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Contest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -91,6 +95,9 @@ paths:
     put:
       tags: [Contests]
       summary: Update a contest
+      description: >
+        Admin only (issue #134): the contest lifecycle is
+        administrative, the same way the /backend contest screens are.
       requestBody:
         content:
           application/json:
@@ -103,11 +110,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Contest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
     patch:
       tags: [Contests]
       summary: Partially update a contest
+      description: >
+        Admin only (issue #134): the contest lifecycle is
+        administrative, the same way the /backend contest screens are.
       requestBody:
         content:
           application/json:
@@ -120,12 +132,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Contest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     delete:
       tags: [Contests]
       summary: Delete a contest
+      description: >
+        Admin only (issue #134): the contest lifecycle is
+        administrative, the same way the /backend contest screens are.
       responses:
         "204":
           description: Deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /contests/{contest}/activate:
     parameters:
@@ -133,6 +152,9 @@ paths:
     post:
       tags: [Contests]
       summary: Activate a contest
+      description: >
+        Admin only (issue #134): the contest lifecycle is
+        administrative, the same way the /backend contest screens are.
       responses:
         "200":
           description: Contest activated
@@ -143,6 +165,8 @@ paths:
                 properties:
                   message: { type: string }
                   contest: { $ref: "#/components/schemas/Contest" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /contests/{contest}/deactivate:
     parameters:
@@ -150,6 +174,9 @@ paths:
     post:
       tags: [Contests]
       summary: Deactivate a contest
+      description: >
+        Admin only (issue #134): the contest lifecycle is
+        administrative, the same way the /backend contest screens are.
       responses:
         "200":
           description: Contest deactivated
@@ -160,6 +187,8 @@ paths:
                 properties:
                   message: { type: string }
                   contest: { $ref: "#/components/schemas/Contest" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /contests/{contest}/status:
     parameters:
@@ -198,6 +227,10 @@ paths:
     get:
       tags: [Clarifications]
       summary: List pending clarifications
+      description: >
+        The judge queue: every unanswered question in the contest, whoever
+        asked it. Judge/admin only (issue #134) -- it is not scoped to the
+        caller the way GET /clarifications is.
       parameters:
         - $ref: "#/components/parameters/ContestIdQuery"
       responses:
@@ -209,6 +242,8 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Clarification"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /clarifications:
     get:
@@ -216,11 +251,9 @@ paths:
       summary: List clarifications
       description: >
         Teams only see their own clarifications plus anything with status
-        broadcast_site or broadcast_all; admins/judges see everything.
-        Despite the name, broadcast_site is currently NOT filtered to the
-        answering judge's site -- it is visible contest-wide, same as
-        broadcast_all (see app/Http/Controllers/Api/ClarificationController.php
-        ::index(), tracked as a known inaccuracy vs. the status name).
+        broadcast_all, and broadcast_site only when the clarification's own
+        site_id matches the viewer's -- a team at another site does not see
+        it (app/Http/Controllers/Api/ClarificationController.php::index()).
       parameters:
         - $ref: "#/components/parameters/ContestIdQuery"
       responses:
@@ -274,10 +307,14 @@ paths:
     delete:
       tags: [Clarifications]
       summary: Soft-delete a clarification
-      description: Marks status "deleted" then removes the row.
+      description: >
+        Marks status "deleted" then removes the row.
+        Judge/admin only (issue #134).
       responses:
         "204":
           description: Deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /clarifications/{clarification}/answer:
     parameters:
@@ -286,10 +323,9 @@ paths:
       tags: [Clarifications]
       summary: Answer a clarification
       description: >
-        Intended for judges/admins, but ClarificationController::answer()
-        currently enforces no such check beyond auth:sanctum -- any
-        authenticated user, including a team, can answer any clarification.
-        Tracked as a known authorization gap, not a documentation error.
+        Judge/admin only, and only for the judge's own contest --
+        ClarificationController::answer() additionally refuses a judge from
+        another contest with a 403.
       requestBody:
         required: true
         content:
@@ -310,6 +346,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Clarification"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /problems:
     get:
@@ -327,6 +365,8 @@ paths:
     post:
       tags: [Problems]
       summary: Import a problem package
+      description: >
+        Judge/admin only (issue #134).
       requestBody:
         required: true
         content:
@@ -349,6 +389,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -368,6 +410,8 @@ paths:
     put:
       tags: [Problems]
       summary: Update a problem
+      description: >
+        Judge/admin only (issue #134).
       requestBody:
         content:
           application/json:
@@ -380,9 +424,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       tags: [Problems]
       summary: Partially update a problem
+      description: >
+        Judge/admin only (issue #134).
       requestBody:
         content:
           application/json:
@@ -395,12 +443,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     delete:
       tags: [Problems]
       summary: Delete a problem
+      description: >
+        Judge/admin only (issue #134).
       responses:
         "204":
           description: Deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /problems/{problem}/download:
     parameters:
@@ -423,12 +477,19 @@ paths:
     get:
       tags: [Problems]
       summary: Export the full problem package as a zip
+      description: >
+        Judge/admin only (issue #134). A BOCA package carries input/ and
+        output/ -- the hidden test data -- so this is not the endpoint a
+        competitor reads a statement from; that is
+        GET /problems/{problem}/download.
       responses:
         "200":
           description: A zip archive of the problem package
           content:
             application/zip:
               schema: { type: string, format: binary }
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /runs:
     get:
@@ -597,6 +658,11 @@ paths:
     get:
       tags: [Scoreboard]
       summary: Export the scoreboard
+      description: >
+        Judge/admin only (issue #134): unlike GET
+        /contests/{contest}/scoreboard, this reads the standings with the
+        freeze NOT applied, so it would hand a competitor exactly what the
+        freeze exists to withhold.
       parameters:
         - name: format
           in: query
@@ -613,6 +679,8 @@ paths:
                 oneOf:
                   - $ref: "#/components/schemas/ScoreboardExportJson"
                   - $ref: "#/components/schemas/ScoreboardExportIcpc"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /contests/{contest}/statistics:
     parameters:
@@ -620,6 +688,9 @@ paths:
     get:
       tags: [Scoreboard]
       summary: Get per-problem submission statistics
+      description: >
+        Judge/admin only (issue #134): solve counts here are read straight
+        off the scores table, unaffected by the scoreboard freeze.
       responses:
         "200":
           description: Per-problem attempt/solve statistics
@@ -643,6 +714,8 @@ paths:
                         attempted_count: { type: integer }
                         success_rate: { type: number }
                         first_solver: { type: integer, nullable: true }
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /health:
     get:
