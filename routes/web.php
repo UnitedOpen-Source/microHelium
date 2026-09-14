@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Backend\ConfigurationController;
+use App\Http\Controllers\Backend\ContestLogController;
 use App\Http\Controllers\Backend\ContestWizardController;
 use App\Http\Controllers\Backend\ProblemBankController;
 use App\Http\Controllers\Backend\ProblemManagementController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Backend\UserController;
 use App\Http\Controllers\ClarificationController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\JudgeController;
+use App\Http\Controllers\PrintRequestController;
 use App\Http\Controllers\ProblemController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ScoreboardController;
@@ -51,7 +53,13 @@ Route::get('/scoreboard', [ScoreboardController::class, 'index'])->name('scorebo
 Route::get('/scoreboard/export', [ScoreboardController::class, 'export'])->name('scoreboard.export');
 
 // Clarifications
-Route::get('/clarifications', [ClarificationController::class, 'index'])->name('clarifications');
+// Issue #135: a clarification answer is problem information -- "n can be
+// zero", "the input is sorted" -- written by the jury for the teams in the
+// contest. The POST already required auth; the GET did not, so anyone on the
+// internet could read the jury's answers live without an account. Asking
+// required a login, reading did not.
+Route::get('/clarifications', [ClarificationController::class, 'index'])
+    ->middleware('auth')->name('clarifications');
 
 Route::post('/clarifications', [ClarificationController::class, 'store'])->middleware('auth');
 
@@ -238,15 +246,15 @@ Route::post('/site/clarifications/{clarification}/answer', [SiteController::clas
 // Issue #94 -- a team sends a file to the staff print queue. Team-only and
 // rate limited: a five-hour contest with two hundred teams is a queue
 // anyone could flood.
-Route::get('/print', [App\Http\Controllers\PrintRequestController::class, 'create'])->name('print.create');
-Route::post('/print', [App\Http\Controllers\PrintRequestController::class, 'store'])
+Route::get('/print', [PrintRequestController::class, 'create'])->name('print.create');
+Route::post('/print', [PrintRequestController::class, 'store'])
     ->middleware('throttle:10,60')
     ->name('print.store');
 
 // Issue #88 -- the contest audit log. Outside the admin-only backend group
 // on purpose: a judge or staff member auditing a disputed verdict needs it
 // too, scoped to their own contest and without the IP column.
-Route::get('/backend/logs', [App\Http\Controllers\Backend\ContestLogController::class, 'index'])
+Route::get('/backend/logs', [ContestLogController::class, 'index'])
     ->middleware(['auth', 'role:admin,judge,staff'])
     ->name('backend.logs');
 
@@ -267,7 +275,6 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('backend.users.edit');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('backend.users.update');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('backend.users.destroy');
-
 
     // Site Management (multi-site coordination -- see issue #18)
     Route::get('/sites', [App\Http\Controllers\Backend\SiteController::class, 'index'])->name('backend.sites');

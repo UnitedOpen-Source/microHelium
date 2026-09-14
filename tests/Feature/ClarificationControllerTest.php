@@ -28,7 +28,8 @@ class ClarificationControllerTest extends TestCase
      */
     public function test_clarification_index_page_loads()
     {
-        $response = $this->get('/clarifications');
+        // Issue #135: reading requires an account, the way asking already did.
+        $response = $this->actingAs($this->createTestUser())->get('/clarifications');
 
         $response->assertStatus(200);
         $response->assertViewIs('clarifications');

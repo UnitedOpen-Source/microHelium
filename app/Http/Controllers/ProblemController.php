@@ -17,6 +17,19 @@ class ProblemController extends Controller
     {
         $contest = $this->resolveContest();
 
+        // Issue #135: show() has always applied a visibility rule -- a guest
+        // sees a problem only when its contest is_public -- and index() did
+        // not, so the listing handed every problem of the running contest to
+        // anyone who asked, while the detail page for the same problem
+        // returned 404. is_public defaults to false, so the listing was the
+        // more permissive of the two by accident rather than by decision.
+        //
+        // The same rule, applied in one more place. A signed-in member of the
+        // contest still sees their own problems either way.
+        if ($contest && ! $this->mayList($contest)) {
+            $contest = null;
+        }
+
         $problems = $contest
             ? $contest->problems()->orderBy('short_name')->get()
             : collect();
@@ -62,30 +75,48 @@ class ProblemController extends Controller
     }
 
     /**
-     * index() only ever lists problems from the one contest resolveContest()
-     * picks, so it can't leak another contest's problems -- but show() takes
-     * a Problem straight from route-model-binding on a route with no auth
-     * middleware, so without this a problem from any other (private,
-     * inactive, or not-yet-announced) contest was viewable just by
-     * guessing/incrementing the numeric id.
+     * Issue #135 -- may the current viewer see this contest's problems?
+     *
+     * The single rule behind both the listing and the detail page, in this
+     * order: staff always; then a signed-in member of that contest; then
+     * everyone, but only when the contest is marked public.
+     *
+     * The middle branch requires a USER on purpose. It used to be "the
+     * contest resolveContest() picked", which for a guest is the running
+     * competition -- so being anonymous was as good as being in the contest.
      */
-    private function authorizeProblemVisibility(Problem $problem): void
+    private function mayList(Contest $contest): bool
     {
         $user = auth()->user();
 
         if ($user?->isAdmin() || $user?->isJudge()) {
-            return;
+            return true;
         }
 
-        $currentContest = $this->resolveContest();
-        if ($currentContest && $problem->contest_id === $currentContest->id) {
-            return;
+        if ($user && (int) $user->contest_id === (int) $contest->id) {
+            return true;
         }
 
-        if ($problem->contest->is_public) {
-            return;
-        }
+        return (bool) $contest->is_public;
+    }
 
-        abort(404);
+    /**
+     * show() takes a Problem straight from route-model-binding on a route
+     * with no auth middleware, so without this a problem from any other
+     * (private, inactive, or not-yet-announced) contest was viewable just by
+     * guessing/incrementing the numeric id.
+     *
+     * Issue #135: this used to let ANY viewer through for the contest
+     * resolveContest() returns, and for a guest that is the running
+     * competition -- so the active contest's problems were world-readable
+     * whatever is_public said, which made the flag meaningless for exactly
+     * the contest it matters most for. It now asks the same question
+     * mayList() asks, so the listing and the detail page cannot disagree.
+     */
+    private function authorizeProblemVisibility(Problem $problem): void
+    {
+        if (! $this->mayList($problem->contest)) {
+            abort(404);
+        }
     }
 }
