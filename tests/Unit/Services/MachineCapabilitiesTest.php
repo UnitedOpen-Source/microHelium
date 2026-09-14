@@ -24,6 +24,24 @@ class MachineCapabilitiesTest extends TestCase
         ];
     }
 
+    /**
+     * The shape the agent actually hands it.
+     *
+     * JudgehostClient::languages() returns decoded JSON -- associative
+     * arrays -- and the first version of this class read properties off
+     * them. Every language was skipped, the agent declared nothing, and
+     * because "declared nothing" legitimately means "can judge anything",
+     * capability routing silently did nothing at all. The unit tests
+     * passed, because they all used (object) casts. An end-to-end run
+     * against a real server is what caught it.
+     */
+    public function test_it_reads_the_decoded_json_the_client_actually_returns(): void
+    {
+        $fromApi = json_decode('[{"extension":"sh","compile_command":"true","run_command":"sh {source}"}]', true);
+
+        $this->assertSame(['sh'], (new MachineCapabilities)->detect($fromApi));
+    }
+
     public function test_a_language_whose_toolchain_is_present_is_reported(): void
     {
         $detected = (new MachineCapabilities)->detect([

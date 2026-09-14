@@ -25,7 +25,14 @@ class MachineCapabilities
     /**
      * The extensions this machine can run, out of the ones given.
      *
-     * @param  iterable<Language|object>  $languages
+     * Takes models, plain objects, or the decoded arrays the API returns.
+     * That last one is not hypothetical: this shipped reading properties
+     * off values that were arrays, so every language was skipped and the
+     * agent declared nothing -- silently, because declaring nothing is a
+     * valid answer meaning "can judge anything". It degraded safely and did
+     * nothing, which is the worst way for a feature to fail.
+     *
+     * @param  iterable<Language|object|array<string, mixed>>  $languages
      * @return list<string>
      */
     public function detect(iterable $languages): array
@@ -33,15 +40,15 @@ class MachineCapabilities
         $supported = [];
 
         foreach ($languages as $language) {
-            $extension = (string) ($language->extension ?? '');
+            $extension = (string) ($this->field($language, 'extension') ?? '');
 
             if ($extension === '' || in_array($extension, $supported, true)) {
                 continue;
             }
 
             $binaries = array_filter([
-                $this->executableOf((string) ($language->compile_command ?? '')),
-                $this->executableOf((string) ($language->run_command ?? '')),
+                $this->executableOf((string) ($this->field($language, 'compile_command') ?? '')),
+                $this->executableOf((string) ($this->field($language, 'run_command') ?? '')),
             ]);
 
             // A language with neither command is not a language this can
@@ -57,6 +64,18 @@ class MachineCapabilities
         }
 
         return $supported;
+    }
+
+    /**
+     * One field, however the caller happens to be carrying it.
+     */
+    private function field(mixed $language, string $key): mixed
+    {
+        if (is_array($language)) {
+            return $language[$key] ?? null;
+        }
+
+        return is_object($language) ? ($language->{$key} ?? null) : null;
     }
 
     public function cpuCount(): ?int
