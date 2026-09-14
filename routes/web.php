@@ -574,3 +574,4 @@ require __DIR__.'/frontend_api_managed_accounts.php';
 require __DIR__.'/frontend_api_practice.php';
 require __DIR__.'/frontend_api_icpc.php';
 require __DIR__.'/frontend_api_reports.php';
+require __DIR__.'/frontend_api_judgehosts.php';

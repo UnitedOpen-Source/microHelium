@@ -23,7 +23,7 @@ Novas issues abertas foram revisadas antes da entrega, com comentário de escopo
 | Issue | Entrega/impacto |
 | --- | --- |
 | [#49](https://github.com/UnitedOpen-Source/microHelium/issues/49) | [Isolamento obrigatório do executor](49-judge-isolation.md): dependência para habilitar envio; sem alteração de runtime neste PR |
-| [#53](https://github.com/UnitedOpen-Source/microHelium/issues/53) | [Julgamento distribuído](53-distributed-judging.md): ADR/fases e contratos; sem infraestrutura ou tela fictícia de agentes |
+| [#53](https://github.com/UnitedOpen-Source/microHelium/issues/53) | [Julgamento distribuído](53-distributed-judging.md): ADR/fases e contratos; sem infraestrutura ou tela fictícia de agentes. Fases 1-3 entregues; a fase 4 (gestão visual) tem agora o contrato de backend publicado em [Gestão de máquinas](53-judge-management.md), incluindo a capacidade `can_manage_judges` que a spec exigia antes de qualquer ação na UI |
 | [#54](https://github.com/UnitedOpen-Source/microHelium/issues/54) | [Rollback e smoke](54-deployment-verification.md): spec de release incluindo assets; nenhum deploy realizado |
 | [#146](https://github.com/UnitedOpen-Source/microHelium/issues/146) | [Sede sem link com o servidor central](146-site-connectivity.md): decisão de **não** replicar por sede, com a evidência — o BOCA-como-projeto tolera partição, o BOCA-como-implantado pela Maratona desde 2016 não é usado assim, e o DOMjudge diz na documentação que a equipe não submete com a rede fora |
 
