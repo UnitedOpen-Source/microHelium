@@ -20,6 +20,7 @@ tags:
   - name: Runs
   - name: Scoreboard
   - name: ManagedAccounts
+  - name: Tokens
   - name: Misc
   - name: Webcast
   - name: Judgehost
@@ -38,6 +39,152 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /tokens:
+    post:
+      tags: [Tokens]
+      summary: Exchange credentials for an API token
+      description: >
+        Issue #159 -- how a client that is not a browser gets in. Until this
+        existed there was no way at all: the Sanctum token table was never
+        migrated and nothing called createToken(), so every route in this
+        document was unreachable by any real client.
+
+
+        The shape is the one Laravel documents for CLI and mobile clients,
+        and matches what DOMjudge's submit client does -- it authenticates
+        with the user's own credentials rather than with a token an
+        organiser has to mint per team.
+
+
+        Unauthenticated by definition, and throttled at 5 requests a minute
+        per address, the same as the web login. The `login` field takes
+        either the account's e-mail or its username.
+
+
+        A wrong password and an account that does not exist answer
+        identically (422), deliberately: a participant list is public by
+        nature and this route must not confirm which names on it are
+        accounts. A disabled account (#47) and an account whose site pins an
+        address range it is not calling from (#50) are refused with 403 --
+        the second matters because without it this route would be the way
+        around the site lock the web login enforces.
+
+
+        The plain-text token is shown once and never again; only its sha256
+        is stored. It expires after SANCTUM_TOKEN_MINUTES (default 30 days).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password, device_name]
+              properties:
+                login:
+                  type: string
+                  description: The account's e-mail address or its username.
+                password: { type: string, format: password }
+                device_name:
+                  type: string
+                  description: >
+                    Informational, and the handle the person uses later to
+                    decide which token to revoke.
+                  example: notebook-da-equipe
+      responses:
+        "201":
+          description: A new token. The plain text appears in this response only.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, example: "3|k8sV..." }
+                  name: { type: string }
+                  abilities:
+                    type: array
+                    items: { type: string }
+                  expires_at: { type: string, format: date-time, nullable: true }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      username: { type: string }
+                      fullname: { type: string }
+                      user_type: { type: string }
+                      contest_id: { type: integer, nullable: true }
+        "403":
+          description: Account disabled, or calling from outside the site's allowed network
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          description: Too many attempts
+    get:
+      tags: [Tokens]
+      summary: List the caller's own API tokens
+      description: >
+        Never the token itself -- only its sha256 is stored, so there is
+        nothing to show. `current` marks the token this request was
+        authenticated with.
+      responses:
+        "200":
+          description: The caller's tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ApiToken" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /tokens/current:
+    delete:
+      tags: [Tokens]
+      summary: Revoke the token this request is authenticated with
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "400":
+          description: The request was not authenticated by a token (a session cookie has no token row)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /tokens/{token}:
+    delete:
+      tags: [Tokens]
+      summary: Revoke one of the caller's own tokens
+      description: >
+        Scoped to the caller's own tokens. Someone else's id answers 404,
+        not 403: whether a given token id exists is not this caller's
+        business either.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /contests:
     get:
@@ -1956,6 +2103,23 @@ components:
       properties:
         sha256: { type: string }
         bytes: { type: integer }
+    ApiToken:
+      type: object
+      description: >
+        A personal access token as the owner sees it. The secret is absent
+        by construction -- the database keeps only its sha256 (#159).
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        abilities:
+          type: array
+          items: { type: string }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        current:
+          type: boolean
+          description: True for the token this request was authenticated with.
     ErrorMessage:
       type: object
       properties:

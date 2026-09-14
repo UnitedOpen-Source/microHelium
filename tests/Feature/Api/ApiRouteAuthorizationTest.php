@@ -56,6 +56,15 @@ class ApiRouteAuthorizationTest extends TestCase
      */
     private const TEAM_REACHABLE = [
         'GET api/user',
+        // Issue #159 -- a caller's own API tokens. Every account has to be
+        // able to see and withdraw the credentials issued in its name, so
+        // these sit on the competitor surface; the scoping that keeps one
+        // team out of another's tokens is ownership inside
+        // Api\TokenController, and is pinned by
+        // Tests\Feature\Api\ApiTokenIssuanceTest.
+        'GET api/tokens',
+        'DELETE api/tokens/current',
+        'DELETE api/tokens/{token}',
         'GET api/contests',
         'GET api/contests/{contest}',
         'GET api/contests/{contest}/status',
@@ -79,14 +88,27 @@ class ApiRouteAuthorizationTest extends TestCase
      * that skipping a route is a decision someone writes down.
      *
      * GET /user returns the caller's own account and no contest rows at all.
+     * The same is true of /tokens (#159): a personal access token belongs to
+     * a user, not to a contest, so "another contest's row" is not a
+     * question that can be asked of it -- the boundary that matters there is
+     * ownership, and ApiTokenIssuanceTest::
+     * test_a_user_cannot_revoke_another_users_token asserts it.
+     *
      * The two writes are checked by
      * test_a_team_cannot_write_into_a_contest_it_does_not_compete_in, which
      * has to build a valid payload to get past validation and reach the
      * boundary; test_every_sanctum_api_route_is_classified holds that list
-     * to every non-GET route on the competitor surface, so a new one cannot
-     * skip the axis by not being mentioned here.
+     * to every non-GET route on the competitor surface that is not listed
+     * here, so a new one cannot skip the axis by not being mentioned --
+     * only by someone writing down, in this list, why the axis does not
+     * exist for it.
      */
-    private const NO_CONTEST_DIMENSION = ['GET api/user'];
+    private const NO_CONTEST_DIMENSION = [
+        'GET api/user',
+        'GET api/tokens',
+        'DELETE api/tokens/current',
+        'DELETE api/tokens/{token}',
+    ];
 
     private const TEAM_WRITES = [
         'POST api/clarifications',
@@ -152,14 +174,16 @@ class ApiRouteAuthorizationTest extends TestCase
 
         $unlistedWrites = array_diff(
             array_filter(self::TEAM_REACHABLE, fn ($route) => ! str_starts_with($route, 'GET ')),
-            self::TEAM_WRITES
+            self::TEAM_WRITES,
+            self::NO_CONTEST_DIMENSION
         );
 
         $this->assertEmpty(
             $unlistedWrites,
             'A write on the competitor surface that the cross-contest test does not cover. Being allowed to call a '
             .'route is not being allowed to act on every contest it names, so add it to TEAM_WRITES and assert the '
-            .'boundary: '.implode(', ', $unlistedWrites)
+            .'boundary -- or, if the route genuinely has no contest dimension, say so in NO_CONTEST_DIMENSION and '
+            .'assert whatever boundary it does have: '.implode(', ', $unlistedWrites)
         );
     }
 
@@ -427,7 +451,15 @@ class ApiRouteAuthorizationTest extends TestCase
         $contest = Contest::factory()->create();
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
 
-        $ownerId = $owner?->user_id ?? $this->createTestUser()->user_id;
+        $ownerUser = $owner ?? $this->createTestUser();
+        $ownerId = $ownerUser->user_id;
+
+        // Issue #159 -- a real row, so that DELETE /tokens/{token} is
+        // measured rather than answered 404 by a URI that still has a
+        // literal placeholder in it. whereNumber('token') would turn
+        // "{token}" into a 404, and a 404 is "not 403": the walk would pass
+        // while never reaching the route.
+        $tokenId = $ownerUser->createToken('walk')->accessToken->getKey();
 
         $run = Run::factory()->create([
             'contest_id' => $contest->id,
@@ -442,8 +474,8 @@ class ApiRouteAuthorizationTest extends TestCase
         ]);
 
         return '/'.str_replace(
-            ['{contest}', '{problem}', '{run}', '{clarification}'],
-            [$contest->id, $problem->id, $run->id, $clarification->id],
+            ['{contest}', '{problem}', '{run}', '{clarification}', '{token}'],
+            [$contest->id, $problem->id, $run->id, $clarification->id, $tokenId],
             $uri
         );
     }
