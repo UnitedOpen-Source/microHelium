@@ -1,0 +1,21 @@
+[user]
+usernumber=1
+usersitenumber=1
+userfullname=[PUC-SP A] Equipe Ação
+userdesc=[PUC-SP] Pontifícia Universidade Católica de São Paulo
+usericpcid=9001
+
+usernumber=2
+usersitenumber=1
+username=judge1
+usertype=judge
+userfullname=Primeiro juiz
+userpassword=secret
+
+usernumber=3
+usersitenumber=2
+username=equipe-tres
+userfullname=Equipe Três
+userdesc=Universidade Federal de São Carlos
+userpassword=aBcDe
+usericpcid=9003

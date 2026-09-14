@@ -3,18 +3,15 @@
 namespace App\Http\Controllers\Api\Frontend;
 
 use App\Http\Controllers\Controller;
-use App\Models\AccountActivation;
 use App\Models\Contest;
 use App\Models\Site;
+use App\Services\ManagedAccountProvisioner;
+use App\Services\UsernameTakenException;
 use App\Support\IdempotencyStore;
 use App\Support\ProfilePrivacyPolicy;
 use Helium\User;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -105,9 +102,9 @@ class ManagedAccountsController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, ManagedAccountProvisioner $provisioner): JsonResponse
     {
-        return IdempotencyStore::handle($request, self::ROUTE, function () use ($request) {
+        return IdempotencyStore::handle($request, self::ROUTE, function () use ($request, $provisioner) {
             // Only these five fields are ever read from the request --
             // any user_type/visibility/etc. sent by a manipulated client is
             // silently ignored, never applied (spec: "Ignorar/rejeitar
@@ -134,82 +131,36 @@ class ManagedAccountsController extends Controller
                 ],
             ]);
 
-            $username = trim($validated['username']);
-            $usernameTaken = User::query()
-                ->whereRaw('LOWER(TRIM(username)) = ?', [mb_strtolower($username)])
-                ->exists();
-
-            if ($usernameTaken) {
+            try {
+                // Account creation itself lives in
+                // App\Services\ManagedAccountProvisioner, shared with the
+                // bulk ICPC/BOCA importer (issue #141, `teams:import`) so
+                // that a team created here and a team created from a file
+                // are the same kind of account -- same unusable password,
+                // same disabled-until-activation state, same 72h
+                // single-use token, same privacy defaults. Everything that
+                // used to be inline here moved there unchanged; the
+                // username pre-check and the unique-violation race it
+                // cannot close moved with it.
+                [$user, $token] = $provisioner->create([
+                    'fullname' => $validated['fullname'],
+                    'username' => $validated['username'],
+                    'contest_id' => $validated['contest_id'],
+                    'site_id' => $validated['site_id'],
+                    'birthdate' => $validated['birthdate'] ?? null,
+                ], auth()->id());
+            } catch (UsernameTakenException) {
+                // Surfaced as the same clean 422 the caller would have got
+                // from a pre-request check, rather than a raw 500.
                 throw ValidationException::withMessages([
                     'username' => ['Este nome de usuario ja esta em uso.'],
                 ]);
             }
 
-            try {
-                [$user, $token] = DB::transaction(function () use ($validated, $username) {
-                    $user = User::create([
-                        'fullname' => trim($validated['fullname']),
-                        'username' => $username,
-                        // Unusable password -- nobody can log in with this
-                        // hash. The real credential is set via the
-                        // activation flow below
-                        // (AccountActivationController::store()).
-                        'password' => Hash::make(Str::random(64)),
-                        'user_type' => User::TYPE_TEAM,
-                        'contest_id' => $validated['contest_id'],
-                        'site_id' => $validated['site_id'],
-                        // Disabled until activation completes -- "criar role
-                        // team habilitada apenas conforme processo de
-                        // ativação".
-                        'is_enabled' => false,
-                        'birthdate' => $validated['birthdate'] ?? null,
-                        'managed_by' => auth()->id(),
-                        'managed_at' => now(),
-                        'profile_visibility' => 'private',
-                    ]);
-
-                    $token = Str::random(64);
-                    AccountActivation::create([
-                        'user_id' => $user->user_id,
-                        // Only the hash is stored -- the raw token exists
-                        // only in the URL returned below and in the
-                        // recipient's link.
-                        'token_hash' => hash('sha256', $token),
-                        // 72h, documented in docs/specs/47-managed-accounts.md.
-                        'expires_at' => now()->addHours(72),
-                    ]);
-
-                    return [$user, $token];
-                });
-            } catch (QueryException $e) {
-                // The pre-check above is a plain SELECT, not a lock -- two
-                // requests for the same username can both pass it before
-                // either commits (e.g. a genuine concurrent duplicate
-                // submission, not just this IdempotencyStore-covered
-                // same-key retry). The DB's unique index on users.username
-                // is the real guard in that race; surface it as the same
-                // clean 422 the pre-check would have produced instead of
-                // letting a raw QueryException turn into a 500.
-                //
-                // This same transaction also inserts an AccountActivation
-                // row with its own unique constraint on token_hash -- a
-                // blind "does the message contain 'unique'" check would
-                // wrongly relabel *that* collision as a username conflict
-                // too, hiding the real cause. Match the username column
-                // specifically, not just the word "unique".
-                if (self::isUsernameUniqueViolation($e)) {
-                    throw ValidationException::withMessages([
-                        'username' => ['Este nome de usuario ja esta em uso.'],
-                    ]);
-                }
-
-                throw $e;
-            }
-
             return response()->json([
                 'data' => [
                     'id' => $user->user_id,
-                    'activation_url' => '/activate/'.$token,
+                    'activation_url' => ManagedAccountProvisioner::activationPath($token),
                 ],
             ], 201);
         });
@@ -227,17 +178,5 @@ class ManagedAccountsController extends Controller
     private static function escapeLike(string $value): string
     {
         return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
-    }
-
-    /**
-     * True only for a unique-constraint violation on users.username
-     * specifically -- see the catch block above for why a blind "unique"
-     * substring match isn't precise enough here.
-     */
-    private static function isUsernameUniqueViolation(QueryException $e): bool
-    {
-        $message = strtolower($e->getMessage());
-
-        return str_contains($message, 'unique') && str_contains($message, 'username');
     }
 }
