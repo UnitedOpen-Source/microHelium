@@ -47,7 +47,12 @@ RUN apk add --no-cache \
     ruby \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
-    bash
+    bash \
+    # setpriv, for docker/php/entrypoint.sh's privilege drop (issue #136).
+    # Busybox ships a /bin/setpriv that only implements --inh-caps and
+    # --no-new-privs; --reuid/--regid are util-linux's. Dockerfile.judge
+    # installs this package for the same reason.
+    util-linux
 
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
 RUN npm install -g typescript
@@ -181,8 +186,23 @@ RUN mkdir -p /var/www/html/storage/app/judge \
     && chown -R www:www /var/www/html/storage \
     && chown -R www:www /var/log/php
 
-# Note: PHP-FPM needs to start as root to read config and bind port,
-# then it switches to the 'www' user defined in www.conf
+# Issue #136 -- the container starts as root and the entrypoint drops to
+# www (uid 1000) for everything except php-fpm and supervisord, which are
+# root masters by design and fork unprivileged children of their own
+# (`user = www` in www.conf, `user=www` on supervisord.conf's queue and
+# scheduler programs). PHP-FPM still needs to start as root to read its
+# config and bind the socket with the ownership www.conf asks for, which
+# is why this is an entrypoint and not a `USER` directive.
+#
+# What this actually fixes: docker-compose.yml runs THIS image for the
+# `queue` and `scheduler` services, and the queue is where JudgeRunJob
+# calls AutoJudgeService::judge() -- compiling and executing submitted
+# contestant code. Before this, that ran as uid 0, contradicting the
+# guarantee Dockerfile.judge has made since #86 for the identical code.
+# See docker/php/entrypoint.sh.
+COPY --chmod=755 docker/php/entrypoint.sh /usr/local/bin/app-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/app-entrypoint"]
 
 # Expose port 9000 for PHP-FPM
 EXPOSE 9000

@@ -44,7 +44,12 @@ RUN apk add --no-cache \
     ruby \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
-    bash
+    bash \
+    # setpriv, for docker/php/entrypoint.sh's privilege drop (issue #136).
+    # Busybox ships a /bin/setpriv that only implements --inh-caps and
+    # --no-new-privs; --reuid/--regid are util-linux's. Dockerfile.judge
+    # installs this package for the same reason.
+    util-linux
 
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
 RUN npm install -g typescript
@@ -130,6 +135,15 @@ RUN mkdir -p /var/www/html/storage/framework/{cache,sessions,views} \
     && mkdir -p /var/www/html/storage/logs \
     && mkdir -p /var/www/html/bootstrap/cache \
     && chown -R www:www /var/www/html
+
+# Issue #136 -- same privilege drop as Dockerfile, and needed here for
+# the same reason: docker-compose.dev.yml's `queue` service builds from
+# this file and runs `php artisan queue:work`, which judges submitted
+# code. Drops to www (uid 1000) for everything except php-fpm and
+# supervisord. See docker/php/entrypoint.sh.
+COPY --chmod=755 docker/php/entrypoint.sh /usr/local/bin/app-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/app-entrypoint"]
 
 EXPOSE 9000
 
