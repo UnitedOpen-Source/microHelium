@@ -14,3 +14,9 @@ npm-debug.log
 /boca-master
 /.phpunit.cache
 .env.e2e*
+
+# Playwright: installed browsers, test results, and the page snapshots the
+# MCP browser tooling drops in the working directory.
+/test-results
+/playwright-report
+/.playwright-mcp

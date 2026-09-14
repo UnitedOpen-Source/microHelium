@@ -30,8 +30,18 @@ import ThemeToggle from './components/ThemeToggle.vue';
  * Mounting the component directly is what the markup already meant, and it
  * uses only build-time compiled render functions, which the CSP is happy
  * with. vite.config.js no longer aliases `vue` to the compiler-carrying
- * esm-bundler build either, so a string template reintroduced here fails
- * loudly instead of silently killing the page.
+ * esm-bundler build either. That does NOT make a reintroduced string
+ * template fail at build time -- measured, and the build emits neither an
+ * error nor a warning; the component simply renders nothing. What it buys
+ * is that the failure stays local instead of throwing at module top level
+ * and taking every other island, and initializeUI(), down with it.
+ *
+ * Since that silence is not a guard, two things watch this:
+ * tests/Unit/FrontendCspCompatibilityTest.php asserts statically on the
+ * alias and on the absence of a `template` option, and
+ * tests/Browser/console.spec.js loads real built pages in a real browser
+ * under the real CSP and fails on any console error -- which is the only
+ * layer that would have caught the original defect.
  */
 const islands = {
     scoreboard: Scoreboard,
