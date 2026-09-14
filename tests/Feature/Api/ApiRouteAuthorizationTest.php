@@ -119,6 +119,11 @@ class ApiRouteAuthorizationTest extends TestCase
         'PATCH api/problems/{problem}',
         'DELETE api/problems/{problem}',
         'GET api/problems/{problem}/export',
+        // Issue #153: the hidden cases' disk paths and sha256 digests --
+        // an oracle a competitor can check a guessed input or output
+        // against. Was part of GET /problems/{problem}'s body until it was
+        // moved here.
+        'GET api/problems/{problem}/test-cases',
         'POST api/runs/{run}/rejudge',
         'PUT api/runs/{run}/judge',
     ];

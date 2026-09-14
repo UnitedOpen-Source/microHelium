@@ -432,13 +432,20 @@ paths:
         contest is_public. A contest you may not see answers 404 rather than
         403, so that an unannounced event is not discoverable by
         incrementing ids.
+
+
+        Carries counts only, never the test cases themselves (issue #153):
+        each row held the case's path on disk plus input_hash/output_hash,
+        and a sha256 of the hidden input lets a competitor verify a guessed
+        input instead of having to solve the problem. The full rows are
+        judge/admin only, at GET /problems/{problem}/test-cases.
       responses:
         "200":
-          description: The problem, with test cases loaded
+          description: The problem, with test case / run / clarification counts
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Problem"
+                $ref: "#/components/schemas/ProblemDetail"
         "404":
           $ref: "#/components/responses/NotFound"
     put:
@@ -528,6 +535,35 @@ paths:
               schema: { type: string, format: binary }
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /problems/{problem}/test-cases:
+    parameters:
+      - $ref: "#/components/parameters/ProblemId"
+    get:
+      tags: [Problems]
+      summary: List the problem's hidden test cases
+      description: >
+        Judge/admin only (issue #153). These rows name the input/output
+        files on disk and carry their sha256 digests, which is an oracle a
+        competitor can check a guessed input or output against -- the same
+        material GET /problems/{problem}/export ships in full. They used to
+        ride along in GET /problems/{problem}; that response now states
+        test_cases_count and nothing more.
+      responses:
+        "200":
+          description: The problem's test cases
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ProblemTestCase" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /runs:
     get:
@@ -2030,6 +2066,38 @@ components:
         auto_judge: { type: boolean }
         sort_order: { type: integer }
         is_fake: { type: boolean }
+
+    ProblemDetail:
+      description: >
+        What GET /problems/{problem} answers: the problem plus the three
+        counts it loads. `test_cases_count` is deliberately the whole of
+        what is said about the hidden cases on the competitor surface
+        (issue #153) -- how long a judgement is, with no digest of the
+        input or of the expected output attached.
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          properties:
+            test_cases_count: { type: integer }
+            runs_count: { type: integer }
+            clarifications_count: { type: integer }
+            contest: { $ref: "#/components/schemas/Contest" }
+
+    ProblemTestCase:
+      description: >
+        Judge/admin material. input_hash/output_hash are sha256 of the
+        hidden input and of the expected output, and input_file/output_file
+        are their paths under the storage root.
+      type: object
+      properties:
+        id: { type: integer }
+        problem_id: { type: integer }
+        number: { type: integer }
+        input_file: { type: string }
+        output_file: { type: string }
+        input_hash: { type: string, nullable: true }
+        output_hash: { type: string, nullable: true }
+        is_sample: { type: boolean }
 
     ProblemUpdate:
       type: object
