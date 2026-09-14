@@ -381,6 +381,120 @@ class JudgehostPullTest extends TestCase
         );
     }
 
+    // --- giving back with a reason (#125) ---------------------------------
+
+    private function claimFor(string $token): array
+    {
+        $run = $this->pendingRun();
+        $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->json('data.claim_token');
+
+        return [$run, $this->as($token) + ['X-Claim-Token' => $claim]];
+    }
+
+    public function test_a_give_back_records_why_and_warns_the_organisers(): void
+    {
+        [, $token] = $this->host('judge-ufscar-01');
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back",
+            ['reason' => 'linguagem_ausente', 'detail' => 'kotlin nao instalado'], $headers)
+            ->assertOk()
+            ->assertJsonPath('data.reason', 'linguagem_ausente')
+            ->assertJsonPath('data.attempts', 1)
+            ->assertJsonPath('data.needs_attention', false);
+
+        $this->assertSame('linguagem_ausente', $run->fresh()->give_back_reason);
+
+        // The reason has to reach the screen the organisation actually
+        // looks at (#88), not only a log file on the partner's machine.
+        $this->assertDatabaseHas('contest_logs', [
+            'contest_id' => $this->contest->id,
+            'type' => 'warning',
+        ]);
+        $log = \App\Models\ContestLog::where('contest_id', $this->contest->id)->latest('id')->first();
+        $this->assertStringContainsString('linguagem_ausente', $log->message);
+        $this->assertStringContainsString('judge-ufscar-01', $log->message);
+    }
+
+    public function test_a_run_every_host_refuses_stops_being_offered_to_hosts(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        // Three hosts try it and all hand it back.
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+                ->json('data.claim_token');
+
+            $this->assertNotNull($claim, "Attempt {$attempt} was not offered the run.");
+
+            $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back",
+                ['reason' => 'linguagem_ausente'], $this->as($token) + ['X-Claim-Token' => $claim])->assertOk();
+        }
+
+        $this->assertSame(3, $run->fresh()->give_back_count);
+
+        // Circulating it forever is the failure this replaces.
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertNoContent();
+    }
+
+    public function test_the_last_refusal_is_logged_as_an_error_not_a_warning(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+                ->json('data.claim_token');
+            $response = $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back",
+                ['reason' => 'pacote_indisponivel'], $this->as($token) + ['X-Claim-Token' => $claim]);
+        }
+
+        $response->assertJsonPath('data.needs_attention', true);
+
+        // Escalated, not repeated: the first refusals are ordinary and
+        // logging them all the same way buries the one that needs a human.
+        $log = \App\Models\ContestLog::where('contest_id', $this->contest->id)->latest('id')->first();
+        $this->assertSame('error', $log->type);
+        $this->assertStringContainsString('nenhum judgehost', $log->message);
+    }
+
+    /**
+     * The local worker is the fallback, so it must still see the run: the
+     * reasons a REMOTE machine gives back are mostly things the server
+     * itself has.
+     */
+    public function test_a_run_hosts_refused_is_still_offered_to_the_local_worker(): void
+    {
+        [, $token] = $this->host();
+        $run = $this->pendingRun();
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $claim = $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+                ->json('data.claim_token');
+            $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back",
+                ['reason' => 'pacote_indisponivel'], $this->as($token) + ['X-Claim-Token' => $claim])->assertOk();
+        }
+
+        $this->assertNotNull(
+            app(JudgeWorkQueue::class)->claimNextLocally(),
+            'The local worker, which has the problem package, was cut off from a run only remote hosts refused.'
+        );
+    }
+
+    public function test_an_invented_reason_is_refused(): void
+    {
+        [, $token] = $this->host();
+        [$run, $headers] = $this->claimFor($token);
+
+        // Free text does not aggregate, and aggregating is the point.
+        $this->postJson("/api/remote-judges/v1/runs/{$run->id}/give-back",
+            ['reason' => 'porque sim'], $headers)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('reason');
+    }
+
     // --- the lease --------------------------------------------------------
 
     // --- heartbeat (#124) -------------------------------------------------

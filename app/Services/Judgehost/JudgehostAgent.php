@@ -3,6 +3,7 @@
 namespace App\Services\Judgehost;
 
 use App\Services\AutoJudgeService;
+use App\Services\Judgehost\UnjudgeableRun;
 use Closure;
 use Throwable;
 
@@ -107,8 +108,9 @@ class JudgehostAgent
             // back is the whole reason give-back exists -- better than
             // holding it until the lease expires, and far better than
             // judging it by rules the problem replaced.
-            $this->say('warn', "Run #{$runId} devolvido: {$e->getMessage()}");
-            $this->giveBackQuietly($runId);
+            $reason = $e instanceof UnjudgeableRun ? $e->reason : 'sandbox_falhou';
+            $this->say('warn', "Run #{$runId} devolvido ({$reason}): {$e->getMessage()}");
+            $this->giveBackQuietly($runId, $reason, $e->getMessage());
 
             return;
         }
@@ -117,7 +119,7 @@ class JudgehostAgent
             $verdict = $this->judge->judgeWithoutPersisting($run, $this->heartbeatFor($runId, $payload));
         } catch (Throwable $e) {
             $this->say('error', "Run #{$runId} falhou ao julgar: {$e->getMessage()}");
-            $this->giveBackQuietly($runId);
+            $this->giveBackQuietly($runId, 'sandbox_falhou', $e->getMessage());
 
             return;
         } finally {
@@ -213,10 +215,10 @@ class JudgehostAgent
         }
     }
 
-    private function giveBackQuietly(int $runId): void
+    private function giveBackQuietly(int $runId, string $reason = 'nao_informado', ?string $detail = null): void
     {
         try {
-            $this->client->giveBack($runId);
+            $this->client->giveBack($runId, $reason, $detail);
         } catch (Throwable $e) {
             // Already reassigned, or the server is unreachable. The lease
             // expiry on the server covers both (#112), so there is nothing
