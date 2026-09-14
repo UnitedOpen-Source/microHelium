@@ -17,9 +17,17 @@ class ContestController extends Controller
         // Issue #43: the technical practice contest is excluded from the
         // public selector for everyone, admins included -- it is reached
         // through /practice, not by picking it as an event.
+        //
+        // Issue #134: the visibility filter used to be a bare
+        // `is_public` for anyone who is not an admin, which was wrong in
+        // both directions -- a judge could not see the private contest they
+        // were judging, and a team could not see its own private contest in
+        // the list it is meant to pick from. Contest::scopeVisibleTo() is
+        // the same rule show() now enforces, so the listing and the detail
+        // endpoint answer the same question.
         $contests = Contest::query()
             ->competition()
-            ->when(!auth()->user()?->isAdmin(), fn($q) => $q->where('is_public', true))
+            ->visibleTo(auth()->user())
             ->withCount(['problems', 'users', 'runs'])
             ->orderByDesc('created_at')
             ->paginate(15);
@@ -65,11 +73,17 @@ class ContestController extends Controller
 
     public function show(Contest $contest): JsonResponse
     {
+        // Route-model binding hands over whatever numeric id was in the URL.
+        // Without this, incrementing that id walked the whole installation:
+        // every contest, with its problem list loaded, whatever is_public
+        // said and whether or not it had started (issue #134).
+        $this->authorizeContestVisibility($contest);
+
         $contest->load([
             'sites',
-            'languages' => fn($q) => $q->where('is_active', true),
-            'answers' => fn($q) => $q->orderBy('sort_order'),
-            'problems' => fn($q) => $q->orderBy('sort_order'),
+            'languages' => fn ($q) => $q->where('is_active', true),
+            'answers' => fn ($q) => $q->orderBy('sort_order'),
+            'problems' => fn ($q) => $q->orderBy('sort_order'),
         ]);
 
         $contest->loadCount(['users', 'runs', 'clarifications']);
@@ -125,6 +139,10 @@ class ContestController extends Controller
 
     public function status(Contest $contest): JsonResponse
     {
+        // Same gate as show(): start_time and duration of an event you may
+        // not see are still that event's information.
+        $this->authorizeContestVisibility($contest);
+
         return response()->json([
             'is_active' => $contest->is_active,
             'is_running' => $contest->isRunning(),

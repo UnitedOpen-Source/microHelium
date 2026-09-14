@@ -2,7 +2,6 @@
 
 namespace Tests\Integration\Api;
 
-use Tests\TestCase;
 use App\Models\Clarification;
 use App\Models\Contest;
 use App\Models\Problem;
@@ -10,6 +9,7 @@ use App\Models\Site;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Tests\TestCase;
 
 class ClarificationControllerTest extends TestCase
 {
@@ -28,7 +28,10 @@ class ClarificationControllerTest extends TestCase
     public function test_index_for_user()
     {
         $contest = Contest::factory()->create();
-        $user = User::factory()->create();
+        // Member of the contest: since issue #134 a team reads broadcasts
+        // only from contests it may see, and ContestFactory's is_public is
+        // not something this test should be depending on either way.
+        $user = User::factory()->create(['contest_id' => $contest->id]);
         Clarification::factory()->count(3)->create(['contest_id' => $contest->id, 'user_id' => $user->user_id]);
         Clarification::factory()->count(2)->create(['contest_id' => $contest->id, 'status' => 'broadcast_all']);
         Clarification::factory()->count(1)->create(['contest_id' => $contest->id]); // Private one
@@ -101,9 +104,11 @@ class ClarificationControllerTest extends TestCase
 
     public function test_store_fails_if_contest_not_running()
     {
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
         $contest = Contest::factory()->create(['is_active' => false]);
+        // A member, so that the refusal under test is the closed contest
+        // and not issue #134's "you do not compete here".
+        $user = User::factory()->create(['contest_id' => $contest->id]);
+        Sanctum::actingAs($user);
         $data = ['contest_id' => $contest->id, 'question' => 'wont work'];
         $response = $this->postJson('/api/clarifications', $data);
         $response->assertStatus(422);
@@ -172,15 +177,15 @@ class ClarificationControllerTest extends TestCase
         $clarification1 = Clarification::factory()->create(['contest_id' => $contest->id]);
         $data1 = ['answer' => 'Answer 1', 'broadcast' => 'site'];
         $this->putJson("/api/clarifications/{$clarification1->id}/answer", $data1)
-             ->assertStatus(200)
-             ->assertJsonPath('status', 'broadcast_site');
+            ->assertStatus(200)
+            ->assertJsonPath('status', 'broadcast_site');
 
         // Test all broadcast
         $clarification2 = Clarification::factory()->create(['contest_id' => $contest->id]);
         $data2 = ['answer' => 'Answer 2', 'broadcast' => 'all'];
         $this->putJson("/api/clarifications/{$clarification2->id}/answer", $data2)
-             ->assertStatus(200)
-             ->assertJsonPath('status', 'broadcast_all');
+            ->assertStatus(200)
+            ->assertJsonPath('status', 'broadcast_all');
     }
 
     /**

@@ -84,20 +84,22 @@ class ProblemController extends Controller
      * The middle branch requires a USER on purpose. It used to be "the
      * contest resolveContest() picked", which for a guest is the running
      * competition -- so being anonymous was as good as being in the contest.
+     *
+     * Issue #134 needed the same question answered on the token API, by four
+     * controllers, so the rule moved to Contest::isVisibleTo() and this
+     * delegates to it. Two copies of a visibility rule is how a listing and
+     * a detail page come to disagree, which is the bug #135 was.
+     *
+     * One widening comes with the move: the model counts membership through
+     * users.site_id -> sites.contest_id as well as users.contest_id, because
+     * in the BOCA schema a user reaches a contest through either column. A
+     * team registered against a site of this contest but with no direct
+     * contest_id now sees its own problems here, which is what it was
+     * already allowed to submit to.
      */
     private function mayList(Contest $contest): bool
     {
-        $user = auth()->user();
-
-        if ($user?->isAdmin() || $user?->isJudge()) {
-            return true;
-        }
-
-        if ($user && (int) $user->contest_id === (int) $contest->id) {
-            return true;
-        }
-
-        return (bool) $contest->is_public;
+        return $contest->isVisibleTo(auth()->user());
     }
 
     /**

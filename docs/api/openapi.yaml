@@ -43,7 +43,10 @@ paths:
     get:
       tags: [Contests]
       summary: List contests
-      description: Non-admins only see contests where is_public is true.
+      description: >
+        Scoped by contest visibility (issue #134): staff see every contest,
+        everyone else sees the contests they belong to plus those marked
+        is_public. The technical practice contest is excluded for everyone.
       responses:
         "200":
           description: Paginated list of contests
@@ -83,6 +86,12 @@ paths:
     get:
       tags: [Contests]
       summary: Get a contest
+      description: >
+        Scoped by contest visibility (issue #134): staff see everything,
+        then a member of the contest, then everyone but only while the
+        contest is_public. A contest you may not see answers 404 rather than
+        403, so that an unannounced event is not discoverable by
+        incrementing ids.
       responses:
         "200":
           description: The contest, with sites/languages/answers/problems loaded
@@ -196,6 +205,12 @@ paths:
     get:
       tags: [Contests]
       summary: Get contest run/freeze status
+      description: >
+        Scoped by contest visibility (issue #134): staff see everything,
+        then a member of the contest, then everyone but only while the
+        contest is_public. A contest you may not see answers 404 rather than
+        403, so that an unannounced event is not discoverable by
+        incrementing ids.
       responses:
         "200":
           description: Contest status
@@ -254,6 +269,8 @@ paths:
         broadcast_all, and broadcast_site only when the clarification's own
         site_id matches the viewer's -- a team at another site does not see
         it (app/Http/Controllers/Api/ClarificationController.php::index()).
+        All of it scoped to contests the caller may see: a broadcast is
+        public to its own contest, not to the installation (issue #134).
       parameters:
         - $ref: "#/components/parameters/ContestIdQuery"
       responses:
@@ -266,7 +283,10 @@ paths:
     post:
       tags: [Clarifications]
       summary: Ask a clarification question
-      description: Fails with 422 if the contest is not currently running.
+      description: >
+        Fails with 422 if the contest is not currently running, and with 403
+        if the caller does not compete in it (issue #134) -- seeing a public
+        contest is not the same as taking part in it.
       requestBody:
         required: true
         content:
@@ -285,6 +305,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Clarification"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -353,6 +375,10 @@ paths:
     get:
       tags: [Problems]
       summary: List problems
+      description: >
+        Only problems of contests the caller may see (issue #134) -- the
+        contest_id parameter is a filter the caller chooses, not the
+        boundary.
       parameters:
         - $ref: "#/components/parameters/ContestIdQuery"
       responses:
@@ -400,6 +426,12 @@ paths:
     get:
       tags: [Problems]
       summary: Get a problem
+      description: >
+        Scoped by contest visibility (issue #134): staff see everything,
+        then a member of the contest, then everyone but only while the
+        contest is_public. A contest you may not see answers 404 rather than
+        403, so that an unannounced event is not discoverable by
+        incrementing ids.
       responses:
         "200":
           description: The problem, with test cases loaded
@@ -407,6 +439,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "404":
+          $ref: "#/components/responses/NotFound"
     put:
       tags: [Problems]
       summary: Update a problem
@@ -462,6 +496,10 @@ paths:
     get:
       tags: [Problems]
       summary: Download the problem's statement file
+      description: >
+        The statement a competitor reads. Scoped by contest visibility
+        (issue #134): unscoped, this served the statement of a contest that
+        had not opened yet to anyone who guessed the problem id.
       responses:
         "200":
           description: The statement file (PDF/HTML/etc, as stored)
@@ -511,8 +549,9 @@ paths:
       description: >
         Rejects submissions to a non-running contest, to a problem/language
         outside the contest, or a byte-identical resubmission (matched by
-        SHA-256 of the source file) with 422. Dispatches JudgeRunJob when
-        auto-judging is enabled for the problem/language.
+        SHA-256 of the source file) with 422, and a submission into a contest
+        the caller does not compete in with 403 (issue #134). Dispatches
+        JudgeRunJob when auto-judging is enabled for the problem/language.
       requestBody:
         required: true
         content:
@@ -532,6 +571,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Run"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -629,7 +670,10 @@ paths:
     get:
       tags: [Scoreboard]
       summary: Get the contest scoreboard
-      description: Frozen (last freeze_time minutes hidden) for non-admins while the contest is frozen.
+      description: >
+        Frozen (last freeze_time minutes hidden) for non-admins while the
+        contest is frozen, and scoped by contest visibility (issue #134):
+        a scoreboard is the contest's participants and how they are doing.
       responses:
         "200":
           description: Scoreboard snapshot
@@ -637,6 +681,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScoreboardResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /contests/{contest}/my-score:
     parameters:
@@ -644,6 +690,12 @@ paths:
     get:
       tags: [Scoreboard]
       summary: Get the authenticated user's own score breakdown
+      description: >
+        Scoped by contest visibility (issue #134): staff see everything,
+        then a member of the contest, then everyone but only while the
+        contest is_public. A contest you may not see answers 404 rather than
+        403, so that an unannounced event is not discoverable by
+        incrementing ids.
       responses:
         "200":
           description: The caller's per-problem score breakdown
@@ -651,6 +703,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MyScoreResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /contests/{contest}/scoreboard/export:
     parameters:

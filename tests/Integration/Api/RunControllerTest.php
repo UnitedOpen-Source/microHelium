@@ -2,20 +2,20 @@
 
 namespace Tests\Integration\Api;
 
-use Tests\TestCase;
-use App\Models\Run;
-use App\Models\Contest;
-use App\Models\Problem;
-use App\Models\Language;
-use App\Models\Answer;
 use App\Jobs\JudgeRunJob;
+use App\Models\Answer;
+use App\Models\Contest;
+use App\Models\Language;
+use App\Models\Problem;
+use App\Models\Run;
+use App\Models\Site;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
-use App\Models\Site;
+use Tests\TestCase;
 
 class RunControllerTest extends TestCase
 {
@@ -58,9 +58,13 @@ class RunControllerTest extends TestCase
 
     public function test_store_fails_if_contest_not_running()
     {
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
+        // The submitter belongs to the contest: since issue #134 a run may
+        // only be posted into a contest the caller competes in, so a user
+        // with no contest at all would be refused before these tests ever
+        // reached the case they are about.
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()->addHour()]);
+        $user = User::factory()->create(['contest_id' => $contest->id]);
+        Sanctum::actingAs($user);
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
         $language = Language::factory()->create(['contest_id' => $contest->id, 'is_active' => true]);
         $file = UploadedFile::fake()->create('solution.cpp', 10, 'text/plain');
@@ -77,9 +81,9 @@ class RunControllerTest extends TestCase
 
     public function test_store_fails_if_problem_not_in_contest()
     {
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()]);
+        $user = User::factory()->create(['contest_id' => $contest->id]);
+        Sanctum::actingAs($user);
         $otherContest = Contest::factory()->create();
         $problem = Problem::factory()->create(['contest_id' => $otherContest->id]);
         $language = Language::factory()->create(['contest_id' => $contest->id, 'is_active' => true]);
@@ -97,9 +101,9 @@ class RunControllerTest extends TestCase
 
     public function test_store_fails_if_language_not_in_contest()
     {
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()]);
+        $user = User::factory()->create(['contest_id' => $contest->id]);
+        Sanctum::actingAs($user);
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
         $otherContest = Contest::factory()->create();
         $language = Language::factory()->create(['contest_id' => $otherContest->id, 'is_active' => true]);
@@ -121,13 +125,13 @@ class RunControllerTest extends TestCase
         $file = UploadedFile::fake()->create('solution.cpp', 10, 'text/plain');
         $path = $file->store('temp');
         $hash = hash_file('sha256', Storage::path($path));
-        
+
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()]);
-        $user = User::factory()->create();
+        $user = User::factory()->create(['contest_id' => $contest->id]);
         Sanctum::actingAs($user);
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
         $language = Language::factory()->create(['contest_id' => $contest->id, 'is_active' => true]);
-        
+
         Run::factory()->create([
             'contest_id' => $contest->id,
             'user_id' => $user->user_id,
@@ -144,7 +148,6 @@ class RunControllerTest extends TestCase
 
         $response->assertStatus(422);
     }
-
 
     public function test_show_returns_run_details()
     {
@@ -164,7 +167,6 @@ class RunControllerTest extends TestCase
         $response = $this->getJson("/api/runs/{$run->id}");
         $response->assertStatus(403);
     }
-
 
     public function test_download_source_unauthorized()
     {
@@ -194,7 +196,7 @@ class RunControllerTest extends TestCase
         $fileContent = 'int main() { return 0; }';
         $run = Run::factory()->create(['source_file' => 'test.cpp']);
         Storage::disk('local')->put($run->source_file, $fileContent);
-        
+
         $admin = User::factory()->create(['user_type' => 'admin']);
         Sanctum::actingAs($admin);
         $response = $this->get("/api/runs/{$run->id}/source");

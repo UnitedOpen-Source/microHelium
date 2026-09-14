@@ -4,10 +4,15 @@ namespace Tests\Feature\Api;
 
 use App\Models\Clarification;
 use App\Models\Contest;
+use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Run;
+use App\Models\Site;
 use Helium\User;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -69,6 +74,26 @@ class ApiRouteAuthorizationTest extends TestCase
     ];
 
     /**
+     * TEAM_REACHABLE entries the cross-contest walk cannot ask its question
+     * of, and why. Kept as a list rather than as an `if` inside the loop so
+     * that skipping a route is a decision someone writes down.
+     *
+     * GET /user returns the caller's own account and no contest rows at all.
+     * The two writes are checked by
+     * test_a_team_cannot_write_into_a_contest_it_does_not_compete_in, which
+     * has to build a valid payload to get past validation and reach the
+     * boundary; test_every_sanctum_api_route_is_classified holds that list
+     * to every non-GET route on the competitor surface, so a new one cannot
+     * skip the axis by not being mentioned here.
+     */
+    private const NO_CONTEST_DIMENSION = ['GET api/user'];
+
+    private const TEAM_WRITES = [
+        'POST api/clarifications',
+        'POST api/runs',
+    ];
+
+    /**
      * Judge/admin or admin only -- a team token must be refused outright.
      *
      * Everything that changes the shape of the event (contest lifecycle,
@@ -118,6 +143,18 @@ class ApiRouteAuthorizationTest extends TestCase
         $this->assertEmpty(
             $stale,
             'This test classifies routes that no longer exist -- drop them from the lists: '.implode(', ', $stale)
+        );
+
+        $unlistedWrites = array_diff(
+            array_filter(self::TEAM_REACHABLE, fn ($route) => ! str_starts_with($route, 'GET ')),
+            self::TEAM_WRITES
+        );
+
+        $this->assertEmpty(
+            $unlistedWrites,
+            'A write on the competitor surface that the cross-contest test does not cover. Being allowed to call a '
+            .'route is not being allowed to act on every contest it names, so add it to TEAM_WRITES and assert the '
+            .'boundary: '.implode(', ', $unlistedWrites)
         );
     }
 
@@ -180,6 +217,110 @@ class ApiRouteAuthorizationTest extends TestCase
     }
 
     /**
+     * Issue #134, second axis: reading ANOTHER contest's rows through a
+     * route a team is genuinely allowed to call.
+     *
+     * "Not 403" is the wrong question to stop at, and the earlier version of
+     * this file stopped there -- GET /problems answered 200 while listing
+     * every problem in the installation, and GET /contests/{other} answered
+     * 200 with a private, unstarted event. Api\RunController was already
+     * scoping rows to their owner; Api\ProblemController and
+     * Api\ContestController scoped nothing at all.
+     *
+     * The treatment is derived from the URI rather than listed per route: a
+     * URI with a placeholder gets pointed at the other contest's row and has
+     * to refuse; a collection URI has to come back without that row in it,
+     * and -- the half that keeps this honest -- WITH the team's own.
+     */
+    public function test_a_team_is_never_handed_another_contests_rows(): void
+    {
+        $mine = Contest::factory()->create(['is_public' => false]);
+        $team = $this->createTestUser(['contest_id' => $mine->id]);
+        $own = $this->fixturesFor($mine, $team);
+
+        // Private and not running: the pre-contest case, where the problem
+        // set exists and the statements are already on disk.
+        $other = Contest::factory()->create(['is_public' => false, 'is_active' => false]);
+        $otherTeam = $this->createTestUser(['contest_id' => $other->id]);
+        $theirs = $this->fixturesFor($other, $otherTeam, broadcast: true);
+
+        Sanctum::actingAs($team);
+
+        foreach (self::TEAM_REACHABLE as $route) {
+            if (in_array($route, self::NO_CONTEST_DIMENSION, true) || in_array($route, self::TEAM_WRITES, true)) {
+                continue;
+            }
+
+            [$method, $uri] = explode(' ', $route, 2);
+
+            if (str_contains($uri, '{')) {
+                $status = $this->json($method, $this->fill($uri, $theirs))->getStatusCode();
+
+                $this->assertContains(
+                    $status,
+                    [403, 404],
+                    "{$route} answered {$status} for a row belonging to a contest the team is not in."
+                );
+
+                continue;
+            }
+
+            $ids = array_column($this->json($method, '/'.$uri)->json('data') ?? [], 'id');
+            $resource = explode('/', $uri)[1];
+
+            $this->assertNotContains(
+                $theirs[$resource]->getKey(),
+                $ids,
+                "{$route} listed a row from another contest."
+            );
+
+            $this->assertContains(
+                $own[$resource]->getKey(),
+                $ids,
+                "{$route} stopped listing the team's own row -- the scoping is too tight, not just tight."
+            );
+        }
+    }
+
+    /**
+     * The write half of the same boundary: a team may submit and ask
+     * questions, but only in the contest it competes in. Both actions used
+     * to check that the contest was running and that the problem/language
+     * belonged to it, and never that the caller did.
+     */
+    public function test_a_team_cannot_write_into_a_contest_it_does_not_compete_in(): void
+    {
+        $team = $this->createTestUser(['contest_id' => Contest::factory()->create()->id]);
+
+        // Public and running, so that nothing except membership can be what
+        // refuses these.
+        $other = Contest::factory()->has(Site::factory())->create([
+            'is_public' => true,
+            'is_active' => true,
+            'start_time' => now(),
+        ]);
+        $problem = Problem::factory()->create(['contest_id' => $other->id]);
+        $language = Language::factory()->create(['contest_id' => $other->id, 'is_active' => true]);
+
+        Sanctum::actingAs($team);
+
+        $this->postJson('/api/clarifications', [
+            'contest_id' => $other->id,
+            'problem_id' => $problem->id,
+            'question' => 'Qual e a entrada do caso 3?',
+        ])->assertStatus(403);
+
+        Storage::fake('local');
+
+        $this->postJson('/api/runs', [
+            'contest_id' => $other->id,
+            'problem_id' => $problem->id,
+            'language_id' => $language->id,
+            'source_file' => UploadedFile::fake()->create('solution.cpp', 10, 'text/plain'),
+        ])->assertStatus(403);
+    }
+
+    /**
      * The judge queue is the case that made the route order load-bearing:
      * /clarifications/pending has to be matched before the {clarification}
      * placeholder of clarifications.show, which lives in the other group
@@ -219,6 +360,55 @@ class ApiRouteAuthorizationTest extends TestCase
         sort($routes);
 
         return array_values(array_unique($routes));
+    }
+
+    /**
+     * One row of each contest-owned resource, keyed by the URI segment that
+     * names it, so the walk above can look up "the other contest's
+     * {problems} row" straight from the route it is testing.
+     *
+     * The foreign clarification is a broadcast on purpose: a private one is
+     * refused by the "not yours" check that was already there, and would
+     * prove nothing about the contest boundary.
+     *
+     * @return array<string, Model>
+     */
+    private function fixturesFor(Contest $contest, User $owner, bool $broadcast = false): array
+    {
+        $problem = Problem::factory()->create(['contest_id' => $contest->id]);
+
+        return [
+            'contests' => $contest,
+            'problems' => $problem,
+            'runs' => Run::factory()->create([
+                'contest_id' => $contest->id,
+                'problem_id' => $problem->id,
+                'user_id' => $owner->user_id,
+            ]),
+            'clarifications' => Clarification::factory()->create([
+                'contest_id' => $contest->id,
+                'problem_id' => $problem->id,
+                'user_id' => $owner->user_id,
+                'status' => $broadcast ? 'broadcast_all' : 'pending',
+            ]),
+        ];
+    }
+
+    /**
+     * @param  array<string, Model>  $rows
+     */
+    private function fill(string $uri, array $rows): string
+    {
+        return '/'.str_replace(
+            ['{contest}', '{problem}', '{run}', '{clarification}'],
+            [
+                $rows['contests']->getKey(),
+                $rows['problems']->getKey(),
+                $rows['runs']->getKey(),
+                $rows['clarifications']->getKey(),
+            ],
+            $uri
+        );
     }
 
     /**

@@ -9,7 +9,6 @@ use App\Services\ProblemPackageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProblemController extends Controller
@@ -22,8 +21,15 @@ class ProblemController extends Controller
     {
         $contestId = $request->get('contest_id');
 
+        // Issue #134: `contest_id` here is a filter the caller chooses, not
+        // a boundary -- omit it and this listed every problem in the
+        // installation to any authenticated team, including the problem set
+        // of an event that had not opened yet. The boundary is the contest's
+        // own visibility rule, the same one show() and the web-side listing
+        // (#135) apply.
         $problems = Problem::query()
-            ->when($contestId, fn($q) => $q->where('contest_id', $contestId))
+            ->whereHas('contest', fn ($q) => $q->visibleTo(auth()->user()))
+            ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
             ->where('is_fake', false)
             ->with(['contest:id,name'])
             ->withCount('testCases')
@@ -66,6 +72,8 @@ class ProblemController extends Controller
 
     public function show(Problem $problem): JsonResponse
     {
+        $this->authorizeContestVisibility($problem->contest);
+
         $problem->load(['contest', 'testCases']);
         $problem->loadCount(['runs', 'clarifications']);
 
@@ -100,9 +108,14 @@ class ProblemController extends Controller
 
     public function download(Problem $problem): StreamedResponse
     {
+        // This one is the statement itself. Unscoped, it handed out the PDF
+        // for a contest that had not started to anyone who guessed the
+        // problem id -- the pre-contest statement leak (issue #134).
+        $this->authorizeContestVisibility($problem->contest);
+
         $path = "problems/{$problem->contest_id}/{$problem->basename}/description/{$problem->description_file}";
 
-        if (!Storage::disk('app')->exists($path)) {
+        if (! Storage::disk('app')->exists($path)) {
             abort(404, 'Problem description file not found');
         }
 
