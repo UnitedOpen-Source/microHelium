@@ -3,6 +3,7 @@
 use App\Http\Controllers\Backend\ConfigurationController;
 use App\Http\Controllers\Backend\ContestLogController;
 use App\Http\Controllers\Backend\ContestWizardController;
+use App\Http\Controllers\Backend\LanguageController;
 use App\Http\Controllers\Backend\ProblemBankController;
 use App\Http\Controllers\Backend\ProblemManagementController;
 use App\Http\Controllers\Backend\UserController;
@@ -289,6 +290,16 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::post('/sites', [App\Http\Controllers\Backend\SiteController::class, 'store'])->name('backend.sites.store');
     Route::put('/sites/{site}', [App\Http\Controllers\Backend\SiteController::class, 'update'])->name('backend.sites.update');
     Route::delete('/sites/{site}', [App\Http\Controllers\Backend\SiteController::class, 'destroy'])->name('backend.sites.destroy');
+
+    // Language Management (issue #140) -- BOCA's src/admin/language.php.
+    // compile_command/run_command are the shell command lines the judge
+    // executes, so this screen stays inside this admin-only group: it is
+    // command entry by an administrator, audited in ContestLog (#88) and
+    // contained by the sandbox (#49) at execution time.
+    Route::get('/languages', [LanguageController::class, 'index'])->name('backend.languages');
+    Route::post('/languages', [LanguageController::class, 'store'])->name('backend.languages.store');
+    Route::put('/languages/{language}', [LanguageController::class, 'update'])->name('backend.languages.update');
+    Route::delete('/languages/{language}', [LanguageController::class, 'destroy'])->name('backend.languages.destroy');
 
     // Configurations/Hackathons Management
     Route::get('/configurations', [ConfigurationController::class, 'index'])->name('backend.configurations');
