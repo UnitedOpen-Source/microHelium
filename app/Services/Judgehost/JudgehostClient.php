@@ -88,9 +88,19 @@ class JudgehostClient
         return true;
     }
 
-    public function giveBack(int $runId): void
+    /**
+     * Issue #125 -- hand a run back, saying why.
+     *
+     * The reason is what lets an organiser tell "nobody here has Kotlin
+     * installed" from "the network is dropping test data" without reading
+     * a log file on someone else's machine.
+     */
+    public function giveBack(int $runId, string $reason = 'nao_informado', ?string $detail = null): void
     {
-        $this->request()->post($this->url("/runs/{$runId}/give-back"))->throw();
+        $this->request()->post($this->url("/runs/{$runId}/give-back"), array_filter([
+            'reason' => $reason,
+            'detail' => $detail === null ? null : mb_strcut($detail, 0, 500),
+        ], fn ($value) => $value !== null))->throw();
     }
 
     /**

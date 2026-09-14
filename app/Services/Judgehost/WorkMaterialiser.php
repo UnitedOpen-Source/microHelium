@@ -113,7 +113,8 @@ class WorkMaterialiser
             // A server older than #120 does not say, and "no answer" is not
             // "no scripts" -- it is exactly the case that produced a wrong
             // verdict, so it is refused rather than assumed.
-            throw new RuntimeException(
+            throw new UnjudgeableRun(
+                'pacote_indisponivel',
                 'O servidor nao informa quais scripts customizados o problema usa; '
                 .'julgar sem essa informacao pode produzir veredito errado (#120).'
             );
@@ -139,7 +140,12 @@ class WorkMaterialiser
                 continue;
             }
 
-            $bytes = $this->client->packageScript($runId, $hook);
+            try {
+                $bytes = $this->client->packageScript($runId, $hook);
+            } catch (\Throwable $e) {
+                throw new UnjudgeableRun('pacote_indisponivel', $e->getMessage(), previous: $e);
+            }
+
             $this->assertDigest($bytes, $declared['sha256'] ?? null, "script {$hook}");
 
             $this->put($path, $bytes);
@@ -186,7 +192,7 @@ class WorkMaterialiser
         }
 
         if ($cases->isEmpty()) {
-            throw new RuntimeException('O problema nao tem casos de teste disponiveis para este judgehost.');
+            throw new UnjudgeableRun('pacote_indisponivel', 'O problema nao tem casos de teste disponiveis para este judgehost.');
         }
 
         return $cases;
@@ -203,7 +209,7 @@ class WorkMaterialiser
     private function cached(int $runId, int $testCaseId, string $kind, ?string $sha256): string
     {
         if ($sha256 === null || ! preg_match('/^[a-f0-9]{64}$/', $sha256)) {
-            throw new RuntimeException("O servidor nao informou o digest do caso de teste {$testCaseId} ({$kind}).");
+            throw new UnjudgeableRun('transferencia_corrompida', "O servidor nao informou o digest do caso de teste {$testCaseId} ({$kind}).");
         }
 
         $relative = $this->workspace.'/cache/'.substr($sha256, 0, 2).'/'.$sha256;
@@ -235,7 +241,7 @@ class WorkMaterialiser
         $actual = hash('sha256', $bytes);
 
         if (! hash_equals($expected, $actual)) {
-            throw new RuntimeException("O {$what} recebido nao confere com o digest informado pelo servidor.");
+            throw new UnjudgeableRun('transferencia_corrompida', "O {$what} recebido nao confere com o digest informado pelo servidor.");
         }
     }
 

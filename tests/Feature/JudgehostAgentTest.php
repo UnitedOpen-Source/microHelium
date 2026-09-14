@@ -342,6 +342,61 @@ SH);
         $this->assertNull($run->judgehost_id);
     }
 
+    /**
+     * Issue #125 -- the agent has to say WHY, not just hand the run back.
+     *
+     * A judgehost giving a run back is ordinary; a run every judgehost
+     * gives back is not, and the organisers can only tell the two apart if
+     * the machine names which is happening. The reason has to be the real
+     * one too -- a generic "sandbox_falhou" on a missing problem package
+     * would send whoever reads it looking in the wrong place.
+     */
+    public function test_the_agent_reports_why_it_could_not_judge(): void
+    {
+        [, $token] = Judgehost::issue('judge-01');
+        $this->serverPackageScript('compare', "#!/bin/sh\nexit 0\n");
+        $run = $this->pendingRun("echo 1\n", "1 1\n", "2\n");
+
+        Http::fake(function (ClientRequest $request) {
+            if (str_contains($request->url(), '/package/')) {
+                return Http::response('nope', 500);
+            }
+
+            $response = $this->dispatch($request);
+
+            return Http::response($this->bodyOf($response), $response->getStatusCode(), $response->headers->all());
+        });
+
+        $this->agentFor($token)->tick();
+
+        $run->refresh();
+        $this->assertSame('pending', $run->status);
+        $this->assertSame('pacote_indisponivel', $run->give_back_reason);
+        $this->assertSame(1, $run->give_back_count);
+    }
+
+    public function test_a_corrupted_transfer_is_reported_as_corruption(): void
+    {
+        [, $token] = Judgehost::issue('judge-01');
+        $run = $this->pendingRun("read a b\necho \$((a + b))\n", "3 4\n", "7\n");
+
+        Http::fake(function (ClientRequest $request) {
+            if (str_contains($request->url(), '/source')) {
+                return Http::response('truncated', 200);
+            }
+
+            $response = $this->dispatch($request);
+
+            return Http::response($this->bodyOf($response), $response->getStatusCode(), $response->headers->all());
+        });
+
+        $this->agentFor($token)->tick();
+
+        // Not the same failure as a missing package, and it must not read
+        // as one: this points at the network, that points at the server.
+        $this->assertSame('transferencia_corrompida', $run->fresh()->give_back_reason);
+    }
+
     public function test_a_corrupted_transfer_is_refused_instead_of_judged(): void
     {
         [, $token] = Judgehost::issue('judge-01');

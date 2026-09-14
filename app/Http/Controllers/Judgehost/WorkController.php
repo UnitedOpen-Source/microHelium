@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Judgehost;
 
 use App\Http\Controllers\Controller;
+use App\Models\ContestLog;
 use App\Models\Run;
 use App\Services\JudgeWorkQueue;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Issue #53 -- the surface a judge machine talks to.
@@ -18,6 +20,28 @@ use Illuminate\Http\Request;
 class WorkController extends Controller
 {
     use HoldsRun;
+
+    /**
+     * Issue #125 -- why a machine could not finish a run.
+     *
+     * A closed set, because the point is for an organiser to be able to
+     * tell "nobody here has Kotlin installed" from "the network is
+     * dropping test data", and free text does not aggregate.
+     */
+    public const GIVE_BACK_REASONS = [
+        'linguagem_ausente',
+        'pacote_indisponivel',
+        'sandbox_falhou',
+        'transferencia_corrompida',
+        'nao_informado',
+    ];
+
+    /**
+     * After this many give-backs the run stops being an ordinary retry and
+     * starts being something a human has to look at. Deliberately small:
+     * with a handful of hosts, three refusals means they all refused.
+     */
+    public const GIVE_BACK_ALERT_AFTER = 3;
 
     public function __construct(private JudgeWorkQueue $queue) {}
 
@@ -115,11 +139,59 @@ class WorkController extends Controller
      */
     public function giveBackRun(Request $request, Run $run): JsonResponse
     {
-        $this->assertHolds($request, $run);
+        $judgehost = $this->assertHolds($request, $run);
 
-        // The claim is over, so its token stops being current (#123).
-        $run->update(['status' => 'pending', 'judgehost_id' => null, 'claimed_at' => null, 'claim_token' => null]);
+        // Issue #125 -- the reason travels with the run, not only into a log
+        // file on someone else's machine. Without it a run no host can judge
+        // circulates the queue forever and reads as plain `pending` to the
+        // organisers: a team with no verdict and nobody with a clue why.
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', Rule::in(self::GIVE_BACK_REASONS)],
+            'detail' => ['nullable', 'string', 'max:500'],
+        ]);
 
-        return response()->json(['data' => ['run_id' => $run->id, 'status' => 'pending']]);
+        $reason = $data['reason'] ?? 'nao_informado';
+        $attempts = (int) $run->give_back_count + 1;
+
+        $run->update([
+            'status' => 'pending',
+            'judgehost_id' => null,
+            'claimed_at' => null,
+            // The claim is over, so its token stops being current (#123).
+            'claim_token' => null,
+            'give_back_reason' => $reason,
+            'give_back_count' => $attempts,
+        ]);
+
+        $exhausted = $attempts >= self::GIVE_BACK_ALERT_AFTER;
+
+        // Escalated rather than repeated: the first couple of give-backs are
+        // ordinary -- a host without that language, a transfer that failed --
+        // and logging each at the same level would bury the case that
+        // actually needs a human.
+        $message = "Run #{$run->run_number} devolvido por {$judgehost->name}: {$reason}"
+            .($attempts > 1 ? " ({$attempts}a vez)" : '');
+
+        $context = [
+            'run_id' => $run->id,
+            'judgehost' => $judgehost->name,
+            'reason' => $reason,
+            'detail' => $data['detail'] ?? null,
+            'attempts' => $attempts,
+        ];
+
+        $exhausted
+            ? ContestLog::error($run->contest_id, $message.' -- nenhum judgehost conseguiu julgar esta submissao', $context)
+            : ContestLog::warning($run->contest_id, $message, $context);
+
+        return response()->json([
+            'data' => [
+                'run_id' => $run->id,
+                'status' => 'pending',
+                'reason' => $reason,
+                'attempts' => $attempts,
+                'needs_attention' => $exhausted,
+            ],
+        ]);
     }
 }

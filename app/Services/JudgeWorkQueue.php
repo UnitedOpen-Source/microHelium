@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\Judgehost\WorkController;
 use App\Models\Judgehost;
 use App\Models\Language;
 use App\Models\Problem;
@@ -72,6 +73,22 @@ class JudgeWorkQueue
             $candidates = Run::query()
                 ->where('status', 'pending')
                 ->whereNull('judgehost_id')
+                // Issue #125 -- a run every host has refused stops being
+                // offered to hosts. Circulating it forever is the failure
+                // mode this replaces: each machine takes it, returns it,
+                // and the next one takes it, while the team sees `pending`
+                // and nobody sees why.
+                //
+                // Only judgehosts are cut off, deliberately. The reasons a
+                // remote machine gives back -- a language it lacks, a
+                // problem package it could not fetch -- are mostly things
+                // the server itself has, so the local worker stays a real
+                // fallback rather than the run simply dying. If that fails
+                // too, runs:reconcile-stuck (#45) is the backstop that
+                // stops it being invisible.
+                ->when($judgehost !== null, fn ($query) => $query->where(
+                    'give_back_count', '<', WorkController::GIVE_BACK_ALERT_AFTER
+                ))
                 ->with(['problem.languageLimits', 'language'])
                 ->orderBy('created_at')
                 ->lockForUpdate()

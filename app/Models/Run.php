@@ -29,6 +29,8 @@ class Run extends Model
         'claimed_at',
         'claim_token',
         'reported_claim_token',
+        'give_back_reason',
+        'give_back_count',
         'reconcile_attempts',
         'judge_id',
         'judge_site_id',
