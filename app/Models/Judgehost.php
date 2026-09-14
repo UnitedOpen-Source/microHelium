@@ -23,12 +23,16 @@ class Judgehost extends Model
         'name',
         'token_hash',
         'enabled',
+        'cpu_count',
+        'memory_mb',
         'last_seen_at',
         'created_by',
     ];
 
     protected $casts = [
         'enabled' => 'boolean',
+        'cpu_count' => 'integer',
+        'memory_mb' => 'integer',
         'last_seen_at' => 'datetime',
     ];
 
@@ -41,6 +45,62 @@ class Judgehost extends Model
     public function runs(): HasMany
     {
         return $this->hasMany(Run::class);
+    }
+
+    /**
+     * Issue #117 -- the languages this machine reported it can run.
+     */
+    public function capabilities(): HasMany
+    {
+        return $this->hasMany(JudgehostCapability::class);
+    }
+
+    /**
+     * Replace what this host says it can run.
+     *
+     * Called on register, so a machine that had a runtime installed or
+     * removed corrects itself by restarting its agent rather than by
+     * someone remembering to edit a list.
+     *
+     * @param  list<string>  $extensions
+     */
+    public function declareCapabilities(array $extensions): void
+    {
+        $extensions = collect($extensions)
+            ->filter(fn ($extension) => is_string($extension) && $extension !== '')
+            ->map(fn (string $extension) => mb_substr($extension, 0, 20))
+            ->unique()
+            ->values();
+
+        $this->capabilities()->whereNotIn('extension', $extensions)->delete();
+
+        foreach ($extensions as $extension) {
+            $this->capabilities()->firstOrCreate(['extension' => $extension]);
+        }
+
+        $this->unsetRelation('capabilities');
+    }
+
+    /**
+     * Can this host judge a submission in $extension?
+     *
+     * A host that has declared nothing is treated as able to judge
+     * anything, which is what an agent older than #117 does. Refusing it
+     * work instead would take a judge offline on upgrade, and #125 already
+     * makes the failure visible and bounded: it gives the run back with a
+     * reason, and a run refused enough times stops being offered.
+     */
+    public function canJudge(?string $extension): bool
+    {
+        $declared = $this->relationLoaded('capabilities')
+            ? $this->capabilities
+            : $this->capabilities()->get();
+
+        if ($declared->isEmpty()) {
+            return true;
+        }
+
+        return $declared->contains('extension', $extension);
     }
 
     public function creator(): BelongsTo

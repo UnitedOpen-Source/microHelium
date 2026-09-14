@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Judgehost;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contest;
 use App\Models\ContestLog;
+use App\Models\Judgehost;
+use App\Models\Language;
 use App\Models\Run;
 use App\Services\JudgeWorkQueue;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
@@ -58,13 +62,114 @@ class WorkController extends Controller
     {
         $judgehost = $this->judgehost($request);
 
+        $data = $request->validate([
+            // Issue #117 -- what this machine can actually run, derived by
+            // the agent from the machine rather than typed by anyone: a
+            // list someone maintains is a list that goes stale, and stale
+            // here means a host repeatedly taking work it cannot do.
+            'languages' => ['sometimes', 'array', 'max:100'],
+            'languages.*' => ['string', 'max:20'],
+            // Reported, never acted on. An organiser is told when judge
+            // machines diverge instead of the server compensating for it:
+            // the ICPC CCS requirements describe auto-judging machines
+            // identical to the team machines, and no contest system
+            // normalises a time limit by host benchmark.
+            'cpu_count' => ['sometimes', 'integer', 'min:1', 'max:4096'],
+            'memory_mb' => ['sometimes', 'integer', 'min:1', 'max:16777216'],
+        ]);
+
+        if (array_key_exists('languages', $data)) {
+            $judgehost->declareCapabilities($data['languages']);
+        }
+
+        if (isset($data['cpu_count']) || isset($data['memory_mb'])) {
+            $judgehost->forceFill(array_filter([
+                'cpu_count' => $data['cpu_count'] ?? null,
+                'memory_mb' => $data['memory_mb'] ?? null,
+            ], fn ($value) => $value !== null))->saveQuietly();
+
+            $this->warnIfHardwareDiverges($judgehost);
+        }
+
         return response()->json([
             'data' => [
                 'judgehost' => ['id' => $judgehost->id, 'name' => $judgehost->name],
                 'reclaimed' => $this->queue->giveBack($judgehost),
                 'lease_seconds' => (int) config('judgehost.lease_seconds', 600),
+                'languages' => $judgehost->capabilities()->pluck('extension')->all(),
             ],
         ]);
+    }
+
+    /**
+     * Issue #117 -- say something when judge machines stop matching.
+     *
+     * Surfaced rather than corrected. Judging the same submission on
+     * machines of different speeds makes TLE non-deterministic -- AC on a
+     * fast judge, TLE on a slow one -- and the field's answer to that is
+     * uniform hardware, not a correction factor. A factor measured once
+     * tracks neither cache contention nor thermal throttling, so it would
+     * feel fair while the verdicts went on varying. Telling the people who
+     * can fix it is the honest option.
+     */
+    private function warnIfHardwareDiverges(Judgehost $judgehost): void
+    {
+        if ($judgehost->cpu_count === null) {
+            return;
+        }
+
+        $others = Judgehost::query()
+            ->enabled()
+            ->whereKeyNot($judgehost->getKey())
+            ->whereNotNull('cpu_count')
+            ->pluck('cpu_count', 'name');
+
+        $divergent = $others->reject(fn (int $cpus) => $cpus === $judgehost->cpu_count);
+
+        if ($divergent->isEmpty()) {
+            return;
+        }
+
+        Log::warning('Judgehosts with differing CPU counts are judging the same contest.', [
+            'joining' => ['name' => $judgehost->name, 'cpu_count' => $judgehost->cpu_count],
+            'others' => $divergent->all(),
+            'why_it_matters' => 'A time limit that passes on one machine can fail on another; '
+                .'ICPC expects auto-judging machines identical to the team machines.',
+        ]);
+    }
+
+    /**
+     * GET /api/remote-judges/v1/languages
+     *
+     * Issue #117 -- the languages a judge machine might be asked to run,
+     * so it can find out which of them it actually has.
+     *
+     * The commands are here because that is what the agent probes: the
+     * executable each one starts with. Sending the extensions alone would
+     * make the agent guess which binary "kt" implies, and guessing is what
+     * a configured list already does badly.
+     *
+     * Scoped to a valid judgehost credential, but not to any run: a host
+     * needs this before it has claimed anything. It exposes no submission
+     * and no test data -- only how this installation is configured to build
+     * and run each language, which every team already sees.
+     */
+    public function languages(Request $request): JsonResponse
+    {
+        $this->judgehost($request);
+
+        $languages = Language::query()
+            ->whereIn('contest_id', Contest::query()->where('is_active', true)->select('id'))
+            ->get(['extension', 'compile_command', 'run_command'])
+            ->unique('extension')
+            ->map(fn (Language $language) => [
+                'extension' => $language->extension,
+                'compile_command' => $language->compile_command,
+                'run_command' => $language->run_command,
+            ])
+            ->values();
+
+        return response()->json(['data' => $languages]);
     }
 
     /**

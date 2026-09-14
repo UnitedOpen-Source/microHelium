@@ -1015,6 +1015,33 @@ paths:
         limit because polling is the normal mode of operation here.
       security:
         - judgehostToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                languages:
+                  type: array
+                  maxItems: 100
+                  items: { type: string, maxLength: 20 }
+                  description: >
+                    Issue #117. The extensions this machine can actually run, derived by the
+                    agent from the machine rather than configured. Replaces whatever it
+                    declared before, so a runtime installed or removed is corrected by
+                    restarting the agent. Omitting it leaves the host able to judge anything,
+                    which is what agents older than #117 do.
+                cpu_count:
+                  type: integer
+                  description: >
+                    Recorded and surfaced to organisers, never used to route. Judging the
+                    same submission on machines of different speeds makes TLE
+                    non-deterministic, and the field's answer to that is uniform hardware --
+                    ICPC's CCS requirements describe auto-judging machines identical to the
+                    team machines -- not a per-host correction factor, which would hide the
+                    problem rather than show it.
+                memory_mb: { type: integer }
       responses:
         "200":
           description: Registered
@@ -1037,6 +1064,10 @@ paths:
                       lease_seconds:
                         type: integer
                         description: How long a claim survives without a result before the server reaps it
+                      languages:
+                        type: array
+                        items: { type: string }
+                        description: What the server now believes this host can run (issue #117).
         "401":
           description: Missing, unknown, or disabled judgehost token (indistinguishable)
           content:
@@ -1205,6 +1236,42 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
         "404":
           description: No such run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
+  /remote-judges/v1/languages:
+    get:
+      tags: [Judgehost]
+      summary: The languages this installation can ask a judge machine to run (issue #117)
+      description: >
+        So an agent can find out which of them it actually has. The commands are included
+        because that is what the agent probes -- the executable each one starts with.
+        Extensions alone would make it guess which binary "kt" implies, and guessing is
+        what a configured list already does badly.
+        Scoped to a valid judgehost credential but not to any run: a host needs this before
+        it has claimed anything. It exposes no submission and no test data, only how this
+        installation builds and runs each language.
+      security:
+        - judgehostToken: []
+      responses:
+        "200":
+          description: The languages of every active contest, one entry per extension
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        extension: { type: string }
+                        compile_command: { type: string, nullable: true }
+                        run_command: { type: string, nullable: true }
+        "401":
+          description: Missing, unknown, or disabled judgehost token (indistinguishable)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
