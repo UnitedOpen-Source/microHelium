@@ -1,0 +1,96 @@
+{
+    "version": 1,
+    "contest": {
+        "name": "Maratona SBC 2026 -- Primeira Fase",
+        "description": "Primeira fase da Maratona de Programacao da SBC, regional sul.",
+        "start_time": "2026-09-19T13:00:00-03:00",
+        "duration": 300,
+        "freeze_time": 60,
+        "penalty": 20,
+        "max_file_size": 100,
+        "is_active": false,
+        "is_public": true
+    },
+    "sites": [
+        {
+            "name": "UFRGS",
+            "chief_judge_name": "Coordenacao UFRGS",
+            "ip_address": "10.20.0.0/16",
+            "max_judge_wait_time": 600,
+            "judges_for": ["UNIPAMPA Alegrete", "URI Erechim"]
+        },
+        {
+            "name": "UFSC",
+            "chief_judge_name": "Coordenacao UFSC",
+            "ip_address": "10.30.0.0/16",
+            "max_judge_wait_time": 900
+        },
+        {
+            "name": "UTFPR Curitiba",
+            "chief_judge_name": "Coordenacao UTFPR",
+            "max_judge_wait_time": 900
+        },
+        {
+            "name": "UNIPAMPA Alegrete",
+            "chief_judge_name": "Coordenacao UNIPAMPA",
+            "score_visibility": "own_site",
+            "auto_judge": false,
+            "max_judge_wait_time": 1800
+        },
+        {
+            "name": "URI Erechim",
+            "chief_judge_name": "Coordenacao URI",
+            "score_visibility": "own_site",
+            "max_judge_wait_time": 1800
+        },
+        {
+            "name": "Sede remota (contingencia)",
+            "is_active": false,
+            "permit_logins": false,
+            "max_judge_wait_time": 900
+        }
+    ],
+    "languages": [
+        { "preset": "c_gcc13" },
+        { "preset": "cpp_gpp13" },
+        { "preset": "java21" },
+        { "preset": "py3" },
+        { "preset": "kt", "is_active": false }
+    ],
+    "problems": [
+        {
+            "short_name": "A",
+            "name": "Abrigo de Animais",
+            "basename": "abrigo",
+            "color_name": "Vermelho",
+            "color_hex": "#EF4444",
+            "time_limit": 1
+        },
+        {
+            "short_name": "B",
+            "name": "Bilhetes da Rodoviaria",
+            "basename": "bilhetes",
+            "color_name": "Azul",
+            "color_hex": "#3B82F6",
+            "time_limit": 2
+        },
+        {
+            "short_name": "C",
+            "name": "Corrida de Orientacao",
+            "basename": "corrida",
+            "color_name": "Verde",
+            "color_hex": "#22C55E",
+            "time_limit": 3,
+            "memory_limit": 512
+        },
+        {
+            "short_name": "D",
+            "name": "Dominos Coloridos",
+            "basename": "dominos",
+            "color_name": "Amarelo",
+            "color_hex": "#EAB308",
+            "time_limit": 2,
+            "auto_judge": false
+        }
+    ]
+}

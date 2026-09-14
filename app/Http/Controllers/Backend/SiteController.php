@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\Site;
 use App\Models\SiteJudgingRoute;
+use App\Support\IpAccessList;
 use Helium\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -162,33 +163,17 @@ class SiteController extends Controller
      * typo'd octet or an invalid CIDR suffix (e.g. "/33") would previously
      * save silently and just never match any real client IP, locking out
      * every user of that site with no warning at save time.
+     *
+     * The rule itself moved to App\Support\IpAccessList when the event
+     * importer (#147) started writing whole batches of sites from a file
+     * and needed to reject the same values this form rejects.
      */
     public function validateIpAddressField(string $attribute, mixed $value, \Closure $fail): void
     {
-        if (!$value) {
-            return;
-        }
+        $error = IpAccessList::firstError($value);
 
-        foreach (explode(',', $value) as $part) {
-            $part = trim($part);
-            if ($part === '') {
-                continue;
-            }
-
-            if (str_contains($part, '/')) {
-                [$subnet, $bits] = array_pad(explode('/', $part, 2), 2, null);
-                $isIpv4 = filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
-                $isIpv6 = filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
-                $maxBits = $isIpv4 ? 32 : ($isIpv6 ? 128 : null);
-
-                if ($maxBits === null || !ctype_digit((string) $bits) || (int) $bits > $maxBits) {
-                    $fail("\"{$part}\" nao e uma rede valida (formato esperado: IP/prefixo, ex: 192.168.1.0/24).");
-                    return;
-                }
-            } elseif (filter_var($part, FILTER_VALIDATE_IP) === false) {
-                $fail("\"{$part}\" nao e um endereco IP valido.");
-                return;
-            }
+        if ($error !== null) {
+            $fail($error);
         }
     }
 }
