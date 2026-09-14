@@ -59,6 +59,20 @@
                                     </svg>
                                 S.O.S.
                             </a>
+
+                            {{-- Issue #161: printing shipped in #94 with no way
+                                 to reach it -- no menu item, no button, nothing.
+                                 grep found the only reference to the route was
+                                 the page's own form, so it existed and no team
+                                 could find it. It belongs beside the S.O.S.:
+                                 both are the team asking the room for something,
+                                 as opposed to asking the jury about a problem. --}}
+                            <a href="/print" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('print*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                </svg>
+                                Impressão
+                            </a>
                             @endif
                             <a href="/submissions" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('submissions*', 'submission/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
