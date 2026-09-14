@@ -15,6 +15,8 @@ use App\Http\Controllers\ProblemController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ScoreboardController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\SosController;
+use App\Http\Controllers\SosQueueController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\SubmissionController;
 use App\Http\Controllers\SubmitController;
@@ -232,6 +234,17 @@ Route::get('/staff/tasks/{task}/file', [StaffController::class, 'downloadFile'])
     ->middleware(['auth', 'role:staff,admin'])
     ->name('staff.tasks.file');
 
+// Issue #139 -- the S.O.S. queue: this site's teams asking for a person,
+// not for a verdict. Separate from the task queue above because it is a
+// different queue, with a state a staff member moves rather than a single
+// "done". Site coordinators are included: at a real site they are the local
+// organisation too. Judges are not -- an S.O.S. never goes to the jury.
+Route::get('/staff/sos', [SosQueueController::class, 'index'])->name('staff.sos');
+Route::post('/staff/sos/{sosCall}/acknowledge', [SosQueueController::class, 'acknowledge'])
+    ->name('staff.sos.acknowledge');
+Route::post('/staff/sos/{sosCall}/resolve', [SosQueueController::class, 'resolve'])
+    ->name('staff.sos.resolve');
+
 /*
 |--------------------------------------------------------------------------
 | Site Coordinator Routes (issue #18 -- multi-site coordination)
@@ -259,6 +272,17 @@ Route::get('/print', [PrintRequestController::class, 'create'])->name('print.cre
 Route::post('/print', [PrintRequestController::class, 'store'])
     ->middleware('throttle:10,60')
     ->name('print.store');
+
+// Issue #139 -- BOCA's S.O.S. button (src/team/task.php). Team-only, and
+// throttled only against raw hammering: what actually bounds the staff queue
+// is that a team may hold one unresolved call at a time (see the unique
+// index in the sos_calls migration), not a cooldown. A cooldown would mean
+// telling a team with a dead machine to wait, which is the one answer this
+// button must never give.
+Route::get('/sos', [SosController::class, 'create'])->name('sos.create');
+Route::post('/sos', [SosController::class, 'store'])
+    ->middleware('throttle:20,1')
+    ->name('sos.store');
 
 // Issue #88 -- the contest audit log. Outside the admin-only backend group
 // on purpose: a judge or staff member auditing a disputed verdict needs it
