@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Problem extends Model
 {
@@ -102,33 +102,70 @@ class Problem extends Model
         return storage_path("app/problems/{$this->contest_id}/{$this->basename}");
     }
 
+    /**
+     * Issue #137 -- the absolute path of the statement file the BOCA package
+     * carried in its description/ directory, or null when this problem has
+     * none.
+     *
+     * description_file is whatever problem.info's `descfile` key said, i.e. a
+     * string that came out of an uploaded (or GitHub-imported) package, so it
+     * is untrusted input and must never be concatenated into a path as it
+     * stands: `descfile=../../../../.env` would otherwise resolve to a file
+     * well outside the package directory. basename() pins the result inside
+     * description/ whatever the package asked for.
+     */
+    public function getDescriptionFilePath(): ?string
+    {
+        $file = basename(trim((string) $this->description_file));
+
+        if ($file === '' || $file === '.' || $file === '..') {
+            return null;
+        }
+
+        return $this->getPackagePath()."/description/{$file}";
+    }
+
+    /**
+     * Whether that statement file is actually on disk. The column and the
+     * disk can disagree -- a package imported on another machine, a database
+     * restored next to an empty storage/ -- and a dead link to a document the
+     * team cannot open is worse than no link at all, so callers ask this
+     * before offering the statement.
+     */
+    public function hasDescriptionFile(): bool
+    {
+        $path = $this->getDescriptionFilePath();
+
+        return $path !== null && is_file($path);
+    }
+
     public function getCompileScriptPath(string $language): string
     {
-        return $this->getPackagePath() . "/compile/{$language}";
+        return $this->getPackagePath()."/compile/{$language}";
     }
 
     public function getRunScriptPath(string $language): string
     {
-        return $this->getPackagePath() . "/run/{$language}";
+        return $this->getPackagePath()."/run/{$language}";
     }
 
     public function getCompareScriptPath(string $language): string
     {
-        return $this->getPackagePath() . "/compare/{$language}";
+        return $this->getPackagePath()."/compare/{$language}";
     }
 
     public function getLimitsScriptPath(string $language): string
     {
-        return $this->getPackagePath() . "/limits/{$language}";
+        return $this->getPackagePath()."/limits/{$language}";
     }
 
     public function getInputPath(int $testNumber): string
     {
-        return $this->getPackagePath() . "/input/{$testNumber}";
+        return $this->getPackagePath()."/input/{$testNumber}";
     }
 
     public function getOutputPath(int $testNumber): string
     {
-        return $this->getPackagePath() . "/output/{$testNumber}";
+        return $this->getPackagePath()."/output/{$testNumber}";
     }
 }

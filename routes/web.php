@@ -46,6 +46,14 @@ Route::get('/exercises', [ProblemController::class, 'index'])->name('exercises')
 
 Route::get('/exercise/{problem}', [ProblemController::class, 'show'])->name('exercise.show');
 
+// Issue #137: the statement file a BOCA package brings in description/ --
+// imported, stored, and until now never linked from the team's screen, so a
+// problem imported the normal way showed the team "o enunciado ainda nao foi
+// disponibilizado". No auth middleware on purpose: the rule is the contest
+// visibility rule (#135) plus the contest clock, both applied in the
+// controller, so a public contest's archived statements stay readable.
+Route::get('/exercise/{problem}/enunciado', [ProblemController::class, 'statement'])->name('exercise.statement');
+
 // Scoreboard
 Route::get('/scoreboard', [ScoreboardController::class, 'index'])->name('scoreboard');
 

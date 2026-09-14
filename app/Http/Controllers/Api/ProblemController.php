@@ -106,6 +106,21 @@ class ProblemController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * Issue #137: these three calls said Storage::disk('app'), and there is
+     * no 'app' disk -- config/filesystems.php defines local, public and s3
+     * only, so every one of them threw "Disk [app] does not have a configured
+     * driver" in any real deployment. It went unnoticed because the tests
+     * called Storage::fake('app'), and faking a disk REGISTERS it: the tests
+     * were green against a disk that exists nowhere else.
+     *
+     * 'local' is what was meant -- its root is storage_path('app'), which is
+     * exactly what these relative paths are relative to: ProblemPackageService
+     * writes packages under storage_path('app/problems/...') and its
+     * exportToZip() writes storage_path("app/{$zipPath}"). The tests that
+     * cover these two now write real files there instead of faking a disk, so
+     * a wrong disk name fails again instead of being papered over.
+     */
     public function download(Problem $problem): StreamedResponse
     {
         // This one is the statement itself. Unscoped, it handed out the PDF
@@ -115,17 +130,17 @@ class ProblemController extends Controller
 
         $path = "problems/{$problem->contest_id}/{$problem->basename}/description/{$problem->description_file}";
 
-        if (! Storage::disk('app')->exists($path)) {
+        if (! Storage::disk('local')->exists($path)) {
             abort(404, 'Problem description file not found');
         }
 
-        return Storage::disk('app')->download($path);
+        return Storage::disk('local')->download($path);
     }
 
     public function exportPackage(Problem $problem): StreamedResponse
     {
         $zipPath = $this->packageService->exportToZip($problem);
 
-        return Storage::disk('app')->download($zipPath);
+        return Storage::disk('local')->download($zipPath);
     }
 }
