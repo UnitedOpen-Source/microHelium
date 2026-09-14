@@ -3,3 +3,13 @@
 *.scss linguist-vendored
 *.js linguist-vendored
 CHANGELOG.md export-ignore
+
+# Issue #141: these are real ICPC exports, and the point of them is that they
+# arrive the way the ICPC site produces them -- CRLF line endings, and
+# latin1.tab in Windows-1252. `* text=auto` above would normalise the CRLF
+# away on commit, so after a fresh checkout the parser test named
+# "utf8 survives crlf" would be reading LF files and passing without testing
+# anything. -text keeps the bytes as committed.
+tests/Fixtures/team-import/*.tab -text
+tests/Fixtures/team-import/*.tsv -text
+tests/Fixtures/team-import/*.txt -text
