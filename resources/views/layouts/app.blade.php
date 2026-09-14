@@ -104,6 +104,15 @@
                                     </svg>
                                     Julgar Submissões
                                 </a>
+                                {{-- Issue #144: BOCA's judge/history.php. What each
+                                     judge judged -- the screen you open when a
+                                     verdict is contested. --}}
+                                <a href="/judge/history" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('judge/history*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Histórico de Julgamento
+                                </a>
                             </div>
                         </div>
                         @endif
@@ -129,6 +138,14 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 3h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                         </svg>
                                     S.O.S.
+                                </a>
+                                {{-- Issue #144: BOCA's staff/report/. Submissões,
+                                     vereditos e tempos desta sede. --}}
+                                <a href="/staff/report" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('staff/report*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                    </svg>
+                                    Relatório da Sede
                                 </a>
                             </div>
                         </div>
@@ -172,6 +189,14 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 3h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                         </svg>
                                     S.O.S.
+                                </a>
+                                {{-- Issue #144: BOCA's staff/report/. Submissões,
+                                     vereditos e tempos desta sede. --}}
+                                <a href="/staff/report" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('staff/report*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                    </svg>
+                                    Relatório da Sede
                                 </a>
                             </div>
                         </div>

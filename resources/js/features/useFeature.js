@@ -5,7 +5,7 @@ export function useFeature(endpoint) {
     const data = ref(null), loading = ref(false), error = ref(null), busy = ref(false), notice = ref(''), actionError = ref(null);
     let controller, alive = true, pendingAction;
     const params = new URLSearchParams(location.search);
-    const query = reactive(Object.fromEntries([...params].filter(([key]) => ['q', 'page', 'contest_id', 'organization_id', 'status'].includes(key))));
+    const query = reactive(Object.fromEntries([...params].filter(([key]) => ['q', 'page', 'contest_id', 'organization_id', 'status', 'site_id', 'judge_id'].includes(key))));
     async function load(filters = query) {
         controller?.abort(); const active = controller = new AbortController();
         loading.value = true; error.value = null;
@@ -48,7 +48,7 @@ export function useFeature(endpoint) {
     function restore() {
         const next = new URLSearchParams(location.search);
         Object.keys(query).forEach(key => delete query[key]);
-        for (const key of ['q', 'page', 'contest_id', 'organization_id', 'status']) if (next.has(key)) query[key] = next.get(key);
+        for (const key of ['q', 'page', 'contest_id', 'organization_id', 'status', 'site_id', 'judge_id']) if (next.has(key)) query[key] = next.get(key);
         load();
     }
     onMounted(() => { load(); window.addEventListener('popstate', restore); });
