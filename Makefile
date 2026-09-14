@@ -145,14 +145,23 @@ tinker:
 # Queue & Judge
 # =============================================================================
 
+# -u www because `docker compose exec` bypasses the image ENTRYPOINT, and
+# so bypasses the privilege drop docker/php/entrypoint.sh does for the
+# `queue` service (issue #136). Without it this target is the one
+# remaining way to run the judging path -- queue:work dispatches
+# JudgeRunJob, which compiles and executes submitted code -- as uid 0.
 queue:
-	@docker compose exec app php artisan queue:work --verbose
+	@docker compose exec -u www app php artisan queue:work --verbose
 
 queue-restart:
 	@docker compose exec app php artisan queue:restart
 
+# -u judge for the same reason, against the guarantee Dockerfile.judge's
+# entrypoint has made since #86: `exec` starts a new process directly, so
+# this one was running the autojudge loop as root even though the
+# service's own main process is uid 1000.
 judge:
-	@docker compose exec autojudge php artisan autojudge:start --sleep=5
+	@docker compose exec -u judge autojudge php artisan autojudge:start --sleep=5
 
 # =============================================================================
 # Testing & Code Quality

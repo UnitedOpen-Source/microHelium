@@ -90,6 +90,14 @@ services:
     # docker-compose.prod.yml config` against it before issue #54.
     restart: unless-stopped
     working_dir: /var/www/html
+    # No `user:` key, deliberately. This service judges -- queue:work runs
+    # App\Jobs\JudgeRunJob, which calls AutoJudgeService::judge() to
+    # compile and execute submitted contestant code -- and since issue #136
+    # the image itself guarantees that happens as uid 1000, via
+    # docker/php/entrypoint.sh. Pinning the uid here too would move the
+    # guarantee back into the compose file, where it only protects people
+    # who use this file. Do not add `user: root`: it would defeat the
+    # entrypoint, which only drops privilege when it starts as root.
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
     volumes:
       - .:/var/www/html
@@ -109,6 +117,11 @@ services:
     container_name: microhelium-scheduler
     restart: unless-stopped
     working_dir: /var/www/html
+    # Same exposure as `queue`, and it is not obvious: routes/console.php
+    # schedules `runs:reconcile-stuck`, which dispatches JudgeRunJob. On a
+    # sync queue connection that job runs inline, in THIS container. The
+    # entrypoint drops the whole `/bin/sh -c ...` loop to uid 1000, so the
+    # judging that reaches here is unprivileged too.
     command: /bin/sh -c "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"
     volumes:
       - .:/var/www/html
