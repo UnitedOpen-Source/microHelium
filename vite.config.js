@@ -28,9 +28,19 @@ export default defineConfig({
             // 'self' plus a nonce, no 'unsafe-eval'). Nothing here needs it:
             // every component is a .vue SFC compiled to a render function at
             // build time. Pointing at the default entry keeps the compiler
-            // out of the bundle, so a runtime string template fails at build
-            // time rather than throwing an EvalError in the browser and
-            // taking the rest of the page's JavaScript with it.
+            // out of the bundle.
+            //
+            // Measured, because the obvious claim is wrong: this does NOT
+            // make a reintroduced string template fail at build time. The
+            // build succeeds, and a production Vue build emits neither an
+            // error nor a warning -- the component just renders nothing.
+            // What it does buy is that the failure stays local instead of
+            // throwing an EvalError at module top level and taking every
+            // other island, and initializeUI(), down with it.
+            //
+            // Because that silence is not a guard,
+            // tests/Unit/FrontendCspCompatibilityTest.php asserts on this
+            // alias and on the absence of a `template` option.
             '@': '/resources/js',
         },
     },
