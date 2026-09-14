@@ -5,6 +5,20 @@
 @section('description', 'Organize as entregas, impressões e solicitações dos participantes.')
 
 @section('content')
+
+{{-- Issue #143: balloon colour is per task and dynamic, and a style=""
+     attribute cannot carry a CSP nonce. One nonced block with a rule per
+     task replaces them, which is what lets style-src drop 'unsafe-inline'.
+     The hex is validated here rather than trusted into a stylesheet. --}}
+@if($tasks->isNotEmpty())
+<style nonce="{{ $cspNonce ?? '' }}">
+@foreach($tasks as $task)
+@if(preg_match('/^#[0-9a-fA-F]{6}$/', $task->color_hex ?? ''))
+.balloon-swatch-{{ $task->id }}{background-color:{{ $task->color_hex }}}
+@endif
+@endforeach
+</style>
+@endif
 <div class="space-y-6">
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
@@ -35,8 +49,7 @@
                             @if($task->color_hex)
                                 {{-- Issue #87: the colour is what the staff member
                                      actually looks for when picking the balloon up. --}}
-                                <span class="inline-block w-3 h-3 rounded-full align-middle mr-2 border border-border"
-                                      style="background-color: {{ $task->color_hex }}"
+                                <span class="inline-block w-3 h-3 rounded-full align-middle mr-2 border border-border balloon-swatch-{{ $task->id }}"
                                       title="{{ $task->color_name }}"
                                       aria-hidden="true"></span>
                             @endif

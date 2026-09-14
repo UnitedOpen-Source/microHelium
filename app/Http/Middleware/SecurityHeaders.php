@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -35,7 +36,13 @@ class SecurityHeaders
 
     public function handle(Request $request, Closure $next): Response
     {
-        $request->attributes->set(self::NONCE_ATTRIBUTE, Str::random(24));
+        $nonce = Str::random(24);
+        $request->attributes->set(self::NONCE_ATTRIBUTE, $nonce);
+
+        // Issue #143: the nonce existed and nothing consumed it. Views need
+        // it to emit the one <style> block that replaces the inline style
+        // attributes -- which is what lets style-src drop 'unsafe-inline'.
+        View::share('cspNonce', $nonce);
 
         /** @var Response $response */
         $response = $next($request);
@@ -67,6 +74,14 @@ class SecurityHeaders
                 .'magnetometer=(), microphone=(), payment=(), usb=()',
             'Cross-Origin-Opener-Policy' => 'same-origin',
             'Cross-Origin-Resource-Policy' => 'same-origin',
+            // Issue #143: the third of the trio. With COOP and CORP already
+            // set, this is what actually makes the origin cross-origin
+            // isolated. It costs nothing here because every resource the
+            // pages load is same-origin and already answers with CORP --
+            // verified by loading each page with it on. The day someone
+            // embeds a third-party script or font, this is the header that
+            // will refuse it, and that refusal is the point.
+            'Cross-Origin-Embedder-Policy' => 'require-corp',
         ];
 
         // Only over TLS: sending HSTS on a plain-HTTP response is ignored by
@@ -84,6 +99,7 @@ class SecurityHeaders
         $nonce = "'nonce-".$request->attributes->get(self::NONCE_ATTRIBUTE)."'";
 
         $script = ["'self'", $nonce];
+        $style = ["'self'", $nonce];
         $connect = ["'self'"];
 
         // Vite's dev server serves the module graph and opens a websocket for
@@ -98,12 +114,19 @@ class SecurityHeaders
         return implode('; ', [
             "default-src 'self'",
             'script-src '.implode(' ', $script),
-            // 'unsafe-inline' for styles only, and knowingly: Vue's scoped
-            // styles and the components' inline style bindings generate them
-            // at runtime. An injected style is a far smaller weapon than an
-            // injected script, and nonce-ing every one of them is not
-            // reachable while the components are written this way.
-            "style-src 'self' 'unsafe-inline'",
+            // Issue #143: this used to be 'unsafe-inline', justified by
+            // "Vue's scoped styles and the components' inline style
+            // bindings". That justification did not survive checking:
+            // resources/js has no :style bindings and no <style> blocks in
+            // any SFC, and Vite extracts component CSS to
+            // public/build/assets/*.css at build time. The only inline
+            // styles in the application were three style= attributes in
+            // Blade, and they are gone.
+            //
+            // A nonce cannot cover a style ATTRIBUTE -- that needs
+            // 'unsafe-hashes' -- so the dynamic colours moved into a nonced
+            // <style> block instead of being annotated in place.
+            'style-src '.implode(' ', $style),
             "img-src 'self' data:",
             "font-src 'self' data:",
             'connect-src '.implode(' ', $connect),

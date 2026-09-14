@@ -20,7 +20,7 @@
             </div>
             @if($num < 5)
             <div class="flex-1 h-1 mx-2 sm:mx-4 bg-border rounded">
-                <div id="progress-{{ $num }}-{{ $num+1 }}" class="h-full bg-primary rounded transition-colors duration-300" style="width: 0%"></div>
+                <div id="progress-{{ $num }}-{{ $num+1 }}" class="h-full bg-primary rounded transition-colors duration-300 w-0"></div>
             </div>
             @endif
             @endforeach

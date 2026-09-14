@@ -41,10 +41,24 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-border">
+{{-- Issue #143: the balloon colour is per problem and therefore dynamic,
+     but a style="" attribute cannot carry a CSP nonce -- only 'unsafe-hashes'
+     covers attributes, and that is broader than the thing it would allow.
+     One nonced block with a rule per problem says the same thing and lets
+     style-src drop 'unsafe-inline' entirely. The hex is validated here as it
+     was in the attribute: anything that is not exactly #rrggbb falls back to
+     the theme colour rather than reaching the stylesheet. --}}
+@if($problems->isNotEmpty())
+<style nonce="{{ $cspNonce ?? '' }}">
+@foreach($problems as $problem)
+.problem-swatch-{{ $problem->id }}{background-color:{{ preg_match('/^#[0-9a-fA-F]{6}$/', $problem->color_hex ?? '') ? $problem->color_hex : 'var(--color-primary)' }}}
+@endforeach
+</style>
+@endif
                     @forelse ($problems as $problem)
                     <tr class="hover:bg-muted/50 transition-colors">
                         <td class="px-4 py-4">
-                            <span class="problem-marker"><span aria-hidden="true" class="problem-swatch" style="background-color: {{ preg_match('/^#[0-9a-fA-F]{6}$/', $problem->color_hex ?? '') ? $problem->color_hex : 'var(--color-primary)' }}"></span>{{ $problem->short_name }}</span>
+                            <span class="problem-marker"><span aria-hidden="true" class="problem-swatch problem-swatch-{{ $problem->id }}"></span>{{ $problem->short_name }}</span>
                         </td>
                         <td class="px-4 py-4">
                             <a href="{{ route('exercise.show', $problem) }}" class="font-semibold text-foreground hover:text-primary transition-colors">
