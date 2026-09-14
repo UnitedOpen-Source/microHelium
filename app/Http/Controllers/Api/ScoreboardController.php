@@ -14,7 +14,13 @@ class ScoreboardController extends Controller
 {
     public function index(Request $request, Contest $contest): JsonResponse
     {
-        $frozen = $contest->isFrozen() && !auth()->user()?->isAdmin();
+        // Issue #134: a scoreboard is a contest's participants and how they
+        // are doing. If the contest itself is not visible to this viewer,
+        // neither is its standings table -- one rule for every read hanging
+        // off /contests/{contest}.
+        $this->authorizeContestVisibility($contest);
+
+        $frozen = $contest->isFrozen() && ! auth()->user()?->isAdmin();
 
         $scoreboard = Leaderboard::getScoreboard($contest->id, $frozen);
 
@@ -41,6 +47,8 @@ class ScoreboardController extends Controller
 
     public function userScore(Request $request, Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         $user = auth()->user();
 
         $scores = Score::where('contest_id', $contest->id)
@@ -56,7 +64,7 @@ class ScoreboardController extends Controller
             'rank' => $leaderboardEntry?->rank,
             'problems_solved' => $leaderboardEntry?->problems_solved ?? 0,
             'total_time' => $leaderboardEntry?->total_time ?? 0,
-            'problems' => $scores->map(fn($s) => [
+            'problems' => $scores->map(fn ($s) => [
                 'problem_id' => $s->problem_id,
                 'short_name' => $s->problem->short_name,
                 'name' => $s->problem->name,

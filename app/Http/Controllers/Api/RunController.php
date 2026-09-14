@@ -10,10 +10,10 @@ use App\Models\ContestLog;
 use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Run;
+use App\Models\Score;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RunController extends Controller
@@ -24,8 +24,8 @@ class RunController extends Controller
         $contestId = $request->get('contest_id');
 
         $runs = Run::query()
-            ->when($contestId, fn($q) => $q->where('contest_id', $contestId))
-            ->when(!$user->isAdmin() && !$user->isJudge(), fn($q) => $q->where('user_id', $user->user_id))
+            ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
+            ->when(! $user->isAdmin() && ! $user->isJudge(), fn ($q) => $q->where('user_id', $user->user_id))
             ->with(['problem:id,short_name,name', 'language:id,name', 'answer:id,name,short_name,is_accepted', 'user:user_id,fullname'])
             ->orderByDesc('created_at')
             ->paginate(20);
@@ -39,7 +39,7 @@ class RunController extends Controller
             'contest_id' => 'required|exists:contests,id',
             'problem_id' => 'required|exists:problems,id',
             'language_id' => 'required|exists:languages,id',
-            'source_file' => 'required|file|max:' . config('autojudge.max_file_size', 100),
+            'source_file' => 'required|file|max:'.config('autojudge.max_file_size', 100),
         ]);
 
         $user = auth()->user();
@@ -47,8 +47,18 @@ class RunController extends Controller
         $problem = Problem::findOrFail($validated['problem_id']);
         $language = Language::findOrFail($validated['language_id']);
 
+        // Issue #134: the three checks below all ask whether the SUBMISSION
+        // is coherent -- running contest, problem and language belonging to
+        // it -- and none of them asked whether the submitter belongs there.
+        // A team from another contest could put a run into this contest's
+        // judge queue and onto its scoreboard.
+        $this->authorizeContestMembership(
+            $contest,
+            'Voce nao pode submeter para um contest do qual nao participa.'
+        );
+
         // Validate contest is running
-        if (!$contest->isRunning()) {
+        if (! $contest->isRunning()) {
             return response()->json(['error' => 'Contest is not running'], 422);
         }
 
@@ -58,7 +68,7 @@ class RunController extends Controller
         }
 
         // Validate language belongs to contest
-        if ($language->contest_id !== $contest->id || !$language->is_active) {
+        if ($language->contest_id !== $contest->id || ! $language->is_active) {
             return response()->json(['error' => 'Language is not available for this contest'], 422);
         }
 
@@ -117,7 +127,7 @@ class RunController extends Controller
         $user = auth()->user();
 
         // Check permissions
-        if (!$user->isAdmin() && !$user->isJudge() && $run->user_id !== $user->user_id) {
+        if (! $user->isAdmin() && ! $user->isJudge() && $run->user_id !== $user->user_id) {
             abort(403, 'Unauthorized');
         }
 
@@ -132,7 +142,7 @@ class RunController extends Controller
 
         $path = $run->source_file;
 
-        if (!Storage::disk('local')->exists($path)) {
+        if (! Storage::disk('local')->exists($path)) {
             abort(404, 'Source file not found');
         }
 
@@ -196,7 +206,7 @@ class RunController extends Controller
         ]);
 
         // Update score
-        \App\Models\Score::updateScore($run);
+        Score::updateScore($run);
 
         ContestLog::info($run->contest_id, "Run #{$run->run_number} manually judged", [
             'judge_id' => auth()->id(),

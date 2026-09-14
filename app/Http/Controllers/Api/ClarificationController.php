@@ -17,8 +17,15 @@ class ClarificationController extends Controller
         $contestId = $request->get('contest_id');
 
         $clarifications = Clarification::query()
-            ->when($contestId, fn($q) => $q->where('contest_id', $contestId))
-            ->when(!$user->isAdmin() && !$user->isJudge(), function ($q) use ($user) {
+            ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
+            // Issue #134: the broadcast branch below had no contest
+            // boundary of its own, so with no contest_id filter a team was
+            // handed every broadcast_all clarification in the installation
+            // -- answers written for another contest, which is how a
+            // clarification gives away what is in a problem.
+            ->when(! $user->isAdmin() && ! $user->isJudge(), function ($q) use ($user) {
+                $q->whereHas('contest', fn ($q) => $q->visibleTo($user));
+
                 $q->where(function ($q) use ($user) {
                     $q->where('user_id', $user->user_id)
                         ->orWhere('status', 'broadcast_all')
@@ -49,8 +56,13 @@ class ClarificationController extends Controller
         $user = auth()->user();
         $contest = Contest::findOrFail($validated['contest_id']);
 
+        $this->authorizeContestMembership(
+            $contest,
+            'Voce nao pode enviar clarificacoes para um contest do qual nao participa.'
+        );
+
         // Validate contest is running
-        if (!$contest->isRunning()) {
+        if (! $contest->isRunning()) {
             return response()->json(['error' => 'Contest is not running'], 422);
         }
 
@@ -81,8 +93,14 @@ class ClarificationController extends Controller
         $user = auth()->user();
 
         // Check permissions
-        if (!$user->isAdmin() && !$user->isJudge()) {
-            if ($clarification->user_id !== $user->user_id && !$clarification->isBroadcast()) {
+        if (! $user->isAdmin() && ! $user->isJudge()) {
+            // The broadcast half of this is what index() filters too: a
+            // broadcast is public to the contest it was answered in, not to
+            // every account on the installation (issue #134).
+            $isReadableBroadcast = $clarification->isBroadcast()
+                && $clarification->contest?->isVisibleTo($user);
+
+            if ($clarification->user_id !== $user->user_id && ! $isReadableBroadcast) {
                 abort(403, 'Unauthorized');
             }
         }
@@ -144,7 +162,7 @@ class ClarificationController extends Controller
         $contestId = $request->get('contest_id');
 
         $clarifications = Clarification::query()
-            ->when($contestId, fn($q) => $q->where('contest_id', $contestId))
+            ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
             ->where('status', 'pending')
             ->with(['problem:id,short_name,name', 'user:user_id,fullname'])
             ->orderBy('created_at')

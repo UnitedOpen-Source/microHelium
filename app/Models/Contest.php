@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use Helium\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Contest extends Model
 {
@@ -52,6 +53,81 @@ class Contest extends Model
         return $query->where('is_practice', true);
     }
 
+    /**
+     * Issue #134 -- may this viewer see this contest at all?
+     *
+     * The same rule issue #135 landed for the web side in
+     * App\Http\Controllers\ProblemController::mayList(), in the same order:
+     * staff always; then someone who belongs to this contest; then everyone,
+     * but only when the contest is marked public. It lives on the model
+     * because the API asks it of four different controllers (contest,
+     * problem, scoreboard, clarification) -- one rule with one home, so the
+     * listing and the detail endpoint cannot drift apart the way #135 found
+     * them drifted on the web side.
+     *
+     * The gate matters most before an event opens: is_public defaults to
+     * false, and a contest that has not started still has its whole problem
+     * set loaded.
+     */
+    public function isVisibleTo(?User $user): bool
+    {
+        if ($user?->isAdmin() || $user?->isJudge()) {
+            return true;
+        }
+
+        if (in_array((int) $this->id, self::memberContestIds($user), true)) {
+            return true;
+        }
+
+        return (bool) $this->is_public;
+    }
+
+    /**
+     * The row-set half of isVisibleTo(), for the listings.
+     *
+     * Kept beside it on purpose: a listing that filters by a different rule
+     * than the one the detail endpoint enforces is exactly the bug #135
+     * describes, where /exercises listed problems whose own page answered
+     * 404.
+     */
+    public function scopeVisibleTo($query, ?User $user)
+    {
+        if ($user?->isAdmin() || $user?->isJudge()) {
+            return $query;
+        }
+
+        return $query->where(function ($q) use ($user) {
+            $q->where('is_public', true)
+                ->orWhereIn('id', self::memberContestIds($user));
+        });
+    }
+
+    /**
+     * Which contests this user belongs to.
+     *
+     * Broader than #135's mayList(), which asks about users.contest_id
+     * alone, and deliberately so: in the BOCA schema a user reaches a
+     * contest through either column, and the API's own writers already treat
+     * the site as authoritative when the direct link is absent
+     * (`$user->site_id ?? $contest->sites()->first()->id` in
+     * Api\RunController::store() and Api\ClarificationController::store()).
+     * Reading users.contest_id only would lock a legitimately registered
+     * team out of its own contest whenever registration filled in the site.
+     *
+     * @return list<int>
+     */
+    private static function memberContestIds(?User $user): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter([
+            (int) $user->contest_id,
+            (int) $user->site?->contest_id,
+        ])));
+    }
+
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);
@@ -74,7 +150,7 @@ class Contest extends Model
 
     public function users(): HasMany
     {
-        return $this->hasMany(\Helium\User::class);
+        return $this->hasMany(User::class);
     }
 
     public function runs(): HasMany
@@ -99,42 +175,47 @@ class Contest extends Model
 
     public function getEndTimeAttribute(): ?\DateTime
     {
-        if (!$this->start_time) {
+        if (! $this->start_time) {
             return null;
         }
+
         return $this->start_time->copy()->addMinutes($this->duration);
     }
 
     public function getFreezeTimeAttribute(): ?\DateTime
     {
-        if (!$this->start_time) {
+        if (! $this->start_time) {
             return null;
         }
+
         return $this->end_time->copy()->subMinutes($this->attributes['freeze_time']);
     }
 
     public function isRunning(): bool
     {
-        if (!$this->is_active || !$this->start_time) {
+        if (! $this->is_active || ! $this->start_time) {
             return false;
         }
         $now = now();
+
         return $now->gte($this->start_time) && $now->lte($this->end_time);
     }
 
     public function isFrozen(): bool
     {
-        if (!$this->isRunning()) {
+        if (! $this->isRunning()) {
             return false;
         }
+
         return now()->gte($this->freeze_time);
     }
 
     public function getContestTime(): int
     {
-        if (!$this->start_time || now()->lt($this->start_time)) {
+        if (! $this->start_time || now()->lt($this->start_time)) {
             return 0;
         }
+
         // $a->diffInSeconds($b) returns $b's timestamp minus $a's (signed,
         // not absolute, as of Carbon 3 -- this app's pinned version). Elapsed
         // time since start is "now minus start", so start_time must be the
