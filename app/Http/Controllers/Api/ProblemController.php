@@ -70,14 +70,70 @@ class ProblemController extends Controller
         return response()->json($problem->load('testCases'), 201);
     }
 
+    /**
+     * Issue #153 -- this used to `load('testCases')`, and after #134 the
+     * competitor half of routes/api.php is exactly where it should be: the
+     * teams competing in the contest can reach it. What went out with each
+     * row was the case's path on disk plus `input_hash` and `output_hash`,
+     * sha256 of the hidden input and of the expected output.
+     *
+     * A digest is not the file, but it is an oracle for it. Guessing the
+     * hidden input blind is hopeless; *verifying* a guess against a known
+     * sha256 is a loop, and on a problem with a tight input format (small
+     * bounds, rigid layout, an obvious corner case) that loop terminates.
+     * `output_hash` confirms the expected answer without solving anything.
+     * #134 already closed the larger hole next door -- /problems/{problem}/
+     * export handed over input/ and output/ themselves -- and this is the
+     * same disclosure in digest form, so it belongs on the same side of the
+     * split.
+     *
+     * The count stays, because a team knowing how many cases a judgement
+     * runs is legitimate and carries no digest: JudgeWorkQueue::
+     * workPayload() already publishes exactly that to the judgehosts. The
+     * key is `test_cases_count` rather than workPayload's `test_case_count`
+     * because loadCount() names it after the relation, and index() above has
+     * been emitting it under that name all along -- the listing and the
+     * detail endpoint should not disagree about what the field is called.
+     *
+     * Staff who need the rows themselves have
+     * GET /problems/{problem}/test-cases, behind role:judge,admin.
+     */
     public function show(Problem $problem): JsonResponse
     {
         $this->authorizeContestVisibility($problem->contest);
 
-        $problem->load(['contest', 'testCases']);
-        $problem->loadCount(['runs', 'clarifications']);
+        $problem->load('contest');
+        $problem->loadCount(['testCases', 'runs', 'clarifications']);
 
         return response()->json($problem);
+    }
+
+    /**
+     * Issue #153 -- the staff-side replacement for what show() used to
+     * carry.
+     *
+     * Preparing or checking a problem is judge work, and the digests are
+     * how you tell whether the cases on this installation are the cases the
+     * package shipped; removing them from show() should not mean nobody can
+     * read them over the API any more. routes/api.php already states that
+     * this controller does no authorization of its own and that the route
+     * is the whole of the check, so the gate is `role:judge,admin` on the
+     * route rather than an `if` in here -- the same shape #134 gave
+     * exportPackage(), and the reason a second URI exists instead of show()
+     * quietly returning two different bodies depending on who asked.
+     *
+     * The visibility call is still made: it is a no-op for admins and
+     * judges (Contest::isVisibleTo() lets both through unconditionally), so
+     * it costs nothing, and it keeps the action correct if the route is
+     * ever regrouped.
+     */
+    public function testCases(Problem $problem): JsonResponse
+    {
+        $this->authorizeContestVisibility($problem->contest);
+
+        return response()->json([
+            'data' => $problem->testCases()->get(),
+        ]);
     }
 
     public function update(Request $request, Problem $problem): JsonResponse

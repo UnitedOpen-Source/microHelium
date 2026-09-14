@@ -108,6 +108,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('problems', ProblemController::class)->only(['store', 'update', 'destroy']);
         Route::get('/problems/{problem}/export', [ProblemController::class, 'exportPackage']);
 
+        // Issue #153. The hidden test cases in full -- disk paths,
+        // input_hash, output_hash. GET /problems/{problem} used to load
+        // this relation into the competitor-facing body: a sha256 of the
+        // hidden input turns guessing into verifying, which is the same
+        // disclosure /export was moved here for, only in digest form. The
+        // competitor response keeps `test_cases_count` and nothing else.
+        Route::get('/problems/{problem}/test-cases', [ProblemController::class, 'testCases']);
+
         Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
         Route::put('/runs/{run}/judge', [RunController::class, 'judge']);
 
