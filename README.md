@@ -314,6 +314,43 @@ fullname=Hello World Problem
 descfile=problem.pdf
 ```
 
+## Command-line client (`bin/mh`)
+
+Issue #145. During training a team lives in an editor, not in a browser:
+`mh submit A.cpp` is one command, against changing windows, picking a
+problem from a select, picking a language and attaching a file. Official
+contests normally require the web interface, so this is above all for
+training -- which is what Treino Livre (#43) is.
+
+Python 3 and the standard library only, deliberately. It runs on a
+competitor's machine in a university lab, so anything needing `pip install`
+is a thing that will not be there on the morning of the contest. Copy
+`bin/mh` anywhere on `$PATH`.
+
+```bash
+mh login --server https://contest.example.org   # asks for user and password
+mh problems                                     # the contest's problems and languages
+mh submit A.sh                                  # problem from the name, language from the extension
+mh runs                                         # recent submissions and their verdicts
+mh logout                                       # revokes the token on the server too
+```
+
+`submit` waits for the verdict and **exits with it** -- 0 when accepted, 1
+when not, 2 on an error -- so `mh submit A.cpp && ./next-thing` composes
+with whatever the team already runs. `--no-wait` skips the waiting,
+`--problem` and `--language` override what the file name implies, and
+`--dry-run` resolves both and stops.
+
+The token is stored in `~/.config/microhelium/config.json` with mode 0600
+(`$MH_CONFIG` moves it, `$XDG_CONFIG_HOME` is respected). `MH_SERVER` and
+`MH_TOKEN` override the file, which is what a shared lab machine or a CI
+job should use.
+
+Nothing about this is new server surface: `GET /api/contests/{id}` already
+returns the problems and the active languages that turn `A.sh` into a
+problem id and a language id. The one thing that was missing was any way to
+obtain a token, and that is issue #159 above.
+
 ## API Endpoints
 
 ### Authentication
