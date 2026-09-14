@@ -121,51 +121,165 @@ Visit `http://localhost:8000` in your browser.
 
 ## Auto-Judge Setup
 
-For automatic code evaluation, you need to set up the auto-judge system:
+The judge runs untrusted code, so its isolation is not optional. Since #49
+that isolation is **bubblewrap**, and since #86 a cgroup v2 memory cap.
 
-### 1. Install Required Compilers
+> **If you followed an older copy of this section, stop.** It told you to
+> compile `safeexec` as setuid root and to build a `/bocajail` chroot with
+> debootstrap. Neither is used any more: `safeexec` was removed in #96, and
+> `AUTOJUDGE_JAIL_PATH` is read by nothing. A setuid-root binary you do not
+> need is a liability, so remove it if you created one.
+
+### 1. Install the toolchains and the sandbox
 
 ```bash
 # Ubuntu/Debian
-sudo apt-get install gcc g++ openjdk-17-jdk python3 gpc
-
-# Fedora/RHEL
-sudo dnf install gcc gcc-c++ java-17-openjdk python3
+sudo apt-get install bubblewrap util-linux \
+    gcc g++ openjdk-17-jdk python3
 ```
 
-### 2. Create Sandbox Environment (Recommended)
+`bubblewrap` is what confines a submission; `util-linux` provides the
+`setpriv` the judge container uses to drop privileges. The language
+packages are whichever ones your contest configures.
+
+### 2. Let bubblewrap create user namespaces
+
+On Ubuntu 24.04 and later, unprivileged user namespaces are restricted by
+AppArmor and bwrap cannot start:
 
 ```bash
-# Create jail directory
-sudo mkdir -p /bocajail
-sudo debootstrap --arch=amd64 jammy /bocajail http://archive.ubuntu.com/ubuntu
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 ```
 
-### 3. Compile Safe Execution Tool
+To check it works at all:
 
 ```bash
-cd tools
-gcc -O2 -o safeexec safeexec.c
-sudo chown root:root safeexec
-sudo chmod 4555 safeexec
+bwrap --unshare-all --dev /dev \
+    --ro-bind-try /usr /usr --ro-bind-try /bin /bin \
+    --ro-bind-try /lib /lib --ro-bind-try /lib64 /lib64 \
+    /bin/sh -c 'echo sandbox ok'
 ```
 
-### 4. Configure Auto-Judge
+`--ro-bind-try` rather than `--ro-bind` because which of those directories
+exist varies by distribution — on some `/bin` is a symlink into `/usr`, on
+others `/lib64` is absent. Note that `/` is never bound: binding it
+read-only would confine writes but leave every file on the host readable,
+`.env` included.
 
-Edit your `.env` file:
+### 3. Configure
 
 ```env
 AUTOJUDGE_ENABLED=true
-AUTOJUDGE_JAIL_PATH=/bocajail
 AUTOJUDGE_TIME_LIMIT=10
 AUTOJUDGE_MEMORY_LIMIT=512
+AUTOJUDGE_USE_BWRAP=true
 ```
 
-### 5. Start Auto-Judge Daemon
+`config/autojudge.php` documents the rest, including which host paths the
+sandbox mounts read-only (`sandbox_paths` — the application root is never
+among them) and the per-language address-space grace table.
+
+### 4. Start one or more workers
 
 ```bash
 php artisan autojudge:start
 ```
+
+**More than one is fine, and helps.** Workers claim runs under a row lock,
+so two never take the same submission (#126). Measured on a 10-CPU machine,
+eight workers judge about 3.6x as fast as one, saturating near the CPU
+count — see `docs/specs/126-judging-throughput.md`.
+
+One caveat from that measurement: **on SQLite this does not scale at all.**
+SQLite serialises writes and judging writes several times per run, so extra
+workers add nothing. Use MySQL if you want the throughput.
+
+### 5. Memory limits (optional, recommended)
+
+A cgroup v2 `memory.max` is the only memory limit that works for every
+language — the JVM and .NET reserve gigabytes of address space before
+running a line of submitted code, so `ulimit -v` cannot cap them. It needs
+a writable cgroup hierarchy, which Docker only gives a `--privileged`
+container. `docker-compose.yml` already runs the judge that way.
+
+Without it, judging still works and still produces an MLE verdict, measured
+from peak RSS instead — it just bounds nothing, since the verdict arrives
+after the memory has been taken.
+
+## Distributed Judging (judgehosts)
+
+When one machine's CPUs are not enough, judging can be spread across
+machines — including machines in a partner institution's rack. **Read
+step 4 above first**: adding workers on the machine you already have is
+cheaper than adding machines, and for most contests it is enough.
+
+A judgehost **pulls**. Nothing ever connects to it, so it needs no inbound
+port and no hole in anyone's firewall. It also needs **no database
+credentials**: judging a run issues no queries at all, which is what makes
+it safe to hand a machine to someone else.
+
+### On the server: issue a credential per machine
+
+```bash
+php artisan judgehost:create judge-ufscar-01
+```
+
+The token is printed **once** and stored only as a sha256. There is no way
+to recover it; a lost token means issuing a new credential and disabling
+the old one. Give one credential per machine — the credential is the
+identity, and sharing one lets any holder speak for any host.
+
+### On the judge machine: run the agent
+
+Same image as the local judge, plus two settings:
+
+```env
+JUDGEHOST_SERVER=https://contest.example.org
+JUDGEHOST_TOKEN=<the token printed above>
+```
+
+```bash
+php artisan judgehost:work
+```
+
+The token comes from the environment rather than the command line so it
+does not sit in `ps` output for every user on the box.
+
+`--once` judges at most one run and stops, which is the way to test a new
+machine without leaving a daemon behind.
+
+### What the agent does, and refuses to do
+
+At boot it registers, which releases any work it was still holding from a
+previous life, and reports which languages it can actually run — probed
+from the machine, not configured, so a runtime installed or removed is
+corrected by restarting the agent.
+
+It then polls for work, backing off when there is none, and for each run
+fetches the source, the test data, and any custom compile/run/compare
+script the problem defines.
+
+**It gives a run back rather than judging it half-equipped.** If it cannot
+fetch a problem's custom checker, or a transfer does not match the digest
+the server sent, it returns the run with a reason instead of judging by
+rules the problem replaced. That matters more than it sounds: a problem
+with a tolerance checker, judged by exact comparison, marks correct
+submissions wrong — silently, and in favour of the wrong answer.
+
+A run enough hosts refuse stops being offered to hosts and is logged as an
+error for the organisers, rather than circulating the queue forever.
+
+### Use identical machines
+
+ICPC's CCS requirements describe auto-judging machines *identical to the
+team machines*, and DOMjudge documents uniform hardware as how a fair,
+reproducible setup is obtained. The reason is TLE: the same submission can
+pass on a fast judge and time out on a slow one.
+
+microHelium records each host's CPU count and warns when judges diverge,
+but it deliberately does **not** compensate — a correction factor measured
+once tracks neither cache contention nor thermal throttling, so it would
+feel fair while the verdicts went on varying. Use matching hardware.
 
 ## Problem Package Format
 
