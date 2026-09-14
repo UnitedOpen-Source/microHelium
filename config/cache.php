@@ -46,7 +46,17 @@ return [
 
         'file' => [
             'driver' => 'file',
-            'path' => storage_path('framework/cache/data'),
+            // Overridable so a process can be given a cache of its own.
+            // Issue #145 needed it: tests/E2E/CliClientOverRealHttpTest.php
+            // drives a real server over a real socket, and the rate limiter
+            // behind POST /api/tokens (#159) counts into this store -- with
+            // one shared directory the attempts from one test method, and
+            // from the previous RUN, were still counted against the next,
+            // and the tests failed with "too many attempts" for a reason
+            // that had nothing to do with what they measure. Useful outside
+            // the suite too: a deployment that wants the cache on tmpfs
+            // rather than on the application volume sets this.
+            'path' => env('CACHE_FILE_PATH', storage_path('framework/cache/data')),
         ],
 
         'memcached' => [
