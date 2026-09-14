@@ -4,8 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Backup extends Model
 {
@@ -51,13 +51,26 @@ class Backup extends Model
             $bytes /= 1024;
             $i++;
         }
-        return round($bytes, 2) . ' ' . $units[$i];
+
+        return round($bytes, 2).' '.$units[$i];
     }
 
+    /**
+     * Issue #142 -- withTrashed() matters here in a way it does not for the
+     * run and task numbering this mirrors: `backups` soft-deletes, and a
+     * soft-deleted row still occupies its slot in the unique
+     * (contest_id, site_id, backup_number) index. Numbering that skipped
+     * trashed rows would hand out a number the database then refuses to
+     * insert -- and it would do it at the one moment the operator least
+     * wants a failure, which is right before they change something.
+     */
     public static function getNextBackupNumber(int $contestId, int $siteId): int
     {
-        return self::where('contest_id', $contestId)
+        $highest = self::withTrashed()
+            ->where('contest_id', $contestId)
             ->where('site_id', $siteId)
-            ->max('backup_number') + 1 ?? 1;
+            ->max('backup_number');
+
+        return ((int) $highest) + 1;
     }
 }

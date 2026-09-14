@@ -27,6 +27,14 @@ RUN apk add --no-cache \
     postgresql-dev \
     linux-headers \
     bubblewrap \
+    # Issue #142: `backup:create` shells out to mysqldump, and this image had
+    # no MySQL client at all -- the backup button would have failed on the
+    # one host where it matters. Alpine's client is MariaDB's;
+    # mariadb-connector-c is what carries the caching_sha2_password auth
+    # plugin, and without it the dump cannot even log in to a default
+    # MySQL 8 server (the db service in docker-compose.yml).
+    mariadb-client \
+    mariadb-connector-c \
     $PHPIZE_DEPS \
     # Supervisor for queue workers
     supervisor \

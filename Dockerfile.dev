@@ -26,6 +26,11 @@ RUN apk add --no-cache \
     postgresql-dev \
     linux-headers \
     bubblewrap \
+    # Issue #142: mysqldump for `backup:create`, plus the connector plugin
+    # that lets MariaDB's client authenticate against MySQL 8's default
+    # caching_sha2_password. Same reasoning as in Dockerfile.
+    mariadb-client \
+    mariadb-connector-c \
     $PHPIZE_DEPS \
     # Compilers for autojudge -- this list must cover every language
     # Language::getDefaultLanguages() marks is_active by default, or admins
