@@ -2,7 +2,6 @@
 
 namespace Tests\Integration\Api;
 
-use Tests\TestCase;
 use App\Models\Contest;
 use App\Models\Problem;
 use App\Services\ProblemPackageService;
@@ -12,16 +11,47 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Mockery\MockInterface;
+use Tests\TestCase;
 
 class ProblemControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** @var array<int, string> real files written under storage_path('app') by these tests */
+    private array $realFiles = [];
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->admin = User::factory()->create(['user_type' => 'admin']);
         Sanctum::actingAs($this->admin);
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ($this->realFiles as $file) {
+            @unlink($file);
+            @rmdir(dirname($file));
+        }
+
+        parent::tearDown();
+    }
+
+    /**
+     * Issue #137: these two used Storage::fake('app') -- and faking a disk
+     * registers it, so they passed against a disk config/filesystems.php has
+     * never defined, while the endpoint threw "Disk [app] does not have a
+     * configured driver" in production. The endpoint now uses 'local' (root:
+     * storage_path('app'), which is where ProblemPackageService actually
+     * writes) and these tests write a real file there, so nothing about the
+     * disk is mocked into existence any more.
+     */
+    private function realStorageFile(string $relativePath, string $contents): void
+    {
+        $full = storage_path("app/{$relativePath}");
+        @mkdir(dirname($full), 0755, true);
+        file_put_contents($full, $contents);
+        $this->realFiles[] = $full;
     }
 
     public function test_index_returns_paginated_problems()
@@ -32,7 +62,7 @@ class ProblemControllerTest extends TestCase
         $response = $this->getJson("/api/problems?contest_id={$contest->id}");
 
         $response->assertStatus(200)
-                 ->assertJsonCount(10, 'data');
+            ->assertJsonCount(10, 'data');
     }
 
     public function test_store_creates_problem_from_package()
@@ -82,15 +112,14 @@ class ProblemControllerTest extends TestCase
 
     public function test_download_problem_description()
     {
-        Storage::fake('app');
         $contest = Contest::factory()->create();
         $problem = Problem::factory()->create([
             'contest_id' => $contest->id,
             'basename' => 'test-problem',
-            'description_file' => 'description.html'
+            'description_file' => 'description.html',
         ]);
         $path = "problems/{$problem->contest_id}/{$problem->basename}/description/{$problem->description_file}";
-        Storage::disk('app')->put($path, '<html><body>Problem description</body></html>');
+        $this->realStorageFile($path, '<html><body>Problem description</body></html>');
 
         $response = $this->get("/api/problems/{$problem->id}/download");
 
@@ -100,7 +129,6 @@ class ProblemControllerTest extends TestCase
 
     public function test_download_problem_description_not_found()
     {
-        Storage::fake('app');
         $problem = Problem::factory()->create();
         $response = $this->get("/api/problems/{$problem->id}/download");
         $response->assertStatus(404);
@@ -122,9 +150,8 @@ class ProblemControllerTest extends TestCase
                     ->andReturn($fakeZipPath);
             })
         );
-        
-        Storage::fake('app');
-        Storage::disk('app')->put($fakeZipPath, 'zip_content');
+
+        $this->realStorageFile($fakeZipPath, 'zip_content');
 
         $response = $this->get("/api/problems/{$problem->id}/export");
         $response->assertStatus(200);

@@ -10,7 +10,27 @@
             <span class="text-sm text-muted-foreground">{{ $problem->color_name }}</span>
         </div>
         <div class="p-6 sm:p-8 space-y-8">
-            <section><h2 class="text-lg font-semibold mb-3">Enunciado</h2><div class="reading-content whitespace-pre-wrap break-words">{{ $problem->description ?? 'O enunciado ainda não foi disponibilizado.' }}</div></section>
+            {{-- Issue #137: a problem imported from a BOCA package has no `description` text at all -- its
+                 statement is the file in description/. Showing only the text column meant the normal import
+                 path led to "o enunciado ainda não foi disponibilizado" with the PDF already on the server.
+                 When both exist they are both shown: the text is the summary, the file is the document. --}}
+            <section><h2 class="text-lg font-semibold mb-3">Enunciado</h2>
+                @if($problem->description)
+                <div class="reading-content whitespace-pre-wrap break-words">{{ $problem->description }}</div>
+                @elseif(! $hasStatementFile)
+                <div class="reading-content">O enunciado ainda não foi disponibilizado.</div>
+                @endif
+                @if($hasStatementFile)
+                <div class="mt-4 rounded-xl border border-border p-4 flex flex-wrap items-center justify-between gap-3">
+                    @if($statementReleased)
+                    <p class="text-sm text-muted-foreground">Enunciado oficial em arquivo{{ $problem->description ? ' — o texto acima é apenas um resumo' : '' }}.</p>
+                    <a href="{{ route('exercise.statement', $problem) }}" target="_blank" rel="noopener" class="button-secondary">Abrir enunciado completo →</a>
+                    @else
+                    <p class="text-sm text-muted-foreground">O enunciado completo será liberado no início da prova.</p>
+                    @endif
+                </div>
+                @endif
+            </section>
             @php $samples = $problem->testCases()->where('is_sample', true)->get(); @endphp
             @if($samples->isNotEmpty())
             <section><h2 class="text-lg font-semibold mb-4">Exemplos</h2><div class="space-y-4">
