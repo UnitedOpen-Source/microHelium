@@ -21,4 +21,8 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::view('/webcast', 'features.webcast')->name('backend.webcast');
     Route::view('/bank-governance', 'features.bank-governance')->name('backend.bank-governance');
     Route::view('/managed-accounts', 'features.managed-accounts')->name('backend.managed-accounts');
+    // Issue #53, fase 4. `admin` e nao `judge`, igual as rotas de dados em
+    // routes/frontend_api_judgehosts.php: acrescentar ou desligar maquina
+    // muda a capacidade do evento, e isso e decisao de quem dirige a prova.
+    Route::view('/judge-machines', 'features.judge-machines')->name('backend.judge-machines');
 });
