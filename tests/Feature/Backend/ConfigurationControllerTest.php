@@ -16,13 +16,18 @@ class ConfigurationControllerTest extends TestCase
     public function test_admin_can_view_configurations_index()
     {
         $admin = $this->createAdminUser();
-        DB::table('hackathons')->insert(['eventName' => 'Test Hackathon', 'description' => 'Test', 'starts_at' => now(), 'ends_at' => now()->addHours(8)]);
+
+        // Issue #190: the fixture is a plain `contests` row now, with no
+        // `hackathons` row anywhere -- which is what every creation path
+        // except the old wizard has always produced, and what this screen
+        // used to be unable to show.
+        \App\Models\Contest::factory()->create(['name' => 'Test Hackathon']);
 
         $response = $this->actingAs($admin)->get(route('backend.configurations'));
 
         $response->assertStatus(200);
         $response->assertViewIs('backend.configurations');
-        $response->assertViewHas('hackathons');
+        $response->assertViewHas('contests');
         $response->assertSee('Test Hackathon');
     }
 
@@ -42,7 +47,10 @@ class ConfigurationControllerTest extends TestCase
 
         $response->assertRedirect(route('backend.configurations'));
         $response->assertSessionHas('success');
-        $this->assertDatabaseHas('hackathons', ['eventName' => 'New Awesome Hackathon']);
+        // Issue #190: no `hackathons` row is written any more. Asserting
+        // one existed was asserting the defect -- the duplicate write is
+        // what kept two tables in step by auto-increment coincidence.
+        $this->assertDatabaseCount('hackathons', 0);
         $this->assertDatabaseHas('contests', ['name' => 'New Awesome Hackathon']);
         $this->assertDatabaseHas('sites', ['name' => 'Main Site']);
         $this->assertDatabaseHas('languages', ['extension' => 'php', 'is_active' => true]);

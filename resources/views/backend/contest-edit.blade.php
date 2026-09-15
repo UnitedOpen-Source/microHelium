@@ -9,7 +9,7 @@
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6">
 
-    <form action="{{ route('backend.contest.update', $hackathon->hackathon_id) }}" method="POST" class="space-y-6">
+    <form action="{{ route('backend.contest.update', $contest->id) }}" method="POST" class="space-y-6">
         @csrf
         @method('PUT')
 
@@ -23,12 +23,12 @@
                     <label for="name" class="block text-sm font-medium text-foreground mb-2">Nome da Maratona *</label>
                     <input id="name" type="text" name="name" maxlength="100" required
                         class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
-                        value="{{ old('name', $hackathon->eventName) }}">
+                        value="{{ old('name', $contest->name) }}">
                 </div>
                 <div>
                     <label for="description" class="block text-sm font-medium text-foreground mb-2">Descrição</label>
                     <textarea id="description" name="description" rows="3"
-                        class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none">{{ old('description', $hackathon->description) }}</textarea>
+                        class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent resize-none">{{ old('description', $contest->description) }}</textarea>
                 </div>
             </div>
         </div>
@@ -44,7 +44,7 @@
                         <label for="start_time" class="block text-sm font-medium text-foreground mb-2">Data e Hora de Inicio *</label>
                         <input id="start_time" type="datetime-local" name="start_time" required
                             class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
-                            value="{{ old('start_time', \Carbon\Carbon::parse($contest->start_time ?? $hackathon->starts_at)->format('Y-m-d\TH:i')) }}">
+                            value="{{ old('start_time', \Carbon\Carbon::parse($contest->start_time)->format('Y-m-d\TH:i')) }}">
                     </div>
                     <div>
                         <label for="duration" class="block text-sm font-medium text-foreground mb-2">Duracao (minutos) *</label>
@@ -134,7 +134,7 @@
                     <p class="font-medium text-destructive">Excluir Maratona</p>
                     <p class="text-sm text-destructive">Esta acao e irreversivel. Todos os dados serao perdidos.</p>
                 </div>
-                <form action="/backend/contest/{{ $hackathon->hackathon_id }}/delete" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir esta maratona? Esta acao nao pode ser desfeita.')">
+                <form action="/backend/contest/{{ $contest->id }}/delete" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir esta maratona? Esta acao nao pode ser desfeita.')">
                     @csrf
                     @method('DELETE')
                     <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive-hover transition-colors">

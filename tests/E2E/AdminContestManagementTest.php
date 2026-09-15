@@ -130,9 +130,10 @@ class AdminContestManagementTest extends TestCase
             'is_public' => true,
         ]);
 
-        // Verify hackathon was created
-        $this->assertDatabaseHas('hackathons', [
-            'eventName' => 'E2E Test Contest 2024',
+        // Issue #190: o assistente nao escreve mais a tabela legada.
+        $this->assertDatabaseCount('hackathons', 0);
+        $this->assertDatabaseHas('contests', [
+            'name' => 'E2E Test Contest 2024',
             'description' => 'End-to-end test contest for admin management',
         ]);
 
@@ -193,15 +194,8 @@ class AdminContestManagementTest extends TestCase
      */
     public function test_admin_can_edit_existing_contest()
     {
-        // Create a contest first
-        $hackathonId = DB::table('hackathons')->insertGetId([
-            'eventName' => 'Original Contest Name',
-            'description' => 'Original description',
-            'starts_at' => now()->addDay()->format('Y-m-d H:i:s'),
-            'ends_at' => now()->addDay()->addHours(5)->format('Y-m-d H:i:s'),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // Issue #190: nenhuma linha legada. A competicao existe em
+        // `contests`, como nos outros caminhos de criacao.
 
         $contestId = DB::table('contests')->insertGetId([
             'name' => 'Original Contest Name',
@@ -223,7 +217,6 @@ class AdminContestManagementTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewIs('backend.contest-edit');
-        $response->assertViewHas('hackathon');
         $response->assertViewHas('contest');
 
         // Update the contest
@@ -259,12 +252,8 @@ class AdminContestManagementTest extends TestCase
             'is_public' => 1, // is_public is set to 1 because the field is present in request
         ]);
 
-        // Verify hackathon was also updated
-        $this->assertDatabaseHas('hackathons', [
-            'hackathon_id' => $hackathonId,
-            'eventName' => 'Updated Contest Name',
-            'description' => 'Updated description with more details',
-        ]);
+        // Issue #190: nao ha copia legada para conferir.
+        $this->assertDatabaseCount('hackathons', 0);
 
         // Verify the original data no longer exists
         $this->assertDatabaseMissing('contests', [
@@ -449,15 +438,7 @@ class AdminContestManagementTest extends TestCase
      */
     public function test_admin_can_delete_contest()
     {
-        // Create a hackathon and contest
-        $hackathonId = DB::table('hackathons')->insertGetId([
-            'eventName' => 'Contest to Delete',
-            'description' => 'This contest will be deleted',
-            'starts_at' => now()->addDay()->format('Y-m-d H:i:s'),
-            'ends_at' => now()->addDay()->addHours(5)->format('Y-m-d H:i:s'),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // Issue #190: nenhuma linha legada.
 
         $contestId = DB::table('contests')->insertGetId([
             'name' => 'Contest to Delete',
@@ -506,7 +487,6 @@ class AdminContestManagementTest extends TestCase
 
         // Verify everything exists
         $this->assertDatabaseHas('contests', ['id' => $contestId]);
-        $this->assertDatabaseHas('hackathons', ['hackathon_id' => $hackathonId]);
         $this->assertDatabaseHas('sites', ['contest_id' => $contestId]);
         $this->assertDatabaseHas('languages', ['contest_id' => $contestId]);
         $this->assertDatabaseHas('answers', ['contest_id' => $contestId]);
@@ -520,7 +500,6 @@ class AdminContestManagementTest extends TestCase
 
         // Verify contest and related data were deleted
         $this->assertDatabaseMissing('contests', ['id' => $contestId]);
-        $this->assertDatabaseMissing('hackathons', ['hackathon_id' => $hackathonId]);
         $this->assertDatabaseMissing('sites', ['contest_id' => $contestId]);
         $this->assertDatabaseMissing('languages', ['contest_id' => $contestId]);
         $this->assertDatabaseMissing('answers', ['contest_id' => $contestId]);
@@ -568,10 +547,11 @@ class AdminContestManagementTest extends TestCase
         $response->assertRedirect(route('backend.configurations'));
 
         $contest = DB::table('contests')->where('name', 'Workflow Test Contest')->first();
-        $hackathon = DB::table('hackathons')->where('eventName', 'Workflow Test Contest')->first();
 
         $this->assertNotNull($contest);
-        $this->assertNotNull($hackathon);
+        // Issue #190: e uma tabela so. Conferir a copia legada era conferir
+        // a duplicacao que este issue removeu.
+        $this->assertDatabaseCount('hackathons', 0);
         $this->assertFalse((bool)$contest->is_active);
 
         // Step 2: Edit the contest
@@ -635,7 +615,6 @@ class AdminContestManagementTest extends TestCase
 
         $response->assertRedirect(route('backend.configurations'));
         $this->assertDatabaseMissing('contests', ['id' => $contest->id]);
-        $this->assertDatabaseMissing('hackathons', ['hackathon_id' => $hackathon->hackathon_id]);
     }
 
     /**

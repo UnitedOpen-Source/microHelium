@@ -334,7 +334,7 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::put('/languages/{language}', [LanguageController::class, 'update'])->name('backend.languages.update');
     Route::delete('/languages/{language}', [LanguageController::class, 'destroy'])->name('backend.languages.destroy');
 
-    // Configurations/Hackathons Management
+    // Gestao de competicoes (#190: tudo em `contests`)
     Route::get('/configurations', [ConfigurationController::class, 'index'])->name('backend.configurations');
     Route::post('/configurations', [ConfigurationController::class, 'store']);
 
@@ -407,14 +407,17 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
         return redirect()->route('backend.configurations')->with('success', 'Maratona ativada com sucesso!');
     });
 
+    // Issue #190 -- procura em `contests`. Procurava em `hackathons` por
+    // `hackathon_id`, entao competicao criada por qualquer outro caminho
+    // respondia "Maratona nao encontrada" mesmo existindo.
     Route::get('/contest/{id}/edit', function ($id) {
-        $hackathon = DB::table('hackathons')->where('hackathon_id', $id)->first();
         $contest = DB::table('contests')->where('id', $id)->first();
-        if (! $hackathon) {
+
+        if (! $contest) {
             return redirect()->route('backend.configurations')->with('error', 'Maratona nao encontrada');
         }
 
-        return view('backend.contest-edit', compact('hackathon', 'contest'));
+        return view('backend.contest-edit', compact('contest'));
     })->name('backend.contest.edit');
 
     Route::put('/contest/{id}/update', function ($id, Request $request) {
@@ -433,23 +436,18 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
         $endTime = clone $startTime;
         $endTime->modify('+'.$validated['duration'].' minutes');
 
-        // Check for duplicate name (excluding current hackathon)
-        $existing = DB::table('hackathons')
-            ->where('eventName', $validated['name'])
-            ->where('hackathon_id', '!=', $id)
+        // Issue #190 -- unicidade contra `contests`. A checagem antiga
+        // olhava `hackathons`, que nao tem linha para competicao criada
+        // pela API ou pelo importador: dois contests podiam ficar com o
+        // mesmo nome sem ninguem ser avisado.
+        $existing = DB::table('contests')
+            ->where('name', $validated['name'])
+            ->where('id', '!=', $id)
             ->first();
+
         if ($existing) {
             return redirect()->back()->with('error', 'Ja existe uma maratona com este nome');
         }
-
-        // Update hackathon
-        DB::table('hackathons')->where('hackathon_id', $id)->update([
-            'eventName' => $validated['name'],
-            'description' => $validated['description'],
-            'starts_at' => $startTime->format('Y-m-d H:i:s'),
-            'ends_at' => $endTime->format('Y-m-d H:i:s'),
-            'updated_at' => now(),
-        ]);
 
         // Update contest
         DB::table('contests')->where('id', $id)->update([
@@ -462,7 +460,13 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             'max_file_size' => $validated['max_file_size'] ?? 100,
             'is_active' => $request->has('is_active'),
             'is_public' => $request->has('is_public'),
-            'unlock_key' => $validated['unlock_key'],
+            // `unlock_key` e nullable na validacao, e regra nullable que
+            // nao vem no corpo simplesmente NAO APARECE em $validated --
+            // ler a chave direto era "Undefined array key" numa requisicao
+            // sem o campo. O formulario sempre manda, entao isso so
+            // aparecia fora do navegador; um teste foi o primeiro a mandar
+            // sem.
+            'unlock_key' => $validated['unlock_key'] ?? null,
             'updated_at' => now(),
         ]);
 
@@ -470,7 +474,9 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     })->name('backend.contest.update');
 
     Route::delete('/contest/{id}/delete', function ($id) {
-        DB::table('hackathons')->where('hackathon_id', $id)->delete();
+        // Issue #190 -- nada de `hackathons` aqui: apagar a linha legada
+        // dava a impressao de ter apagado a competicao mesmo quando ela
+        // nunca teve uma.
         DB::table('contests')->where('id', $id)->delete();
         DB::table('languages')->where('contest_id', $id)->delete();
         DB::table('answers')->where('contest_id', $id)->delete();
