@@ -23,11 +23,13 @@ class Backup extends Model
         'status',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
@@ -42,6 +44,7 @@ class Backup extends Model
      * "Class not found", on a model BackupService writes on every backup,
      * and nothing in the suite ever read it.
      */
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');

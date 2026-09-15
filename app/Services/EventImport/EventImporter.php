@@ -209,7 +209,7 @@ class EventImporter
 
     /**
      * @param  list<EventEntry>  $entries
-     * @param  Collection<int, Model>  $existing
+     * @param  Collection<int, Site|Language|Problem>  $existing
      * @return list<PlannedChange>
      */
     private function planEntries(string $kind, array $entries, Collection $existing, string $identityKey, ?string $secondaryKey, EventImportPlan $plan): array
@@ -557,9 +557,16 @@ class EventImporter
     /**
      * Creates or updates one row of $modelClass from a planned change.
      *
-     * @param  class-string<Model>  $modelClass
+     * The union is the whole set this is ever called with (Site, Language,
+     * Problem), and naming it rather than `class-string<Model>` is what
+     * lets the soft-delete calls below typecheck: withTrashed(), trashed()
+     * and restore() come from the SoftDeletes trait, which the base Model
+     * does not have. The wider annotation was not more general, it was just
+     * less true.
+     *
+     * @param  class-string<Site|Language|Problem>  $modelClass
      */
-    private function write(string $modelClass, PlannedChange $change, Contest $contest): ?Model
+    private function write(string $modelClass, PlannedChange $change, Contest $contest): Site|Language|Problem|null
     {
         if ($change->status === PlannedChange::ERROR) {
             return null;
@@ -569,7 +576,6 @@ class EventImporter
             return $modelClass::create(array_merge(['contest_id' => $contest->id], $change->attributes));
         }
 
-        /** @var Model $model */
         $model = $modelClass::withTrashed()->findOrFail($change->modelId);
 
         if ($model->trashed()) {
@@ -597,7 +603,7 @@ class EventImporter
      * parser rejects "~" in short_name and in language names, and the id
      * makes each placeholder distinct.
      *
-     * @param  class-string<Model>  $modelClass
+     * @param  class-string<Site|Language|Problem>  $modelClass
      * @param  list<PlannedChange>  $changes
      */
     private function parkSecondaryKeys(string $modelClass, array $changes, string $field): void

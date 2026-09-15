@@ -24,6 +24,7 @@ class TestCase extends Model
         'is_sample' => 'boolean',
     ];
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);

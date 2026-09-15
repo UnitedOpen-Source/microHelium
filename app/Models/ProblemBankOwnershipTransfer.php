@@ -23,21 +23,25 @@ class ProblemBankOwnershipTransfer extends Model
         'actor_user_id',
     ];
 
+    /** @return BelongsTo<ProblemBank, $this> */
     public function problemBank(): BelongsTo
     {
         return $this->belongsTo(ProblemBank::class);
     }
 
+    /** @return BelongsTo<Organization, $this> */
     public function fromOrganization(): BelongsTo
     {
         return $this->belongsTo(Organization::class, 'from_organization_id');
     }
 
+    /** @return BelongsTo<Organization, $this> */
     public function toOrganization(): BelongsTo
     {
         return $this->belongsTo(Organization::class, 'to_organization_id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function actor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'actor_user_id', 'user_id');

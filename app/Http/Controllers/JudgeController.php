@@ -52,11 +52,12 @@ class JudgeController extends Controller
 
             $runs = $query->get();
 
-            $pendingRuns = $runs->whereIn('status', ['pending', 'judging'])->map(function (Run $run) {
-                $run->is_overdue = $run->isOverdue();
-
-                return $run;
-            });
+            // No `$run->is_overdue = ...` here any more. Setting an
+            // attribute the model does not declare, purely so a Blade file
+            // can read it back, is a value that exists only between this
+            // line and that template -- PHPStan flagged it, and the view
+            // can simply ask the model, which is where the rule lives.
+            $pendingRuns = $runs->whereIn('status', ['pending', 'judging']);
             $judgedRuns = $runs->where('status', 'judged')->take(50);
 
             // Issue #138: with the gate on, a judged run whose verdict has

@@ -26,16 +26,19 @@ class ContestLog extends Model
         'context' => 'array',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');

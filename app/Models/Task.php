@@ -34,31 +34,37 @@ class Task extends Model
         'is_system' => 'boolean',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
     }
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function staff(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'staff_id', 'user_id');
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function staffSite(): BelongsTo
     {
         return $this->belongsTo(Site::class, 'staff_site_id');

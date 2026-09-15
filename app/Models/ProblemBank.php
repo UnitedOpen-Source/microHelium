@@ -43,11 +43,13 @@ class ProblemBank extends Model
      * Issue #46: nullable owning organization. Null means "legacy" --
      * administrable only by admin (docs/specs/46-bank-ownership.md).
      */
+    /** @return BelongsTo<Organization, $this> */
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class, 'owning_org_id');
     }
 
+    /** @return HasMany<ProblemBankOwnershipTransfer, $this> */
     public function ownershipTransfers(): HasMany
     {
         return $this->hasMany(ProblemBankOwnershipTransfer::class);
@@ -57,6 +59,7 @@ class ProblemBank extends Model
      * Issue #43 -- every practice publication this entry has ever had,
      * open or closed (docs/specs/43-practice.md).
      */
+    /** @return HasMany<PracticePublication, $this> */
     public function practicePublications(): HasMany
     {
         return $this->hasMany(PracticePublication::class);

@@ -56,26 +56,31 @@ class Run extends Model
         'verified_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
     }
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);
     }
 
+    /** @return BelongsTo<Language, $this> */
     public function language(): BelongsTo
     {
         return $this->belongsTo(Language::class);
@@ -84,21 +89,25 @@ class Run extends Model
     /**
      * Issue #53 -- the machine currently holding this run, if any.
      */
+    /** @return BelongsTo<Judgehost, $this> */
     public function judgehost(): BelongsTo
     {
         return $this->belongsTo(Judgehost::class);
     }
 
+    /** @return BelongsTo<Answer, $this> */
     public function answer(): BelongsTo
     {
         return $this->belongsTo(Answer::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function judge(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'judge_id', 'user_id');
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function judgeSite(): BelongsTo
     {
         return $this->belongsTo(Site::class, 'judge_site_id');
@@ -111,6 +120,7 @@ class Run extends Model
      * its judge are different people by design, and which one signed which
      * half is the whole point of keeping a record.
      */
+    /** @return BelongsTo<User, $this> */
     public function verifier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verified_by', 'user_id');

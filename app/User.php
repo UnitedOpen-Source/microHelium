@@ -95,11 +95,13 @@ class User extends Authenticatable
 
     const TYPE_SITE = 'site';
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
     }
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
@@ -109,6 +111,7 @@ class User extends Authenticatable
      * The admin who created this account via the managed-accounts flow
      * (issue #47). Null for self-registered accounts.
      */
+    /** @return BelongsTo<self, $this> */
     public function managedBy(): BelongsTo
     {
         return $this->belongsTo(self::class, 'managed_by', 'user_id');

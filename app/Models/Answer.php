@@ -25,11 +25,13 @@ class Answer extends Model
         'is_fake' => 'boolean',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return HasMany<Run, $this> */
     public function runs(): HasMany
     {
         return $this->hasMany(Run::class);

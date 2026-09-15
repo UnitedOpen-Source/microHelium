@@ -33,26 +33,31 @@ class Site extends Model
         'auto_judge' => 'boolean',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return HasMany<\Helium\User, $this> */
     public function users(): HasMany
     {
         return $this->hasMany(\Helium\User::class, 'site_id', 'id');
     }
 
+    /** @return HasMany<Run, $this> */
     public function runs(): HasMany
     {
         return $this->hasMany(Run::class);
     }
 
+    /** @return HasMany<Clarification, $this> */
     public function clarifications(): HasMany
     {
         return $this->hasMany(Clarification::class);
     }
 
+    /** @return HasMany<Task, $this> */
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
@@ -61,6 +66,7 @@ class Site extends Model
     /**
      * Routes where this site's judges also handle another site's runs.
      */
+    /** @return HasMany<SiteJudgingRoute, $this> */
     public function judgingRoutes(): HasMany
     {
         return $this->hasMany(SiteJudgingRoute::class, 'host_site_id');

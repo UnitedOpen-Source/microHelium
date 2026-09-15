@@ -32,16 +32,19 @@ class PracticePublication extends Model
         'unpublished_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<ProblemBank, $this> */
     public function problemBank(): BelongsTo
     {
         return $this->belongsTo(ProblemBank::class);
     }
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function publisher(): BelongsTo
     {
         return $this->belongsTo(User::class, 'published_by', 'user_id');

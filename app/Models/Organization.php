@@ -22,11 +22,13 @@ class Organization extends Model
         'archived_at' => 'datetime',
     ];
 
+    /** @return HasMany<OrganizationMembership, $this> */
     public function memberships(): HasMany
     {
         return $this->hasMany(OrganizationMembership::class);
     }
 
+    /** @return HasMany<ProblemBank, $this> */
     public function problemBankItems(): HasMany
     {
         return $this->hasMany(ProblemBank::class, 'owning_org_id');

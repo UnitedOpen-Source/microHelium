@@ -93,12 +93,20 @@ class PracticeController extends Controller
         $page = $query->paginate(self::PER_PAGE);
         $solved = $this->solvedProblemIds($request, $contest, collect($page->items())->pluck('problem_id')->all());
 
-        $items = collect($page->items())->map(fn ($row) => [
+        // getAttribute() and not `->short_name`, deliberately. Every one of
+        // these comes from the select above -- `problem_bank.code as
+        // short_name`, `problems.name`, and the bank's description and tags
+        // -- so they are attributes this query put on the model, not columns
+        // of practice_publications. Reading them as properties made PHPStan
+        // report four undefined properties, and it was right to: declaring
+        // them on the model would claim every PracticePublication has them,
+        // which is false everywhere except this one query.
+        $items = collect($page->items())->map(fn (PracticePublication $row) => [
             'id' => (int) $row->problem_id,
-            'short_name' => (string) ($row->short_name ?: 'P'.$row->problem_id),
-            'name' => (string) $row->name,
-            'summary' => $this->summary($row->description),
-            'tags' => $this->tags($row->tags),
+            'short_name' => (string) ($row->getAttribute('short_name') ?: 'P'.$row->problem_id),
+            'name' => (string) $row->getAttribute('name'),
+            'summary' => $this->summary($row->getAttribute('description')),
+            'tags' => $this->tags($row->getAttribute('tags')),
             'solved' => in_array((int) $row->problem_id, $solved, true),
             // "Estatísticas opcionais [...] stats:null quando não
             // implementado ou suprimido por privacidade/baixa amostragem."

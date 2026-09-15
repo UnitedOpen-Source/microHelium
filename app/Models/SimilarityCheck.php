@@ -45,26 +45,31 @@ class SimilarityCheck extends Model
         'result_persist_failed' => 'A análise foi concluída, mas o resultado não pôde ser salvo. Solicite uma nova.',
     ];
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
     }
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);
     }
 
+    /** @return BelongsTo<Language, $this> */
     public function language(): BelongsTo
     {
         return $this->belongsTo(Language::class);
     }
 
+    /** @return HasMany<SimilarityPair, $this> */
     public function pairs(): HasMany
     {
         return $this->hasMany(SimilarityPair::class);
