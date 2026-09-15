@@ -83,6 +83,16 @@ class HomeController extends Controller
                         $submission->answer_id = null;
                         $submission->judged_time = null;
                         $submission->auto_judge_result = null;
+                        // The select above is `runs.*`, so the judged
+                        // program's own output rides along -- and for a
+                        // wrong answer that output IS the verdict, readable
+                        // by anyone who opens the page. Found in review:
+                        // Controller::maskWithheldVerdict() and
+                        // SubmissionController::maskWithheldRow() already
+                        // cleared these two and this one did not, which is
+                        // the drift a shared rule is supposed to prevent.
+                        $submission->auto_judge_stdout = null;
+                        $submission->auto_judge_stderr = null;
                     }
 
                     // home.blade.php renders `$submission->time . 's'` in the

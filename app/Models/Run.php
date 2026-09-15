@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -188,15 +189,31 @@ class Run extends Model
     }
 
     /**
-     * Issue #138 -- does this run count towards the standings yet?
+     * Issue #138 -- the runs that count towards the standings.
      *
      * A verdict withheld from a team must not be scored for them either: a
-     * rank that moves is a verdict announcement. Score::recomputeFor() is
-     * the only caller, and it is the only place the standings are built.
+     * rank that moves is a verdict announcement.
+     *
+     * A scope and not an instance predicate, and that is the point. The
+     * first version of this was `countsTowardsScore(): bool` on the model,
+     * with a docblock claiming Score::recomputeFor() was its only caller.
+     * It had NO callers: recomputeFor() builds a query, not a collection of
+     * models, so it had spelled the same rule out again in query-builder
+     * terms. Two formulations that happened to agree, one of them
+     * documented as the single source -- which is precisely how the next
+     * person changes the rule in one place and misses the other. Found in
+     * review, before it had a chance to drift.
+     *
+     * $gated is passed in rather than read per run: every row this is asked
+     * about belongs to one contest, so asking each of them would be a query
+     * per attempt for an answer that cannot differ.
      */
-    public function countsTowardsScore(): bool
+    public function scopeCountingTowardsScore(Builder $query, bool $gated): Builder
     {
-        return $this->isJudged() && ! $this->isVerdictWithheld();
+        return $query
+            ->where('status', 'judged')
+            ->whereNotNull('answer_id')
+            ->when($gated, fn (Builder $q) => $q->whereNotNull('verified_at'));
     }
 
     public function getSourcePath(): string

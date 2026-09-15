@@ -469,6 +469,51 @@ class VerdictVerificationTest extends TestCase
         );
     }
 
+    /**
+     * The judged program's own output is the verdict, for anyone who can
+     * read it: a wrong answer's stdout is the wrong answer. The dashboard
+     * selects `runs.*`, so it rides along unless something clears it.
+     */
+    public function test_the_public_dashboard_does_not_leak_the_judging_output_either(): void
+    {
+        $team = $this->team();
+        $run = $this->judgedRun($team, accepted: false, contestTime: 600);
+
+        $listed = collect($this->get('/')->viewData('recentSubmissions'))->firstWhere('id', $run->id);
+
+        $this->assertNull($listed->auto_judge_result);
+        $this->assertNull($listed->auto_judge_stdout, 'the judged output gave the withheld verdict away');
+        $this->assertNull($listed->auto_judge_stderr);
+    }
+
+    /**
+     * A balloon is the loudest verdict announcement there is, and the
+     * recompute made a new cycle reachable: the cell can now go solved ->
+     * unsolved -> solved, which the accumulating version could never do
+     * because it returned early once solved. Raised in review as a possible
+     * double-award. It is not one -- BalloonService::awardFor() already
+     * de-dupes by (contest, team, problem) inside a locked transaction --
+     * but the path is new, so the guarantee is pinned here rather than left
+     * resting on a file nobody will think to re-read.
+     */
+    public function test_verifying_twice_does_not_send_a_second_balloon_to_the_desk(): void
+    {
+        $team = $this->team();
+        $run = $this->judgedRun($team, accepted: true, contestTime: 600);
+
+        $this->actingAs($this->judge())->post(route('judge.runs.verify', $run))->assertRedirect();
+        $this->assertSame(1, Task::where('user_id', $team->user_id)->where('is_system', true)->count());
+
+        $this->actingAs($this->judge())->post(route('judge.runs.unverify', $run))->assertRedirect();
+        $this->actingAs($this->judge())->post(route('judge.runs.verify', $run))->assertRedirect();
+
+        $this->assertSame(
+            1,
+            Task::where('user_id', $team->user_id)->where('is_system', true)->count(),
+            'the team got a second balloon for the same solve'
+        );
+    }
+
     public function test_the_public_dashboard_accepted_counter_does_not_tick_up_on_a_withheld_solve(): void
     {
         $team = $this->team();
