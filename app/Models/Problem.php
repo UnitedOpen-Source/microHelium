@@ -27,11 +27,14 @@ class Problem extends Model
         'memory_limit',
         'output_limit',
         'auto_judge',
+        'judging_paused_at',
+        'judging_paused_by',
         'is_fake',
         'sort_order',
     ];
 
     protected $casts = [
+        'judging_paused_at' => 'datetime',
         'auto_judge' => 'boolean',
         'is_fake' => 'boolean',
     ];
@@ -87,6 +90,20 @@ class Problem extends Model
     public function getMemoryLimitFor(Language $language): int
     {
         return $this->limitOverrideFor($language)?->memory_limit ?? $this->memory_limit;
+    }
+
+    /**
+     * Issue #193 -- is this problem's judging on hold?
+     *
+     * A paused problem still accepts submissions; they queue and wait. The
+     * jury pauses when the problem itself is wrong -- bad expected output,
+     * a test case that does not match the statement -- so that teams stop
+     * collecting WRONG ANSWER, and twenty penalty minutes each, for a
+     * defect that is not theirs.
+     */
+    public function isJudgingPaused(): bool
+    {
+        return $this->judging_paused_at !== null;
     }
 
     public function isAutoJudgeEnabledFor(Language $language): bool

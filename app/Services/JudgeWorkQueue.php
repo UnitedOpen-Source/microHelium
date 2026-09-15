@@ -96,6 +96,22 @@ class JudgeWorkQueue
 
             $run = $candidates->first(
                 fn (Run $run) => $run->problem && $run->language
+                    // Issue #193 -- a problem whose judging the jury has
+                    // paused hands out no work. The run stays `pending`,
+                    // the team keeps seeing "being evaluated", and nobody
+                    // collects a WRONG ANSWER caused by the jury's own
+                    // defect.
+                    //
+                    // This covers the PULL paths -- a remote judgehost and
+                    // a local worker both take work here. It is NOT the
+                    // only way a run gets judged: JudgeRunJob is dispatched
+                    // straight from Api\RunController::store() and from
+                    // rejudge, and calls AutoJudgeService::judge() without
+                    // ever asking this queue. The gate is repeated there
+                    // for that reason, and a first version of this change
+                    // that trusted "one place" would have let every fresh
+                    // submission to a paused problem be judged anyway.
+                    && ! $run->problem->isJudgingPaused()
                     && $run->problem->isAutoJudgeEnabledFor($run->language)
                     // Issue #117 -- and this machine has to be able to run
                     // it. Filtered here rather than in SQL for the same
