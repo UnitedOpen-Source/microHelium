@@ -153,9 +153,10 @@ class ContestCreationTest extends TestCase
             'is_public' => true,
         ]);
 
-        // Verify hackathon was created
-        $this->assertDatabaseHas('hackathons', [
-            'eventName' => 'Test Contest 2024',
+        // Issue #190: no legacy row is written any more.
+        $this->assertDatabaseCount('hackathons', 0);
+        $this->assertDatabaseHas('contests', [
+            'name' => 'Test Contest 2024',
             'description' => 'A test contest for integration testing',
         ]);
 
@@ -189,15 +190,12 @@ class ContestCreationTest extends TestCase
      */
     public function test_duplicate_contest_names_are_rejected()
     {
-        // Create an initial contest via hackathon
-        DB::table('hackathons')->insert([
-            'eventName' => 'Existing Contest',
-            'description' => 'Original contest',
-            'starts_at' => now()->format('Y-m-d H:i:s'),
-            'ends_at' => now()->addHours(5)->format('Y-m-d H:i:s'),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // Issue #190: the duplicate is a `contests` row, because that is
+        // what a contest is. This used to seed `hackathons` and rely on the
+        // wizard validating against that table -- which meant a contest
+        // created by the API or the importer did NOT block a duplicate
+        // name, since it has no legacy row.
+        \App\Models\Contest::factory()->create(['name' => 'Existing Contest']);
 
         $contestData = [
             'name' => 'Existing Contest', // Duplicate name
@@ -221,8 +219,8 @@ class ContestCreationTest extends TestCase
         $response->assertRedirect();
         $response->assertSessionHasErrors('name');
 
-        // Verify only one hackathon with this name exists
-        $count = DB::table('hackathons')->where('eventName', 'Existing Contest')->count();
+        // Verify only one contest with this name exists
+        $count = DB::table('contests')->where('name', 'Existing Contest')->count();
         $this->assertEquals(1, $count);
     }
 
@@ -514,17 +512,14 @@ class ContestCreationTest extends TestCase
             'is_public' => false,
         ]);
 
-        // Verify hackathon end time is calculated correctly
-        $hackathon = DB::table('hackathons')
-            ->where('eventName', 'Custom Parameters Contest')
+        // Issue #190: a duracao vive em `contests.duration`, em minutos.
+        // Isto conferia `ends_at - starts_at` da tabela legada, que era uma
+        // segunda copia da mesma informacao -- e a copia que ninguem lia.
+        $contest = DB::table('contests')
+            ->where('name', 'Custom Parameters Contest')
             ->first();
 
-        $this->assertNotNull($hackathon);
-
-        $startTime = new \DateTime($hackathon->starts_at);
-        $endTime = new \DateTime($hackathon->ends_at);
-        $diffMinutes = ($endTime->getTimestamp() - $startTime->getTimestamp()) / 60;
-
-        $this->assertEquals(420, $diffMinutes);
+        $this->assertNotNull($contest);
+        $this->assertEquals(420, (int) $contest->duration);
     }
 }

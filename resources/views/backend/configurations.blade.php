@@ -9,13 +9,13 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Main Content -->
     <div class="lg:col-span-2 space-y-6">
-        <!-- Hackathons List -->
+        <!-- Lista de competicoes -->
         <div class="bg-card rounded-lg border border-border shadow-sm">
             <div class="p-6 border-b border-border">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h2 class="text-xl font-semibold text-foreground">Configurações da Maratona</h2>
-                        <p class="text-sm text-muted-foreground mt-1">Gerencie as competicoes e hackathons</p>
+                        <p class="text-sm text-muted-foreground mt-1">Gerencie as competicoes</p>
                     </div>
                     <a href="{{ route('backend.contest-wizard') }}" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -38,16 +38,16 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-border">
-                        @forelse ($hackathons as $hackathon)
+                        @forelse ($contests as $contest)
                         <tr class="hover:bg-muted/50 transition-colors">
-                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ $hackathon->hackathon_id }}</td>
-                            <td class="px-4 py-3 text-sm font-medium text-foreground">{{ $hackathon->eventName }}</td>
-                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ Str::limit($hackathon->description ?? '-', 50) }}</td>
-                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ $hackathon->starts_at ?? '-' }}</td>
-                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ $hackathon->ends_at ?? '-' }}</td>
+                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ $contest->id }}</td>
+                            <td class="px-4 py-3 text-sm font-medium text-foreground">{{ $contest->name }}</td>
+                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ Str::limit($contest->description ?? '-', 50) }}</td>
+                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ $contest->start_time ?? '-' }}</td>
+                            <td class="px-4 py-3 text-sm text-muted-foreground">{{ $contest->start_time ? \Carbon\Carbon::parse($contest->start_time)->addMinutes((int) $contest->duration) : '-' }}</td>
                             <td class="px-4 py-3">
                                 <div class="flex items-center gap-2">
-                                    <form action="/backend/contest/{{ $hackathon->hackathon_id }}/activate" method="POST" class="inline">
+                                    <form action="/backend/contest/{{ $contest->id }}/activate" method="POST" class="inline">
                                         @csrf
                                         <button type="submit" class="p-1.5 text-success hover:bg-success-soft rounded transition-colors" title="Ativar">
                                             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -56,12 +56,12 @@
                                             </svg>
                                         </button>
                                     </form>
-                                    <a href="/backend/contest/{{ $hackathon->hackathon_id }}/edit" class="p-1.5 text-warning hover:bg-warning-soft rounded transition-colors" title="Editar">
+                                    <a href="/backend/contest/{{ $contest->id }}/edit" class="p-1.5 text-warning hover:bg-warning-soft rounded transition-colors" title="Editar">
                                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                         </svg>
                                     </a>
-                                    <form action="/backend/contest/{{ $hackathon->hackathon_id }}/delete" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir esta maratona?')">
+                                    <form action="/backend/contest/{{ $contest->id }}/delete" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir esta maratona?')">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="p-1.5 text-destructive hover:bg-destructive-soft rounded transition-colors" title="Excluir">

@@ -33,7 +33,11 @@ class ContestWizardController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:hackathons,eventName',
+            // Issue #190 -- unico contra `contests`, que e onde as
+            // competicoes existem. Era `unique:hackathons,eventName`, que
+            // nao enxergava contest criado pela API, pelo importador ou
+            // por seeder.
+            'name' => 'required|string|max:255|unique:contests,name',
             'description' => 'nullable|string',
             'start_time' => 'required|date',
             'duration' => 'required|integer|min:1',
@@ -45,15 +49,9 @@ class ContestWizardController extends Controller
         $startTime = new \DateTime($validated['start_time']);
         $endTime = (clone $startTime)->modify('+' . $validated['duration'] . ' minutes');
 
-        $hackathonId = DB::table('hackathons')->insertGetId([
-            'eventName' => $validated['name'],
-            'description' => $validated['description'] ?? null,
-            'starts_at' => $startTime->format('Y-m-d H:i:s'),
-            'ends_at' => $endTime->format('Y-m-d H:i:s'),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
+        // Issue #190 -- so `contests`. A linha em `hackathons` nao era
+        // lida por nada alem da propria tela de administracao, que agora
+        // le a tabela certa.
         $contestId = DB::table('contests')->insertGetId([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,

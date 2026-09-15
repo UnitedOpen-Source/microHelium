@@ -16,8 +16,14 @@ class ConfigurationController extends Controller
      */
     public function index()
     {
-        $hackathons = DB::table('hackathons')->orderBy('hackathon_id', 'desc')->get();
-        return view('backend.configurations', compact('hackathons'));
+        // Issue #190 -- reads `contests`, which is where competitions
+        // actually live. This listed `hackathons`, a 2017 table that only
+        // the wizard and this screen ever wrote, so a contest created by
+        // the API, by the event importer (#147), by a seeder or by the
+        // practice contest (#43) did not appear here at all.
+        $contests = DB::table('contests')->orderByDesc('id')->get();
+
+        return view('backend.configurations', compact('contests'));
     }
 
     /**
@@ -40,20 +46,12 @@ class ConfigurationController extends Controller
             $endsAt = now()->addHours(5)->format('Y-m-d H:i:s');
         }
 
-        // Create hackathon
-        $hackathonId = DB::table('hackathons')->insertGetId([
-            'eventName' => $request->input('eventName'),
-            'description' => $request->input('description'),
-            'starts_at' => $startsAt,
-            'ends_at' => $endsAt,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Store selected languages as JSON in hackathon or create contest with languages
+        // Issue #190 -- no `hackathons` row any more. Writing both kept
+        // the two tables in step only by auto-increment coincidence, and
+        // every other creation path (API, importer, seeders) wrote just
+        // `contests` anyway.
         $selectedLanguages = $request->input('languages', []);
 
-        // If contests table exists, create a contest with languages
         if (Schema::hasTable('contests')) {
             $contestId = DB::table('contests')->insertGetId([
                 'name' => $request->input('eventName'),

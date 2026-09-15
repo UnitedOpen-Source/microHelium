@@ -113,7 +113,8 @@ class BackendRoutesTest extends TestCase
         // Assert successful response
         $response->assertStatus(200);
         $response->assertViewIs('backend.configurations');
-        $response->assertViewHas('hackathons');
+        // Issue #190: a tela le `contests`, nao a tabela legada.
+        $response->assertViewHas('contests');
     }
 
     /**
@@ -203,9 +204,11 @@ class BackendRoutesTest extends TestCase
         $response->assertRedirect(route('backend.configurations'));
         $response->assertSessionHas('success');
 
-        // Assert hackathon was created in database
-        $this->assertDatabaseHas('hackathons', [
-            'eventName' => 'Test Hackathon',
+        // Issue #190: nenhuma linha legada e escrita; a competicao existe
+        // em `contests`.
+        $this->assertDatabaseCount('hackathons', 0);
+        $this->assertDatabaseHas('contests', [
+            'name' => 'Test Hackathon',
             'description' => 'A test hackathon for integration testing',
         ]);
     }
