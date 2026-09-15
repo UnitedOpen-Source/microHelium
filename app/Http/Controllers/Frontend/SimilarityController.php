@@ -185,7 +185,7 @@ class SimilarityController extends Controller
             // queued/running row for the same contest until this one
             // commits -- closing the INSERT/INSERT race a plain SELECT
             // can't.
-            $outcome = DB::transaction(function () use ($problem, $language, $eligible, $excluded, $validated, $runIds, $snapshot) {
+            $outcome = DB::transaction(function () use ($problem, $language, $eligible, $validated, $runIds, $snapshot) {
                 $lockedChecks = SimilarityCheck::query()
                     ->where('contest_id', $problem->contest_id)
                     ->whereIn('status', ['queued', 'running'])
