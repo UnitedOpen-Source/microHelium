@@ -213,3 +213,75 @@ jobs:
 
       - name: Production asset build
         run: npm run build
+
+  browser:
+    # Issue #166: every Vue island in the application was dead in any built
+    # deployment for weeks, and the whole suite stayed green. The PHP tests
+    # assert on rendered HTML and the island markup rendered exactly as
+    # expected; the Node tests import components directly, with no browser and
+    # no CSP. The defect lived in the gap -- built assets executed under a real
+    # Content-Security-Policy -- and only a browser can stand there.
+    #
+    # Deliberately not an end-to-end suite: three public pages, a check that an
+    # island really mounted, and a check that the CSP is still being sent.
+    # Runs in well under a minute once the browser is cached.
+    name: Browser (built assets under the real CSP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, zip, gd
+          coverage: none
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: cp .env.example .env
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - run: php artisan key:generate
+
+      # A file, not :memory: -- `php artisan serve` is a separate process from
+      # the migrate above, and an in-memory database does not survive the gap.
+      - name: Prepare a throwaway database
+        run: |
+          touch database/browser.sqlite
+          php artisan migrate --force
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/browser.sqlite
+
+      - run: npm ci
+
+      # The subject of this job. Without it @vite() emits nothing usable and
+      # every assertion below would be about an empty page.
+      - run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run test:browser
+        env:
+          APP_ENV: local
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/browser.sqlite
+          CACHE_STORE: file
+          SESSION_DRIVER: file
+          QUEUE_CONNECTION: sync
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
