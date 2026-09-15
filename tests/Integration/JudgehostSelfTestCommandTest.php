@@ -2,6 +2,8 @@
 
 namespace Tests\Integration;
 
+use Illuminate\Contracts\Console\Kernel;
+use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
 
@@ -83,8 +85,8 @@ class JudgehostSelfTestCommandTest extends TestCase
 
         // artisan() nao devolve a saida crua, entao o JSON e reconstruido
         // rodando o comando pelo kernel do console com um buffer proprio.
-        $output = new \Symfony\Component\Console\Output\BufferedOutput;
-        $exitCode = $this->app[\Illuminate\Contracts\Console\Kernel::class]
+        $output = new BufferedOutput;
+        $exitCode = $this->app[Kernel::class]
             ->call('judgehost:selftest', ['--json' => true], $output);
 
         $payload = json_decode($output->fetch(), true);
