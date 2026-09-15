@@ -8,20 +8,18 @@
 // SimilarityEngineInterface container binding (see
 // app/Providers/AppServiceProvider.php) to take effect at runtime.
 //
-// Only AppServiceProvider is registered here, intentionally -- the other
-// four classes in app/Providers/ are dead legacy code left over from a
-// pre-Laravel-11 skeleton, not omitted by oversight:
-//   - AuthServiceProvider / EventServiceProvider reference classes that
-//     don't exist anywhere in this codebase (Helium\Model,
-//     Helium\Policies\ModelPolicy, Helium\Events\Event,
-//     Helium\Listeners\EventListener) and would fail to boot.
-//   - RouteServiceProvider::map() calls Route::group() over
-//     routes/web.php and routes/api.php a SECOND time -- both are already
-//     loaded once via bootstrap/app.php's ->withRouting(). Registering it
-//     risks duplicate/conflicting named-route registration across the
-//     whole app, not just something scoped to this feature.
-// Cleaning these up (deleting them, or rewriting them to something real)
-// is left for a future, separately-scoped PR -- out of bounds for #42.
+// AppServiceProvider is the only one, and now the only one that exists.
+// The other four classes that used to sit in app/Providers/ were dead
+// legacy code from a pre-Laravel-11 skeleton -- AuthServiceProvider and
+// EventServiceProvider referenced classes that exist nowhere in this
+// codebase (Helium\Model, Helium\Policies\ModelPolicy, Helium\Events\
+// Event, Helium\Listeners\EventListener) and would have failed to boot,
+// and RouteServiceProvider::map() would have loaded routes/web.php and
+// routes/api.php a SECOND time on top of bootstrap/app.php's
+// ->withRouting(). This comment used to say cleaning them up was left for
+// a separately-scoped PR; #180 was that PR, and they are gone, along with
+// the equally dead Helium\Http\Kernel, Helium\Console\Kernel and the
+// three middleware classes Laravel 11+ replaced with ->withMiddleware().
 return [
     Helium\Providers\AppServiceProvider::class,
 ];

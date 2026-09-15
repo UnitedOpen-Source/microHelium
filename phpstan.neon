@@ -32,18 +32,43 @@ parameters:
     # No baseline, at any level. A baseline says "these errors are
     # acceptable" and then nobody reads the list again.
     #
-    # Level 3 was measured after this pass rather than guessed at, because
-    # annotating the relations changed what the higher levels can see: it
-    # went from 128 errors to NINE. Eight are `@var array` docblocks on
-    # Laravel-5-era Helium\ classes that need narrowing to
-    # array<int, string> and friends. The ninth is Carbon stub imprecision,
-    # not a defect: Contest::getEndTimeAttribute() is declared
-    # ?Illuminate\Support\Carbon and that is what it really returns --
-    # verified by running it, get_class() says Illuminate\Support\Carbon --
-    # but Carbon's own stubs type addMinutes() as returning Carbon\Carbon,
-    # so PHPStan can only prove the parent. Whoever raises the level must
-    # not "fix" that by widening the annotation to something less true.
-    level: 2
+    # Level 3 was 128 errors before the relation annotations and NINE after,
+    # which is why it was worth measuring instead of estimating. Of those
+    # nine, eight were `@var array` docblocks on Laravel-5-era Helium\
+    # classes -- and the right fix was not to annotate them. Every one was
+    # dead: a Http\Kernel and a Console\Kernel that Laravel 11+ replaced
+    # with bootstrap/app.php, three middleware classes nothing referenced,
+    # and four service providers that bootstrap/providers.php already
+    # documented as unbootable. Deleted; giving a precise type to a file
+    # that cannot boot is not an improvement.
+    #
+    # The ninth was Carbon stub imprecision rather than a defect, and it is
+    # worth knowing why the fix looks the way it does:
+    # Contest::getEndTimeAttribute() really does return an
+    # Illuminate\Support\Carbon -- verified by running it -- but Carbon's
+    # own stubs type addMinutes() as returning the parent Carbon\Carbon, so
+    # PHPStan could only prove the parent. Widening the declared type would
+    # have silenced it by making the type less true than reality, so the
+    # method converts explicitly instead (a no-op at run time).
+    #
+    # Level 4 was measured too, and the recommendation is to STOP HERE.
+    # It is 32 errors, and unlike levels 0-3 they are mostly the analyser
+    # being pedantic about types it has already narrowed -- 16
+    # `nullsafe.neverNull`, a handful of "this comparison is always true".
+    # Worse, three of them are wrong: PHPStan types a by-reference closure
+    # capture (`use (&$block)`) as its value at closure-creation time, so
+    # TeamFileParser::parseBocaUsers() looks like `$block === []` is always
+    # true, the code after it unreachable, and appendBocaBlock() unused.
+    # None of that is so -- tests/Unit/Services/TeamFileParserTest.php
+    # asserts on a message that only appendBocaBlock() produces. Raising to
+    # level 4 would mean restructuring correct code to satisfy an analysis
+    # that is mistaken about it, which is a worse trade than levels 2 and 3,
+    # where every finding was real.
+    #
+    # The one level-4 finding worth having was taken anyway, without raising
+    # the level: PracticeController injected a PracticePublisher it never
+    # read.
+    level: 3
 
     paths:
         - app

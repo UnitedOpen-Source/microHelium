@@ -194,6 +194,16 @@ class Contest extends Model
      * which \DateTime does not have -- the declared type promised less than
      * the code relied on, and PHPStan is what noticed. Narrowing is safe
      * for every caller, because Carbon IS a \DateTime.
+     *
+     * The Carbon::instance() wrapper is not decoration and not a cast to
+     * silence anything. `Illuminate\Support\Carbon` is genuinely what comes
+     * out of here -- verified by running it, get_class() says so -- but
+     * Carbon's own stubs type addMinutes() as returning the parent
+     * `Carbon\Carbon`, so at level 3 PHPStan can only prove the parent. The
+     * two ways out were widening the declared type to something less true
+     * than reality, or converting explicitly to the class this really
+     * returns. This is the second. At runtime it is a no-op on a value that
+     * is already an Illuminate Carbon.
      */
     public function getEndTimeAttribute(): ?Carbon
     {
@@ -201,7 +211,7 @@ class Contest extends Model
             return null;
         }
 
-        return $this->start_time->copy()->addMinutes($this->duration);
+        return Carbon::instance($this->start_time->copy()->addMinutes($this->duration));
     }
 
     public function getFreezeTimeAttribute(): ?Carbon
@@ -210,7 +220,7 @@ class Contest extends Model
             return null;
         }
 
-        return $this->end_time->copy()->subMinutes($this->attributes['freeze_time']);
+        return Carbon::instance($this->end_time->copy()->subMinutes($this->attributes['freeze_time']));
     }
 
     public function isRunning(): bool
