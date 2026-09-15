@@ -314,6 +314,9 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('backend.users.edit');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('backend.users.update');
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('backend.users.destroy');
+    // Issue #183 -- um link de uso unico para a pessoa escolher a propria
+    // senha, em vez de alguem digitar uma por ela e passar a saber qual e.
+    Route::post('/users/{user}/reset-link', [UserController::class, 'resetLink'])->name('backend.users.reset-link');
 
     // Site Management (multi-site coordination -- see issue #18)
     Route::get('/sites', [App\Http\Controllers\Backend\SiteController::class, 'index'])->name('backend.sites');

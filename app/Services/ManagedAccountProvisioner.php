@@ -123,6 +123,45 @@ class ManagedAccountProvisioner
     }
 
     /**
+     * Issue #183 -- a one-time link that lets an EXISTING account set a new
+     * password, without anyone else learning it.
+     *
+     * The admin screen has always been able to type a new password into
+     * somebody's account, and that is the problem: whoever does it then
+     * knows the password, and has to say it out loud across a contest hall.
+     * This hands over a link instead, and the person picks their own.
+     *
+     * Same machinery as #47's activation, deliberately, and not a second
+     * scheme: one-time, sha256 stored, claimed atomically by
+     * AccountActivationController, expiring on its own. A password reset
+     * and an account activation are the same act -- prove you hold this
+     * token, then choose a password -- and the one that already exists is
+     * the one that has been hardened.
+     *
+     * No e-mail, also deliberately. This application has never sent one
+     * (there is no Mail or Notification class anywhere in app/), contest
+     * accounts frequently have no address anyone reads on the day, and #47
+     * already established that the way a credential reaches a person here
+     * is an organiser handing it over. A reset that depends on SMTP being
+     * configured on a LAN contest host is a reset that does not work when
+     * it is needed.
+     *
+     * @return string the raw token; it is not stored anywhere
+     */
+    public function issuePasswordReset(User $user, ?int $hours = null): string
+    {
+        $token = Str::random(64);
+
+        AccountActivation::create([
+            'user_id' => $user->user_id,
+            'token_hash' => hash('sha256', $token),
+            'expires_at' => now()->addHours($hours ?? self::ACTIVATION_TTL_HOURS),
+        ]);
+
+        return $token;
+    }
+
+    /**
      * Relative activation URL for a raw token. Relative, not absolute:
      * APP_URL is frequently wrong or unset on a contest host (the
      * organisers reach it by LAN IP), and printing a confidently wrong

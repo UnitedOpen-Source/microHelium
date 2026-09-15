@@ -88,6 +88,28 @@
                 <a href="{{ route('backend.users') }}" class="px-4 py-2 border border-border rounded-lg text-foreground hover:bg-accent transition-colors">Cancelar</a>
             </div>
         </form>
+
+        {{-- Issue #183: um link de uso unico, para a pessoa escolher a
+             propria senha. O campo acima tambem redefine senha, e e por
+             isso que este existe: quem digita ali passa a saber a senha e
+             tem que dize-la em voz alta num salao de prova. --}}
+        <div class="mt-8 pt-6 border-t border-border">
+            <h2 class="text-sm font-medium text-foreground mb-1">Link de redefinicao de senha</h2>
+            <p class="text-sm text-muted-foreground mb-3">Gera um endereco de uso unico para entregar a pessoa. Ela escolhe a propria senha, e ninguem mais fica sabendo qual e.</p>
+
+            @if (session('reset_link'))
+                <div class="mb-3 p-3 rounded-lg border border-success/30 bg-success-soft" role="status">
+                    <p class="text-sm text-foreground mb-2">Link para <strong>{{ session('reset_link')['user'] }}</strong>. Ele aparece uma unica vez e expira sozinho.</p>
+                    <input type="text" readonly value="{{ session('reset_link')['url'] }}" onfocus="this.select()" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground font-mono text-sm">
+                    <p class="text-xs text-muted-foreground mt-2">Enderec o relativo de proposito: prefixe com o endereco pelo qual a sua instalacao e acessada.</p>
+                </div>
+            @endif
+
+            <form method="POST" action="{{ route('backend.users.reset-link', $user->user_id) }}">
+                @csrf
+                <button type="submit" class="px-4 py-2 border border-border rounded-lg text-foreground hover:bg-accent transition-colors">Gerar link de redefinicao</button>
+            </form>
+        </div>
     </div>
 </div>
 @endsection

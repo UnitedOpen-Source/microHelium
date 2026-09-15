@@ -40,16 +40,20 @@ class BladeIncludesResolveTest extends TestCase
     private const VIEW_ROOT = __DIR__.'/../../resources/views';
 
     /**
-     * The one template allowed to name a route that does not exist.
+     * Templates allowed to name a route that does not exist. Empty, and
+     * meant to stay that way.
      *
-     * auth/passwords/reset.blade.php is 70 lines of this project's own
-     * styled UI posting to `password.update`, a route nobody ever wrote --
-     * see issue #183. Deleting somebody's finished screen to satisfy a
-     * guard would be the wrong trade, and so would weakening the guard for
-     * everyone. It is excluded by name, with the issue attached, so the
-     * exclusion is a decision someone wrote down rather than a hole.
+     * It held one entry for exactly one commit:
+     * auth/passwords/reset.blade.php posted to `password.update`, a route
+     * nobody ever wrote (#183). Deleting somebody's finished screen to
+     * satisfy a guard would have been the wrong trade, so it was excluded
+     * with the issue attached instead -- and then #183 was resolved, the
+     * reset flow was built on #47's one-time-token machinery, and that
+     * template became genuinely redundant rather than merely orphaned.
+     *
+     * @var list<string>
      */
-    private const ROUTE_EXCEPTIONS = ['resources/views/auth/passwords/reset.blade.php'];
+    private const ROUTE_EXCEPTIONS = [];
 
     public function test_every_blade_include_and_extends_names_a_template_that_exists(): void
     {
