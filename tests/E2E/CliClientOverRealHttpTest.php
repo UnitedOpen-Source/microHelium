@@ -189,6 +189,50 @@ class CliClientOverRealHttpTest extends BaseTestCase
     }
 
     /**
+     * A file name with a quote in it, all the way to the database.
+     *
+     * Found in review. `Content-Disposition: form-data; name="source_file";
+     * filename="{name}"` had the name interpolated raw, so `A"1.sh` produced
+     * `filename="A"1.sh"` -- malformed per RFC 7578 4.2, because the quote
+     * closes the parameter early. A POSIX file name may legally contain a
+     * quote, a backslash, and on Linux even a raw newline, and Linux is the
+     * lab machine this client is written for.
+     *
+     * This asserts against the real parser rather than against the RFC:
+     * whether backslash-escaping inside a quoted parameter is understood is
+     * a property of the server, and "the specification permits it" is a
+     * different claim from "this application reads it".
+     */
+    public function test_a_file_name_with_a_quote_in_it_survives_the_upload(): void
+    {
+        $migrate = $this->artisan(['migrate', '--force', '--no-interaction'], 300);
+        $this->assertTrue($migrate->isSuccessful(), 'migrate failed: '.$migrate->getErrorOutput());
+
+        $seed = $this->php(['tests/E2E/support/seed_cli_scenario.php', $this->workspace], 120);
+        $this->assertTrue($seed->isSuccessful(), $seed->getErrorOutput());
+
+        $this->startServer();
+
+        $login = $this->mh(['login', '--login', 'equipe01', '--password', 'senha-da-equipe']);
+        $this->assertSame(0, $login->getExitCode(), $this->say($login));
+
+        // --problem is needed because the file name no longer spells the
+        // problem's short name, which is itself the realistic case: the
+        // competitor called the file something of their own.
+        $source = $this->workspace.'/A"1.sh';
+        file_put_contents($source, "read a b\necho \$((a + b))\n");
+
+        $submit = $this->mh(['submit', $source, '--problem', 'A', '--no-wait']);
+        $this->assertSame(0, $submit->getExitCode(), "submit failed:\n".$this->say($submit));
+
+        $run = $this->db()->query('select filename, source_hash from runs')->fetch(PDO::FETCH_ASSOC);
+
+        $this->assertNotFalse($run, "nothing reached the database:\n".$this->say($submit));
+        $this->assertSame('A"1.sh', $run['filename'], 'the quote did not survive the header encoding');
+        $this->assertSame(hash_file('sha256', $source), $run['source_hash'], 'the file body was corrupted');
+    }
+
+    /**
      * The three ways a competitor gets this wrong under time pressure. Each
      * has to come back as a sentence they can act on, not an HTTP status:
      * a CLI that prints "422" during a contest costs the team the minutes

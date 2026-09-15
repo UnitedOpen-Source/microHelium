@@ -195,6 +195,33 @@ class Client:
         return self.request("POST", path, data=body, content_type=content_type)
 
 
+def header_value(value: str) -> str:
+    """Make a string safe to put inside a quoted header parameter.
+
+    A POSIX filename may legally contain `"`, `\\`, and even a raw newline.
+    Interpolated straight into `filename="..."` the quote ends the parameter
+    early -- `A"1.sh` becomes `filename="A"1.sh"`, which is malformed per
+    RFC 7578 4.2 -- and a newline splits the part header in two, corrupting
+    the request framing outright. The competitor sees a server-side 4xx they
+    cannot act on, in the middle of a contest.
+
+    CR and LF are dropped rather than escaped: there is no encoding of them
+    that a multipart parser is obliged to understand, and a file name with a
+    newline in it has no business travelling in a header. The quote and the
+    backslash are backslash-escaped, which is what RFC 7578 points at (via
+    RFC 2616's quoted-string) -- and which is verified end to end against
+    this application's own parser in
+    tests/E2E/CliClientOverRealHttpTest.php, because "the RFC says so" and
+    "the server does so" are different claims.
+    """
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "")
+        .replace("\n", "")
+    )
+
+
 def multipart(fields: dict, file_field: str, file_path: Path) -> tuple[bytes, str]:
     """Encode multipart/form-data by hand.
 
@@ -216,7 +243,7 @@ def multipart(fields: dict, file_field: str, file_path: Path) -> tuple[bytes, st
     parts.append(marker)
     parts.append(
         f'Content-Disposition: form-data; name="{file_field}"; '
-        f'filename="{file_path.name}"'.encode("utf-8")
+        f'filename="{header_value(file_path.name)}"'.encode("utf-8")
     )
     parts.append(f"Content-Type: {guessed}".encode("ascii"))
     parts.append(b"")
