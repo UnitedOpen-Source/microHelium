@@ -10,6 +10,9 @@ const pages = {
     // someone who actually opens a report screen.
     'site-report': () => import('./SiteReport.vue'),
     'judge-history': () => import('./JudgeHistory.vue'),
+    // Issue #53, fase 4. O contrato esta em
+    // docs/specs/53-judge-management.md.
+    'judge-machines': () => import('./JudgeMachines.vue'),
 };
 export async function mountFeaturePages() {
     for (const element of document.querySelectorAll('[data-feature-page]')) {

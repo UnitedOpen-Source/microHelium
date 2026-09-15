@@ -7,7 +7,7 @@ const dom = new JSDOM('<!doctype html><html><head><meta name="csrf-token" conten
 for (const key of ['window', 'document', 'location', 'history', 'Element', 'HTMLElement', 'Document', 'SVGElement', 'Node', 'Event', 'MutationObserver']) globalThis[key] = dom.window[key];
 const { createApp, nextTick } = await import('vue');
 const { request, localUrl } = await import('../../resources/js/features/api.js');
-const components = Object.fromEntries(await Promise.all(['Practice', 'Similarity', 'Webcast', 'JudgingHealth', 'BankGovernance', 'ManagedAccounts', 'SiteReport', 'JudgeHistory'].map(async name => [name, (await import(`../../resources/js/features/${name}.vue`)).default])));
+const components = Object.fromEntries(await Promise.all(['Practice', 'Similarity', 'Webcast', 'JudgingHealth', 'BankGovernance', 'ManagedAccounts', 'SiteReport', 'JudgeHistory', 'JudgeMachines'].map(async name => [name, (await import(`../../resources/js/features/${name}.vue`)).default])));
 const tick = async () => { await new Promise(resolve => setTimeout(resolve, 0)); await nextTick(); };
 const envelope = (data, status = 200) => new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } });
 let app;
@@ -29,6 +29,71 @@ test('API distinguishes denied, expired, unavailable and invalid responses witho
     await assert.rejects(request('/api/frontend/test'));
     for (const url of ['javascript:alert(1)', '//evil.test', '/\\evil.test', '/\nevil']) assert.equal(localUrl(url), null);
     assert.equal(localUrl('/submission/12'), '/submission/12');
+});
+
+// Issue #53, fase 4. As duas armadilhas que a spec
+// (docs/specs/53-judge-management.md) manda a interface nao cair.
+test('judge machines: an undeclared language list is not rendered as "judges nothing"', async () => {
+    await mount('JudgeMachines', {
+        items: [
+            { id: 1, name: 'sem-declaracao', enabled: true, state: 'idle', languages: [], declares_languages: false, holding: [] },
+            { id: 2, name: 'declarou', enabled: true, state: 'idle', languages: ['cpp', 'py'], declares_languages: true, holding: [] },
+        ],
+        meta: { total: 2, enabled: 2, judging: 0, stale: 0, lease_seconds: 600, stale_after_seconds: 90 },
+        capabilities: { can_manage_judges: true },
+    });
+
+    // A fila trata "nao declarou" como "julga qualquer uma" (#117), e a tela
+    // tem que dizer isso -- renderizar lista vazia como incapacidade faria o
+    // operador desligar uma maquina que esta funcionando.
+    assert.match(document.body.textContent, /julga qualquer uma/i);
+    assert.match(document.body.textContent, /cpp, py/);
+});
+
+test('judge machines: the one-time token is shown once and disappears for good', async () => {
+    await mount('JudgeMachines', {
+        items: [],
+        meta: { total: 0, enabled: 0, judging: 0, stale: 0, lease_seconds: 600, stale_after_seconds: 90 },
+        capabilities: { can_manage_judges: true },
+    });
+
+    // Respostas por metodo: o POST devolve o token, e o GET que vem logo
+    // depois devolve a lista. Com um unico envelope para os dois, o reload
+    // trocaria `data` por um corpo sem `capabilities` e a secao inteira
+    // sumiria -- levando o token junto, por um motivo que nao existe fora
+    // do teste.
+    const listing = { items: [{ id: 9, name: 'sala-3', enabled: true, state: 'never_seen', languages: [], declares_languages: false, holding: [] }], meta: { total: 1, enabled: 1, judging: 0, stale: 0, lease_seconds: 600, stale_after_seconds: 90 }, capabilities: { can_manage_judges: true } };
+    globalThis.fetch = async (url, options) => options?.method === 'POST'
+        ? envelope({ judgehost: { id: 9, name: 'sala-3' }, token: 'segredo-de-48-caracteres' })
+        : envelope(listing);
+    field('name', 'sala-3');
+    submit();
+    await tick();
+
+    const revealed = document.querySelector('.feature-secret input');
+    assert.ok(revealed, 'o token nao foi mostrado');
+    assert.equal(revealed.value, 'segredo-de-48-caracteres');
+
+    // Escondido a pedido, e nao volta: o servidor guarda so o sha256.
+    [...document.querySelectorAll('button')].find(button => /Já guardei/.test(button.textContent)).click();
+    await tick();
+    assert.equal(document.querySelector('.feature-secret'), null);
+});
+
+test('judge machines: disabling asks first, and says what it will do to the runs in flight', async () => {
+    await mount('JudgeMachines', {
+        items: [{ id: 3, name: 'sala-3', enabled: true, state: 'judging', languages: [], declares_languages: false, holding: [{ run_id: 12, run_number: 7, problem: 'C', seconds_held: 30 }] }],
+        meta: { total: 1, enabled: 1, judging: 1, stale: 0, lease_seconds: 600, stale_after_seconds: 90 },
+        capabilities: { can_manage_judges: true },
+    });
+
+    [...document.querySelectorAll('button')].find(button => /Desligar/.test(button.textContent)).click();
+    await tick();
+
+    // O que o operador precisa saber antes de apertar: o run volta para a
+    // fila em vez de ficar parado ate o lease expirar.
+    assert.match(document.body.textContent, /devolve à fila/i);
+    assert.match(document.body.textContent, /Confirmar desligamento/);
 });
 
 test('missing backend renders honest unavailable state and can recover with retry', async () => {
