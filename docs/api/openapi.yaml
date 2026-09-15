@@ -395,15 +395,53 @@ paths:
         caller the way GET /clarifications is.
       parameters:
         - $ref: "#/components/parameters/ContestIdQuery"
+        - name: category
+          in: query
+          required: false
+          description: >
+            Issue #197 -- which desk. "My keyboard is broken" and "the
+            statement of C is ambiguous" go to different people, and both
+            used to land in one queue. A question about a problem is
+            categorised by that problem (see problem_id); these three are
+            the rest of the set the CCS requirements name.
+          schema: { type: string, enum: [general, sysops, operations] }
+        - name: problem_id
+          in: query
+          required: false
+          description: Only questions about this problem.
+          schema: { type: integer }
       responses:
         "200":
-          description: Pending clarifications, oldest first
+          description: >
+            Pending clarifications, oldest first, with the jury's shortcuts.
+
+
+            Issue #197 changed this from a bare array to an object. The
+            predefined answers ride along with the queue rather than living
+            on a route of their own: whoever opens the queue is exactly who
+            uses them, and a second request for five fixed sentences would
+            be work with no return.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Clarification"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Clarification"
+                  predefined_answers:
+                    type: array
+                    description: >
+                      The CCS requirements ask for these, including "No
+                      comment, read problem statement." -- the first entry,
+                      in Portuguese. Most contest questions are answered
+                      with that sentence, and typing it forty times by hand
+                      is how the clarification queue falls behind.
+                    items: { type: string }
+                  categories:
+                    type: array
+                    items: { type: string }
         "403":
           $ref: "#/components/responses/Forbidden"
 
