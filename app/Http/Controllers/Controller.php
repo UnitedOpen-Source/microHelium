@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\ContestLog;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Http\Request;
 use App\Models\Run;
 use App\Models\Score;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -106,6 +108,60 @@ class Controller extends BaseController
             $run->contest_id,
             'Voce nao pode julgar submissoes de outro contest.'
         );
+    }
+
+    /**
+     * Issue #201 -- prove, now, that you are who the session says.
+     *
+     * The CCS requirements: "The CCS must require a separate authentication
+     * every time a judgment is changed manually and all such changes must
+     * be logged." Both halves were missing: any open session could set a
+     * verdict with one click, and the change was recorded the way every
+     * other action is.
+     *
+     * The password is checked per action rather than through Laravel's
+     * `password.confirm` middleware, which remembers the confirmation for
+     * three hours by default. "Every time" is what the requirement says,
+     * and the risk here is not a remote attacker -- it is the jury
+     * workstation left open in a room with people walking past it. A
+     * three-hour window is exactly the window that does not help.
+     *
+     * Deliberately NOT applied to verifying (#138) or to automatic
+     * judging: verifying is approving what the machine already said, and
+     * this is for overriding it.
+     */
+    protected function assertReauthenticated(Request $request): void
+    {
+        $password = (string) $request->input('password', '');
+
+        if ($password === '' || ! Hash::check($password, (string) auth()->user()?->password)) {
+            abort(422, 'Confirme sua senha para registrar um veredito manualmente.');
+        }
+    }
+
+    /**
+     * Issue #201 -- the other half: every manual verdict change gets its
+     * own record, not a line in the general log.
+     *
+     * "Who changed what, from what, to what, when and why" is the question
+     * asked after a contest, and answering it by grepping a stream of every
+     * action is not answering it.
+     */
+    protected function recordManualVerdict(Run $run, ?Answer $from, ?Answer $to, ?string $reason = null): void
+    {
+        ContestLog::warning($run->contest_id, sprintf(
+            'Veredito manual no run #%s: %s -> %s',
+            $run->run_number ?? $run->id,
+            $from?->short_name ?? 'sem veredito',
+            $to?->short_name ?? 'sem veredito',
+        ), [
+            'event' => 'manual_verdict',
+            'run_id' => $run->id,
+            'from' => $from?->short_name,
+            'to' => $to?->short_name,
+            'user_id' => auth()->id(),
+            'reason' => $reason,
+        ]);
     }
 
     /**

@@ -104,8 +104,15 @@ class JudgeController extends Controller
             'answer_id' => 'required|exists:answers,id',
         ]);
 
+        // Issue #201 -- setting a verdict by hand is the most consequential
+        // single action in the system: it moves the standings and there is
+        // no second instance. Prove it is you, now.
+        $this->assertReauthenticated($request);
+
         $answer = Answer::findOrFail($validated['answer_id']);
         $this->assertAnswerBelongsToRunsContest($answer, $run);
+
+        $previous = $run->answer;
 
         $run->update([
             'status' => 'judged',
@@ -123,6 +130,8 @@ class JudgeController extends Controller
             'judge_id' => auth()->id(),
             'answer_id' => $answer->id,
         ]);
+
+        $this->recordManualVerdict($run, $previous, $answer, $request->input('reason'));
 
         return redirect()->route('judge.runs')->with('success', "Run #{$run->run_number} julgada como {$answer->name}.");
     }
