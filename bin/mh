@@ -1,0 +1,609 @@
+#!/usr/bin/env python3
+"""microHelium command-line client (issue #145).
+
+Why this exists: during training a team lives in an editor, not in a
+browser. `mh submit solution.cpp` is one command; the alternative is
+changing windows, picking a problem from a select, picking a language,
+attaching a file. Over a practice session with dozens of submissions that
+difference is most of how much the tool gets in the way. Official contests
+normally require the web interface, so this is above all for training --
+which is exactly what Treino Livre (#43) is.
+
+Python 3 and the standard library only, on purpose. This runs on a
+competitor's machine in a university lab, not on the server: anything that
+needs `pip install` or a runtime the lab does not already have is a thing
+that will not be there on the morning of the contest.
+
+Nothing here is new server surface. `GET /api/contests/{id}` already
+returns the contest's problems and its active languages, which is what
+turns `solution.cpp` into a problem id and a language id; `POST /api/runs`
+takes the submission; `GET /api/runs/{id}` reports the verdict. The one
+thing that was missing was a way to get a token at all, and that is #159.
+"""
+
+from __future__ import annotations
+
+import argparse
+import getpass
+import json
+import mimetypes
+import os
+import platform
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+from pathlib import Path
+
+VERSION = "1.0.0"
+
+# Long enough that a queue behind other teams' submissions does not look
+# like a failure, short enough that a client left running is not forgotten.
+DEFAULT_WAIT_SECONDS = 300
+
+
+class Failure(Exception):
+    """Something the user can act on. Printed without a traceback."""
+
+
+# --------------------------------------------------------------------------
+# Configuration
+# --------------------------------------------------------------------------
+
+def config_path() -> Path:
+    """Where the token lives.
+
+    XDG first, because that is where a Linux lab's roaming profile will
+    actually carry it between the machines a team sits at.
+    """
+    override = os.environ.get("MH_CONFIG")
+    if override:
+        return Path(override)
+
+    base = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+
+    return Path(base) / "microhelium" / "config.json"
+
+
+def load_config() -> dict:
+    path = config_path()
+
+    if not path.is_file():
+        return {}
+
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError) as error:
+        raise Failure(f"Não foi possível ler {path}: {error}")
+
+
+def save_config(config: dict) -> Path:
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Written 0600 BEFORE the token goes in: creating the file world-readable
+    # and chmod'ing afterwards leaves a window in which anyone on a shared
+    # lab machine can read another team's credential.
+    descriptor = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump(config, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+    os.chmod(path, 0o600)
+
+    return path
+
+
+def resolve(args, config: dict, key: str, env: str):
+    """Command line, then environment, then the config file."""
+    return getattr(args, key, None) or os.environ.get(env) or config.get(key)
+
+
+# --------------------------------------------------------------------------
+# HTTP
+# --------------------------------------------------------------------------
+
+class Client:
+    def __init__(self, server: str, token: str | None = None, insecure: bool = False):
+        self.server = server.rstrip("/")
+        self.token = token
+        self.context = ssl._create_unverified_context() if insecure else None
+
+    def request(self, method: str, path: str, *, data: bytes | None = None,
+                content_type: str | None = None) -> dict:
+        url = self.server + path
+        request = urllib.request.Request(url, data=data, method=method)
+        request.add_header("Accept", "application/json")
+        request.add_header("User-Agent", f"mh/{VERSION}")
+
+        if content_type:
+            request.add_header("Content-Type", content_type)
+
+        if self.token:
+            request.add_header("Authorization", "Bearer " + self.token)
+
+        try:
+            with urllib.request.urlopen(request, context=self.context, timeout=30) as response:
+                body = response.read()
+        except urllib.error.HTTPError as error:
+            raise Failure(self.explain(error, method, path))
+        except urllib.error.URLError as error:
+            raise Failure(f"Não foi possível falar com {self.server}: {error.reason}")
+
+        if not body:
+            return {}
+
+        try:
+            return json.loads(body)
+        except ValueError:
+            raise Failure(
+                f"{method} {path} não devolveu JSON. O servidor configurado "
+                f"({self.server}) é mesmo um microHelium?"
+            )
+
+    def explain(self, error: urllib.error.HTTPError, method: str, path: str) -> str:
+        """Turn an HTTP status into something a competitor can act on.
+
+        A CLI that prints "HTTP 422" during a contest costs the team the
+        minutes it takes to go and find out what that meant.
+        """
+        try:
+            payload = json.loads(error.read())
+        except (ValueError, OSError):
+            payload = {}
+
+        detail = payload.get("message") or payload.get("error") or ""
+
+        errors = payload.get("errors")
+        if isinstance(errors, dict):
+            detail = "; ".join(
+                f"{field}: {' '.join(messages)}" for field, messages in errors.items()
+            ) or detail
+
+        if error.code == 401:
+            return "Token inválido ou expirado. Rode `mh login` de novo."
+        if error.code == 403:
+            return detail or "Sem permissão para isto."
+        if error.code == 404:
+            return detail or f"{method} {path}: não encontrado."
+        if error.code == 429:
+            return "Tentativas demais. Espere um minuto e tente de novo."
+
+        return f"{method} {path} falhou ({error.code}): {detail or 'sem detalhe'}"
+
+    def get(self, path: str) -> dict:
+        return self.request("GET", path)
+
+    def post_json(self, path: str, payload: dict) -> dict:
+        return self.request(
+            "POST", path,
+            data=json.dumps(payload).encode("utf-8"),
+            content_type="application/json",
+        )
+
+    def delete(self, path: str) -> dict:
+        return self.request("DELETE", path)
+
+    def post_file(self, path: str, fields: dict, file_field: str, file_path: Path) -> dict:
+        body, content_type = multipart(fields, file_field, file_path)
+
+        return self.request("POST", path, data=body, content_type=content_type)
+
+
+def header_value(value: str) -> str:
+    """Make a string safe to put inside a quoted header parameter.
+
+    A POSIX filename may legally contain `"`, `\\`, and even a raw newline.
+    Interpolated straight into `filename="..."` the quote ends the parameter
+    early -- `A"1.sh` becomes `filename="A"1.sh"`, which is malformed per
+    RFC 7578 4.2 -- and a newline splits the part header in two, corrupting
+    the request framing outright. The competitor sees a server-side 4xx they
+    cannot act on, in the middle of a contest.
+
+    CR and LF are dropped rather than escaped: there is no encoding of them
+    that a multipart parser is obliged to understand, and a file name with a
+    newline in it has no business travelling in a header. The quote and the
+    backslash are backslash-escaped, which is what RFC 7578 points at (via
+    RFC 2616's quoted-string) -- and which is verified end to end against
+    this application's own parser in
+    tests/E2E/CliClientOverRealHttpTest.php, because "the RFC says so" and
+    "the server does so" are different claims.
+    """
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "")
+        .replace("\n", "")
+    )
+
+
+def multipart(fields: dict, file_field: str, file_path: Path) -> tuple[bytes, str]:
+    """Encode multipart/form-data by hand.
+
+    Hand-rolled rather than pulled from a library because the whole point of
+    this file is that it runs anywhere Python 3 does, with nothing installed.
+    """
+    boundary = uuid.uuid4().hex
+    marker = ("--" + boundary).encode("ascii")
+    parts: list[bytes] = []
+
+    for name, value in fields.items():
+        parts.append(marker)
+        parts.append(f'Content-Disposition: form-data; name="{name}"'.encode("utf-8"))
+        parts.append(b"")
+        parts.append(str(value).encode("utf-8"))
+
+    guessed = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+
+    parts.append(marker)
+    parts.append(
+        f'Content-Disposition: form-data; name="{file_field}"; '
+        f'filename="{header_value(file_path.name)}"'.encode("utf-8")
+    )
+    parts.append(f"Content-Type: {guessed}".encode("ascii"))
+    parts.append(b"")
+    parts.append(file_path.read_bytes())
+
+    parts.append(marker + b"--")
+    parts.append(b"")
+
+    return b"\r\n".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+# --------------------------------------------------------------------------
+# Resolving what to submit
+# --------------------------------------------------------------------------
+
+def pick_contest(client: Client, wanted) -> dict:
+    """The contest to submit into.
+
+    Defaults to the caller's own: a competitor belongs to exactly one, and
+    making them type its id every time is the kind of friction this file
+    exists to remove.
+    """
+    if wanted:
+        return client.get(f"/api/contests/{int(wanted)}")
+
+    user = client.get("/api/user")
+    contest_id = user.get("contest_id")
+
+    if not contest_id:
+        raise Failure(
+            "Sua conta não está ligada a nenhum contest. Passe --contest <id>; "
+            "`mh contests` lista os que você pode ver."
+        )
+
+    return client.get(f"/api/contests/{int(contest_id)}")
+
+
+def pick_language(contest: dict, source: Path, wanted) -> dict:
+    """Language by extension, which is the whole trick of `mh submit a.cpp`."""
+    languages = [language for language in contest.get("languages", []) if language.get("is_active", True)]
+
+    if not languages:
+        raise Failure(f"O contest \"{contest.get('name')}\" não tem linguagem ativa nenhuma.")
+
+    extension = (wanted or source.suffix.lstrip(".")).lower()
+
+    for language in languages:
+        if str(language.get("extension", "")).lower() == extension:
+            return language
+
+    available = ", ".join(sorted(str(language.get("extension")) for language in languages))
+
+    raise Failure(
+        f"Nenhuma linguagem para a extensão \".{extension}\" neste contest. "
+        f"Disponíveis: {available}. Use --language <extensão> se o arquivo tem outro nome."
+    )
+
+
+def pick_problem(contest: dict, source: Path, wanted) -> dict:
+    """Problem from --problem, or from the file's own name.
+
+    `A.cpp` for problem A is how teams already name their files, so the
+    default costs them nothing to learn.
+    """
+    problems = contest.get("problems", [])
+
+    if not problems:
+        raise Failure(f"O contest \"{contest.get('name')}\" não tem problema nenhum publicado.")
+
+    key = str(wanted or source.stem).strip().lower()
+
+    for problem in problems:
+        if str(problem.get("short_name", "")).strip().lower() == key:
+            return problem
+
+    available = ", ".join(str(problem.get("short_name")) for problem in problems)
+
+    raise Failure(
+        f"Nenhum problema com a sigla \"{key}\". Disponíveis: {available}. "
+        f"Use --problem <sigla> quando o arquivo não se chamar como o problema."
+    )
+
+
+# --------------------------------------------------------------------------
+# Commands
+# --------------------------------------------------------------------------
+
+def command_login(args) -> int:
+    config = load_config()
+    server = args.server or os.environ.get("MH_SERVER") or config.get("server")
+
+    if not server:
+        raise Failure("Diga qual servidor: mh login --server https://contest.exemplo.org")
+
+    login = args.login or input("Usuário ou e-mail: ").strip()
+    password = args.password or os.environ.get("MH_PASSWORD") or getpass.getpass("Senha: ")
+    # Parenthesised deliberately: `a or b if c else d` binds as
+    # `(a or b) if c else d`, which on a machine without uname() silently
+    # threw away an explicit --device.
+    device = args.device or f"mh em {platform.node() or 'maquina desconhecida'}"
+
+    issued = Client(server, insecure=args.insecure).post_json("/api/tokens", {
+        "login": login,
+        "password": password,
+        "device_name": device,
+    })
+
+    config.update({
+        "server": server.rstrip("/"),
+        "token": issued["token"],
+        "expires_at": issued.get("expires_at"),
+    })
+
+    path = save_config(config)
+    user = issued.get("user", {})
+
+    print(f"Autenticado como {user.get('username') or login} ({user.get('user_type', '?')}).")
+    print(f"Token guardado em {path} (modo 0600).")
+
+    if issued.get("expires_at"):
+        print(f"Expira em {issued['expires_at']}.")
+
+    return 0
+
+
+def command_logout(args) -> int:
+    client = authenticated(args)
+
+    try:
+        client.delete("/api/tokens/current")
+        print("Token revogado no servidor.")
+    except Failure as error:
+        # The local copy goes regardless: a token this machine can no longer
+        # use is not one to leave lying in a lab account's home directory.
+        print(f"Aviso: {error}", file=sys.stderr)
+
+    config = load_config()
+    config.pop("token", None)
+    config.pop("expires_at", None)
+    save_config(config)
+
+    print("Token local apagado.")
+
+    return 0
+
+
+def command_whoami(args) -> int:
+    user = authenticated(args).get("/api/user")
+
+    print(f"{user.get('fullname')} ({user.get('username')}) -- {user.get('user_type')}")
+    print(f"contest_id: {user.get('contest_id')}  site_id: {user.get('site_id')}")
+
+    return 0
+
+
+def command_contests(args) -> int:
+    payload = authenticated(args).get("/api/contests")
+
+    for contest in payload.get("data", []):
+        state = "ativo" if contest.get("is_active") else "inativo"
+        print(f"{contest['id']:>4}  {contest['name']}  ({state})")
+
+    return 0
+
+
+def command_problems(args) -> int:
+    client = authenticated(args)
+    contest = pick_contest(client, args.contest)
+
+    print(f"{contest['name']}:")
+
+    for problem in contest.get("problems", []):
+        print(f"  {problem.get('short_name'):<6} {problem.get('name')}")
+
+    languages = ", ".join(
+        f".{language.get('extension')}"
+        for language in contest.get("languages", [])
+        if language.get("is_active", True)
+    )
+    print(f"  linguagens: {languages or 'nenhuma'}")
+
+    return 0
+
+
+def command_runs(args) -> int:
+    client = authenticated(args)
+    payload = client.get("/api/runs")
+
+    for run in payload.get("data", [])[: args.limit]:
+        print(format_run(run))
+
+    return 0
+
+
+def command_submit(args) -> int:
+    source = Path(args.file)
+
+    if not source.is_file():
+        raise Failure(f"{source}: arquivo não encontrado.")
+
+    client = authenticated(args)
+    contest = pick_contest(client, args.contest)
+    problem = pick_problem(contest, source, args.problem)
+    language = pick_language(contest, source, args.language)
+
+    print(
+        f"Enviando {source.name} para {problem.get('short_name')} "
+        f"({language.get('name')}) em \"{contest.get('name')}\"..."
+    )
+
+    if args.dry_run:
+        print("--dry-run: nada foi enviado.")
+        return 0
+
+    run = client.post_file("/api/runs", {
+        "contest_id": contest["id"],
+        "problem_id": problem["id"],
+        "language_id": language["id"],
+    }, "source_file", source)
+
+    print(f"Run #{run.get('run_number')} aceito (id {run['id']}).")
+
+    if args.no_wait:
+        return 0
+
+    return wait_for_verdict(client, int(run["id"]), args.timeout)
+
+
+def wait_for_verdict(client: Client, run_id: int, timeout: int) -> int:
+    """Poll until the verdict is in.
+
+    The exit code is the verdict, so `mh submit a.cpp && echo ok` works and
+    the command composes into whatever the team already runs.
+    """
+    deadline = time.monotonic() + timeout
+    delay = 1.0
+    last = None
+
+    while time.monotonic() < deadline:
+        run = client.get(f"/api/runs/{run_id}")
+        status = run.get("status")
+
+        if status != last:
+            print(f"  {status}...")
+            last = status
+
+        if status in ("judged", "deleted"):
+            print(format_run(run))
+            answer = run.get("answer") or {}
+
+            return 0 if answer.get("is_accepted") else 1
+
+        time.sleep(delay)
+        # Backs off to 5s: a run behind a queue does not need to be asked
+        # about every second, and fifty idle clients that do are a load the
+        # server did not have before this file existed.
+        delay = min(delay * 1.5, 5.0)
+
+    print(
+        f"Ainda sem veredito depois de {timeout}s. O run continua na fila; "
+        f"veja com `mh runs`.",
+        file=sys.stderr,
+    )
+
+    return 2
+
+
+def format_run(run: dict) -> str:
+    answer = run.get("answer") or {}
+    problem = run.get("problem") or {}
+    verdict = answer.get("short_name") or ("-" if run.get("status") != "judged" else "?")
+
+    # str() around every field: a run that has not been numbered yet carries
+    # None, and a format spec on None is a traceback instead of a line.
+    return (
+        f"#{str(run.get('run_number') or '?'):<4} {str(problem.get('short_name') or '?'):<6} "
+        f"{str(run.get('status')):<10} {verdict}"
+    )
+
+
+def authenticated(args) -> Client:
+    config = load_config()
+    server = resolve(args, config, "server", "MH_SERVER")
+    token = resolve(args, config, "token", "MH_TOKEN")
+
+    if not server:
+        raise Failure("Nenhum servidor configurado. Rode `mh login --server <url>`.")
+
+    if not token:
+        raise Failure("Nenhum token. Rode `mh login`.")
+
+    return Client(server, token, insecure=args.insecure)
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mh",
+        description="Cliente de linha de comando do microHelium (issue #145).",
+    )
+    parser.add_argument("--version", action="version", version=f"mh {VERSION}")
+    parser.add_argument("--server", help="URL do servidor (senão: MH_SERVER, senão o arquivo de config).")
+    parser.add_argument(
+        "--insecure", action="store_true",
+        help="Não verificar o certificado TLS. Para um servidor de treino com certificado próprio.",
+    )
+
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    login = commands.add_parser("login", help="Trocar credenciais por um token e guardá-lo.")
+    login.add_argument("--login", help="Usuário ou e-mail.")
+    login.add_argument("--password", help="Senha. Prefira não passar: o shell guarda histórico.")
+    login.add_argument("--device", help="Nome deste dispositivo, para você reconhecer o token depois.")
+    login.set_defaults(handler=command_login)
+
+    logout = commands.add_parser("logout", help="Revogar o token no servidor e apagá-lo daqui.")
+    logout.set_defaults(handler=command_logout)
+
+    whoami = commands.add_parser("whoami", help="Quem é o dono do token guardado.")
+    whoami.set_defaults(handler=command_whoami)
+
+    contests = commands.add_parser("contests", help="Contests que você pode ver.")
+    contests.set_defaults(handler=command_contests)
+
+    problems = commands.add_parser("problems", help="Problemas e linguagens do contest.")
+    problems.add_argument("--contest", help="Id do contest (padrão: o seu).")
+    problems.set_defaults(handler=command_problems)
+
+    runs = commands.add_parser("runs", help="Suas submissões mais recentes.")
+    runs.add_argument("--limit", type=int, default=20)
+    runs.set_defaults(handler=command_runs)
+
+    submit = commands.add_parser("submit", help="Submeter um arquivo e esperar o veredito.")
+    submit.add_argument("file")
+    submit.add_argument("--problem", help="Sigla do problema (padrão: o nome do arquivo).")
+    submit.add_argument("--language", help="Extensão da linguagem (padrão: a do arquivo).")
+    submit.add_argument("--contest", help="Id do contest (padrão: o seu).")
+    submit.add_argument("--no-wait", action="store_true", help="Não esperar o veredito.")
+    submit.add_argument("--dry-run", action="store_true", help="Resolver problema e linguagem, e parar.")
+    submit.add_argument("--timeout", type=int, default=DEFAULT_WAIT_SECONDS)
+    submit.set_defaults(handler=command_submit)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    try:
+        return args.handler(args)
+    except Failure as error:
+        print(f"erro: {error}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("\ninterrompido.", file=sys.stderr)
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())
