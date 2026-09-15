@@ -7,6 +7,7 @@ use App\Models\Answer;
 use App\Models\ContestLog;
 use App\Models\Run;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Watchdog for issue #45: the "Atrasado" (overdue) badge added to the judge
@@ -25,6 +26,12 @@ class ReconcileStuckRunsCommand extends Command
     protected $signature = 'runs:reconcile-stuck';
 
     protected $description = 'Re-dispatch or give up on runs stuck pending past their site\'s max_judge_wait_time';
+
+    /**
+     * Where the watchdog records that it ran, read by
+     * FrontendApi\JudgingHealthController (#191).
+     */
+    public const LAST_RUN_KEY = 'judging.watchdog.last_run_at';
 
     public function handle(): int
     {
@@ -47,6 +54,21 @@ class ReconcileStuckRunsCommand extends Command
                 $this->info("Run #{$run->run_number} (ID: {$run->id}) re-dispatched (attempt {$run->reconcile_attempts}).");
             }
         }
+
+        // Issue #191 -- record that the watchdog ran.
+        //
+        // Without this there is no way to tell "nothing was stuck" from
+        // "the scheduler has not run since Tuesday", and those are opposite
+        // situations that look identical from every screen. A stopped
+        // scheduler is the failure nobody notices, because its symptom is
+        // an absence.
+        //
+        // The cache and not a column: this is operational liveness, not
+        // contest data, and losing it on a cache flush costs one reporting
+        // cycle rather than corrupting anything. `forever` because the
+        // health screen has to be able to say "last seen four hours ago",
+        // which a short TTL would turn back into "never".
+        Cache::forever(self::LAST_RUN_KEY, now()->toISOString());
 
         $this->info(count($stuckRuns) . ' stuck run(s) processed.');
 
