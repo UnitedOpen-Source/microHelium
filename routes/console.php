@@ -34,3 +34,14 @@ Schedule::command('sanctum:prune-expired --hours=24')->daily();
 //
 // Inofensivo no servidor, onde o diretorio simplesmente nao existe.
 Schedule::command('judgehost:prune')->daily();
+
+// Issue #199 -- o watchdog do #45 recupera em silencio e a fila cresce sem
+// alerta. Este comando so avalia e avisa; nao mexe em nenhum run, e por
+// isso pode rodar com mais frequencia do que o reconciliador.
+//
+// A cada minuto porque a histerese e o cooldown ja moram dentro do
+// dispatcher: a frequencia aqui e a resolucao com que a condicao e
+// percebida, nao a frequencia com que alguem e incomodado. Com
+// withoutOverlapping por causa do webhook -- um receptor lento nao pode
+// fazer duas avaliacoes correrem juntas e duplicar o aviso.
+Schedule::command('judging:alerts')->everyMinute()->withoutOverlapping();
