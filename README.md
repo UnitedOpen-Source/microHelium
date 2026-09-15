@@ -317,9 +317,37 @@ descfile=problem.pdf
 ## API Endpoints
 
 ### Authentication
-- `POST /api/login` - User authentication
-- `POST /api/logout` - User logout
+
+Every route below the Authentication heading is behind `auth:sanctum` and
+needs a bearer token. Issue #159: `POST /api/login` and `POST /api/logout`
+were listed here for a long time and never existed -- there was no way at
+all to obtain a token, because the Sanctum table was never migrated and no
+route or command ever called `createToken()`. The routes below are the real
+ones.
+
+- `POST /api/tokens` - Exchange credentials for a token (unauthenticated,
+  throttled at 5/minute). `login` takes the account's e-mail **or** its
+  username.
+- `GET /api/tokens` - List your own tokens (never the token itself)
+- `DELETE /api/tokens/current` - Revoke the token you are calling with
+- `DELETE /api/tokens/{id}` - Revoke one of your own tokens
 - `GET /api/user` - Get authenticated user
+
+```bash
+TOKEN=$(curl -sS -X POST https://contest.example.org/api/tokens \
+  -H 'Accept: application/json' \
+  -d login=equipe01 -d password=... -d device_name=notebook-da-equipe \
+  | jq -r .token)
+
+curl -sS https://contest.example.org/api/user -H "Authorization: Bearer $TOKEN"
+```
+
+The plain text is shown **once** -- only its sha256 is stored, the same
+contract as `judgehost:create` above -- and the token expires after
+`SANCTUM_TOKEN_MINUTES` (default 30 days). A disabled account gets no token,
+and neither does an account whose site pins an address range it is not
+calling from (issue #50): otherwise this route would be the way around the
+network lock the web login enforces.
 
 ### Contests
 - `GET /api/contests` - List all contests
@@ -341,13 +369,14 @@ descfile=problem.pdf
 - `GET /api/runs/{id}/source` - Download source code
 
 ### Scoreboard
-- `GET /api/scoreboard` - Get current scoreboard
-- `GET /api/scoreboard/export` - Export scoreboard data
+- `GET /api/contests/{id}/scoreboard` - Get current scoreboard
+- `GET /api/contests/{id}/scoreboard/export` - Export scoreboard data (staff only:
+  it reads the standings with the freeze NOT applied)
 
 ### Clarifications
 - `GET /api/clarifications` - List clarifications
 - `POST /api/clarifications` - Submit clarification request
-- `PUT /api/clarifications/{id}` - Answer clarification (judges)
+- `PUT /api/clarifications/{id}/answer` - Answer clarification (judges)
 
 ## Configuration
 

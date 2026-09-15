@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ContestController;
 use App\Http\Controllers\Api\ProblemController;
 use App\Http\Controllers\Api\RunController;
 use App\Http\Controllers\Api\ScoreboardController;
+use App\Http\Controllers\Api\TokenController;
 use App\Models\Contest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +41,24 @@ use Illuminate\Support\Facades\Route;
 | about, so a new route cannot quietly inherit the open half again.
 */
 
+/*
+|--------------------------------------------------------------------------
+| Getting in (issue #159)
+|--------------------------------------------------------------------------
+|
+| Deliberately outside the group below: this is the route you call when you
+| do not have a token yet, and before it existed there was no such route --
+| `personal_access_tokens` was never migrated and nothing anywhere called
+| createToken(), so the entire authenticated surface was unreachable by any
+| client that is not a browser.
+|
+| Throttled at the same 5/minute as the web login in routes/web.php. The
+| limit is per IP and counts failures and successes alike, which is the
+| point: an unthrottled credentials endpoint is a password-guessing
+| appliance for a participant list that is public by nature.
+*/
+Route::post('/tokens', [TokenController::class, 'store'])->middleware('throttle:5,1');
+
 Route::middleware('auth:sanctum')->group(function () {
     /*
     |----------------------------------------------------------------------
@@ -56,6 +75,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+
+    // The other half of #159: a credential you cannot see or withdraw is
+    // one you have to assume is still out there. These are scoped to the
+    // caller's own tokens inside the controller -- not by a `role:` gate --
+    // because every account, a team's included, needs to be able to revoke
+    // a token it typed into a machine in a shared lab.
+    Route::get('/tokens', [TokenController::class, 'index']);
+    Route::delete('/tokens/current', [TokenController::class, 'destroyCurrent']);
+    Route::delete('/tokens/{token}', [TokenController::class, 'destroy'])->whereNumber('token');
 
     Route::apiResource('contests', ContestController::class)->only(['index', 'show']);
     Route::get('/contests/{contest}/status', [ContestController::class, 'status']);

@@ -16,3 +16,11 @@ Artisan::command('inspire', function () {
 // 5 minutes; without this, two concurrent instances could both increment
 // reconcile_attempts or both give up on the same run.
 Schedule::command('runs:reconcile-stuck')->everyFiveMinutes()->withoutOverlapping();
+
+// Issue #159: tokens carry an expires_at (config/sanctum.php) and the guard
+// refuses an expired one, so this changes no authorization decision -- it
+// only stops personal_access_tokens growing without bound over successive
+// contests on the same installation. --hours=24 keeps a just-expired row
+// around for a day so that "my token stopped working" can still be answered
+// by looking.
+Schedule::command('sanctum:prune-expired --hours=24')->daily();
