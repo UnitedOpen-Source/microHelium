@@ -2,7 +2,8 @@
 
 namespace Tests\Unit;
 
-use PHPUnit\Framework\TestCase;
+use Illuminate\Support\Facades\Route;
+use Tests\TestCase;
 
 /**
  * Every @extends and @include in every Blade file names a template that
@@ -37,6 +38,18 @@ use PHPUnit\Framework\TestCase;
 class BladeIncludesResolveTest extends TestCase
 {
     private const VIEW_ROOT = __DIR__.'/../../resources/views';
+
+    /**
+     * The one template allowed to name a route that does not exist.
+     *
+     * auth/passwords/reset.blade.php is 70 lines of this project's own
+     * styled UI posting to `password.update`, a route nobody ever wrote --
+     * see issue #183. Deleting somebody's finished screen to satisfy a
+     * guard would be the wrong trade, and so would weakening the guard for
+     * everyone. It is excluded by name, with the issue attached, so the
+     * exclusion is a decision someone wrote down rather than a hole.
+     */
+    private const ROUTE_EXCEPTIONS = ['resources/views/auth/passwords/reset.blade.php'];
 
     public function test_every_blade_include_and_extends_names_a_template_that_exists(): void
     {
@@ -76,6 +89,67 @@ class BladeIncludesResolveTest extends TestCase
             [],
             $broken,
             "These Blade templates name a template that does not exist, and would fail at render time:\n  "
+            .implode("\n  ", $broken)
+        );
+    }
+
+    /**
+     * Issue #183 -- the same failure one layer along: `route('foo')` in a
+     * Blade throws RouteNotFoundException when `foo` is not registered, and
+     * again nothing knows until the page is requested.
+     *
+     * The regex excludes `->route(` deliberately, and that exclusion is the
+     * difference between a useful test and a misleading one: the feature
+     * pages call `request()->route('problemId')` to read a route PARAMETER,
+     * which has nothing to do with named routes. Without the guard on the
+     * preceding character this reported eight nonexistent defects across
+     * resources/views/features/ on its first run.
+     */
+    public function test_every_route_name_used_in_a_blade_is_registered(): void
+    {
+        $registered = [];
+
+        foreach (Route::getRoutes() as $route) {
+            if ($name = $route->getName()) {
+                $registered[$name] = true;
+            }
+        }
+
+        $this->assertNotEmpty($registered, 'No named routes were found at all; the route list did not load.');
+
+        $broken = [];
+        $checked = 0;
+
+        foreach ($this->bladeFiles() as $file) {
+            if (in_array($this->relative($file), self::ROUTE_EXCEPTIONS, true)) {
+                continue;
+            }
+
+            preg_match_all(
+                '/(?<![>$\w])route\(\s*[\'"]([a-zA-Z0-9_.\-]+)[\'"]/',
+                (string) file_get_contents($file),
+                $matches
+            );
+
+            foreach ($matches[1] as $name) {
+                $checked++;
+
+                if (! isset($registered[$name])) {
+                    $broken[] = sprintf('%s calls route("%s"), which is not registered', $this->relative($file), $name);
+                }
+            }
+        }
+
+        $this->assertGreaterThan(
+            30,
+            $checked,
+            'Only '.$checked.' route() calls were found in Blade files, which is fewer than this application has.'
+        );
+
+        $this->assertSame(
+            [],
+            $broken,
+            "These Blade templates name a route that does not exist, and would throw at render time:\n  "
             .implode("\n  ", $broken)
         );
     }
