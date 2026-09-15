@@ -10,7 +10,6 @@ use App\Models\Problem;
 use App\Models\Run;
 use App\Services\Practice\JudgeExecutorHealth;
 use App\Services\Practice\PracticeContest;
-use App\Services\Practice\PracticePublisher;
 use App\Services\RunSubmissionService;
 use App\Support\IdempotencyStore;
 use Illuminate\Http\JsonResponse;
@@ -38,9 +37,13 @@ class PracticeController extends Controller
 {
     private const PER_PAGE = 20;
 
+    // No PracticePublisher here. It was injected and never read once --
+    // found at PHPStan level 4 (property.onlyWritten), which is the one
+    // finding at that level that was a real thing rather than the analyser
+    // being pedantic. The container was resolving a service on every
+    // request to this controller for nothing.
     public function __construct(
         private PracticeContest $practiceContest,
-        private PracticePublisher $publisher,
         private JudgeExecutorHealth $executor,
         private RunSubmissionService $submissions,
     ) {}
