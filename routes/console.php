@@ -24,3 +24,13 @@ Schedule::command('runs:reconcile-stuck')->everyFiveMinutes()->withoutOverlappin
 // around for a day so that "my token stopped working" can still be answered
 // by looking.
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// Issue #186 -- roda na MAQUINA DE JULGAMENTO, nao no servidor: e la que os
+// arquivos estao. O cache de casos de teste e o que faz um judgehost quente
+// valer a pena, e tambem e entrada e saida escondidas de outras pessoas num
+// rack de outra instituicao (a premissa do #53). Nada o removia; agora ele
+// e limitado por tempo desde o ultimo uso, e o padrao deixa de ser "para
+// sempre".
+//
+// Inofensivo no servidor, onde o diretorio simplesmente nao existe.
+Schedule::command('judgehost:prune')->daily();

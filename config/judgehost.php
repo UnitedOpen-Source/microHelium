@@ -58,6 +58,34 @@ return [
         // downloads its test data once.
         'workspace' => env('JUDGEHOST_WORKSPACE', 'judgehost'),
 
+        /*
+        |----------------------------------------------------------------------
+        | Retention of fetched test data
+        |----------------------------------------------------------------------
+        |
+        | Issue #186 -- how long a judge machine may keep the test data it
+        | downloaded, counted from the last time a judging actually used it.
+        |
+        | The cache is what makes a warm judgehost worth having, and it is
+        | also a pile of other people's hidden input and output sitting on a
+        | machine in someone else's rack -- which is the premise of #53, not
+        | an edge case. Nothing used to remove it: no command, no schedule,
+        | no bound. A partner institution kept every problem of every
+        | contest it had ever judged, for ever, and nobody had decided that.
+        |
+        | Seven days is chosen to outlive an event comfortably -- a contest
+        | plus its practice sessions and the days either side when people
+        | are still rejudging -- while making "for ever" stop being the
+        | default. Raise it on a dedicated host that judges the same problem
+        | set all season; lower it on a machine you borrowed.
+        |
+        | `judgehost:prune` is what enforces it, and it must run ON THE JUDGE
+        | MACHINE: that is where the files are. The agent's own scheduler is
+        | the natural place (routes/console.php runs it daily).
+        |
+        */
+        'cache_retention_days' => (int) env('JUDGEHOST_CACHE_RETENTION_DAYS', 7),
+
         'request_timeout' => (int) env('JUDGEHOST_REQUEST_TIMEOUT', 30),
     ],
 

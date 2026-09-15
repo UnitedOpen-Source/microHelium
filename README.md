@@ -299,6 +299,34 @@ but it deliberately does **not** compensate — a correction factor measured
 once tracks neither cache contention nor thermal throttling, so it would
 feel fair while the verdicts went on varying. Use matching hardware.
 
+### What stays on a judge machine, and for how long
+
+A judgehost caches the test data it downloads, by digest, under
+`storage/app/judgehost/cache/`. That cache is the reason a warm judgehost is
+worth having: a host judging 200 submissions of one problem fetches its test
+data once.
+
+It is also **other people's hidden input and output**, on a machine that —
+by design — lives in someone else's rack. If you are lending a machine, this
+is what will be on it.
+
+It is bounded by time since last use, not kept for ever:
+
+```bash
+php artisan judgehost:prune              # on the JUDGE machine, not the server
+php artisan judgehost:prune --dry-run    # list what would go
+php artisan judgehost:prune --days=2     # tighter than the default
+```
+
+The default window is `JUDGEHOST_CACHE_RETENTION_DAYS` (7 days), long enough
+to outlive a contest and the rejudging around it. `routes/console.php` runs
+the prune daily, so an agent host with the scheduler running needs nothing
+further; on the server the command is a no-op, because the directory is not
+there.
+
+Safe to run mid-contest: a file the current judging needs was touched when
+that run fetched it, so "unused for a week" means what it says.
+
 ## Problem Package Format
 
 Problems are uploaded as ZIP files with the following structure:
