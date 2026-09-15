@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\JudgeRunJob;
 use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\ContestLog;
+use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Score;
 use Illuminate\Http\RedirectResponse;
@@ -46,7 +48,7 @@ class JudgeController extends Controller
             // $user->site can still resolve to null even with site_id set
             // (e.g. the site was soft-deleted) -- SiteController::destroy()
             // clears site_id on delete, but this is defense in depth.
-            if (!$user->isAdmin() && $user->site_id && $user->site) {
+            if (! $user->isAdmin() && $user->site_id && $user->site) {
                 $query->whereIn('site_id', $user->site->routedJudgingSiteIds());
             }
 
@@ -76,7 +78,18 @@ class JudgeController extends Controller
             ? Answer::where('contest_id', $contest->id)->orderBy('sort_order')->get()
             : collect();
 
-        return view('judge.runs', compact('contest', 'pendingRuns', 'judgedRuns', 'awaitingVerification', 'answers'));
+        // Issue #193 -- os problemas deste contest com a contagem do que
+        // esta represado. Sem o numero, quem pausou esquece de despausar, e
+        // o sintoma disso e uma fila que nao anda sem ninguem saber por que.
+        $problems = $contest
+            ? Problem::where('contest_id', $contest->id)
+                ->where('is_fake', false)
+                ->orderBy('sort_order')
+                ->withCount(['runs as waiting_runs_count' => fn ($query) => $query->where('status', 'pending')])
+                ->get()
+            : collect();
+
+        return view('judge.runs', compact('contest', 'pendingRuns', 'judgedRuns', 'awaitingVerification', 'answers', 'problems'));
     }
 
     public function judge(Request $request, Run $run): RedirectResponse
@@ -167,5 +180,75 @@ class JudgeController extends Controller
         // Issue #43: the technical practice contest is never "the active
         // contest" of an event (docs/specs/43-practice.md).
         return Contest::query()->competition()->where('is_active', true)->first();
+    }
+
+    /**
+     * Issue #193 -- hold this problem's judging.
+     *
+     * The case: mid-contest the jury finds the expected output of problem C
+     * is wrong. Teams keep submitting C, every submission collects a WRONG
+     * ANSWER caused by the jury's own defect, and each costs twenty penalty
+     * minutes. Deactivating the problem would take the statement away from
+     * the teams; this holds only the verdict.
+     *
+     * Submissions keep being accepted and stay `pending`, so the team sees
+     * "being evaluated", which is true.
+     */
+    public function pauseJudging(Request $request, Problem $problem): RedirectResponse
+    {
+        if ($problem->isJudgingPaused()) {
+            return back()->with('success', 'O julgamento deste problema ja estava pausado.');
+        }
+
+        $problem->update([
+            'judging_paused_at' => now(),
+            'judging_paused_by' => auth()->id(),
+        ]);
+
+        ContestLog::warning($problem->contest_id, "Julgamento do problema {$problem->short_name} pausado", [
+            'problem_id' => $problem->id,
+            'user_id' => auth()->id(),
+        ]);
+
+        return back()->with('success', "Julgamento de {$problem->short_name} pausado. Os envios continuam entrando e ficam aguardando.");
+    }
+
+    /**
+     * Release the hold, and push the waiting runs back into judging.
+     *
+     * Re-dispatching matters: the runs that arrived while paused were never
+     * queued anywhere -- JudgeRunJob returned early and the pull queue
+     * skipped them -- so without this they would sit `pending` until
+     * runs:reconcile-stuck (#45) noticed, which is a backstop and not a
+     * plan.
+     */
+    public function resumeJudging(Request $request, Problem $problem): RedirectResponse
+    {
+        if (! $problem->isJudgingPaused()) {
+            return back()->with('success', 'O julgamento deste problema nao estava pausado.');
+        }
+
+        $problem->update([
+            'judging_paused_at' => null,
+            'judging_paused_by' => null,
+        ]);
+
+        $waiting = Run::where('problem_id', $problem->id)
+            ->where('status', 'pending')
+            ->get();
+
+        foreach ($waiting as $run) {
+            if ($problem->isAutoJudgeEnabledFor($run->language)) {
+                JudgeRunJob::dispatch($run);
+            }
+        }
+
+        ContestLog::info($problem->contest_id, "Julgamento do problema {$problem->short_name} retomado", [
+            'problem_id' => $problem->id,
+            'user_id' => auth()->id(),
+            'requeued' => $waiting->count(),
+        ]);
+
+        return back()->with('success', "Julgamento de {$problem->short_name} retomado. {$waiting->count()} envio(s) voltaram para a fila.");
     }
 }

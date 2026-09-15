@@ -44,6 +44,21 @@ class JudgeRunJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        // Issue #193 -- the jury has this problem on hold, so the run waits
+        // rather than collecting a verdict the problem itself is wrong
+        // about.
+        //
+        // This job is dispatched straight from Api\RunController::store()
+        // and from rejudge, without going through JudgeWorkQueue, so the
+        // gate in the queue does not cover it: a fresh submission to a
+        // paused problem would be judged immediately. Leaving the run
+        // `pending` is what makes unpausing pick it up -- releasing the
+        // pause re-dispatches, and runs:reconcile-stuck (#45) is the
+        // backstop if nobody does.
+        if ($this->run->problem?->isJudgingPaused()) {
+            return;
+        }
+
         $judgeService->judge($this->run);
     }
 

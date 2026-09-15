@@ -10,6 +10,37 @@
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
+{{-- Issue #193: segurar o julgamento de um problema com defeito, sem tirar
+     o enunciado das equipes. Pausar guarda so o veredito: o envio continua
+     entrando e fica aguardando, e a equipe ve "em avaliacao", que e verdade. --}}
+@if($problems->isNotEmpty())
+<div class="surface p-6 mb-6">
+    <h2 class="text-xl font-semibold text-foreground mb-1">Julgamento por problema</h2>
+    <p class="text-sm text-muted-foreground mb-4">Pause quando o problema estiver errado: as equipes continuam submetendo e nenhum veredito sai — ninguém paga penalidade por defeito da banca.</p>
+    <div class="flex flex-wrap gap-2">
+        @foreach($problems as $problem)
+            <div class="flex items-center gap-2 px-3 py-2 border border-border rounded-lg {{ $problem->isJudgingPaused() ? 'bg-warning-soft' : '' }}">
+                <span class="font-medium text-foreground">{{ $problem->short_name }}</span>
+                @if($problem->waiting_runs_count > 0)
+                    <span class="text-xs text-muted-foreground">{{ $problem->waiting_runs_count }} aguardando</span>
+                @endif
+                @if($problem->isJudgingPaused())
+                    <form action="{{ route('judge.problems.resume', $problem) }}" method="POST" class="inline">
+                        @csrf
+                        <button type="submit" class="text-xs text-primary hover:underline">Retomar</button>
+                    </form>
+                @else
+                    <form action="{{ route('judge.problems.pause', $problem) }}" method="POST" class="inline">
+                        @csrf
+                        <button type="submit" class="text-xs text-muted-foreground hover:text-warning hover:underline">Pausar</button>
+                    </form>
+                @endif
+            </div>
+        @endforeach
+    </div>
+</div>
+@endif
+
             <h2 class="text-xl font-semibold text-foreground">Pendentes de Julgamento</h2>
             <p class="text-sm text-muted-foreground">{{ $contest?->name ?? 'Nenhum contest ativo' }}</p>
         </div>

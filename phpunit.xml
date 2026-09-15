@@ -54,6 +54,21 @@
         already has set.
     -->
     <php>
+        <!--
+            A suite roda num processo so, e o uso de memoria e cumulativo: a
+            medicao chegou a 123 MB com o teto padrao do PHP em 128 MB, e a
+            primeira leva de testes que passou de 1291 para 1301 estourou
+            com "Allowed memory size of 134217728 bytes exhausted" dentro do
+            finfo, num teste de download que nao tinha relacao nenhuma com a
+            mudanca.
+
+            O sintoma e cruel: quem quebra e o teste que por acaso pediu a
+            proxima alocacao, nao quem gastou a memoria. Fixar o teto aqui
+            torna a margem explicita, em vez de deixa-la depender do
+            memory_limit do php.ini de cada maquina. O CI vinha passando a
+            cinco megabytes do limite sem ninguem saber.
+        -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing" force="true"/>
         <!--
             Issue #49: the judge sandbox is mandatory in every real

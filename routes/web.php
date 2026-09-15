@@ -227,6 +227,11 @@ Route::post('/judge/runs/{run}', [JudgeController::class, 'judge'])->name('judge
 // their own, matching the two above.
 Route::post('/judge/runs/{run}/verify', [JudgeController::class, 'verify'])->name('judge.runs.verify');
 Route::post('/judge/runs/{run}/unverify', [JudgeController::class, 'unverify'])->name('judge.runs.unverify');
+// Issue #193 -- segurar o julgamento de um problema com defeito, sem tirar
+// o enunciado das equipes. Mesmo portao dos demais: o construtor do
+// JudgeController exige ['auth', 'role:judge,admin'].
+Route::post('/judge/problems/{problem}/pause', [JudgeController::class, 'pauseJudging'])->name('judge.problems.pause');
+Route::post('/judge/problems/{problem}/resume', [JudgeController::class, 'resumeJudging'])->name('judge.problems.resume');
 
 /*
 |--------------------------------------------------------------------------
