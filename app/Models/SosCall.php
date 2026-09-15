@@ -66,26 +66,31 @@ class SosCall extends Model
         'resolved_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function acknowledgedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'acknowledged_by', 'user_id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function resolvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by', 'user_id');

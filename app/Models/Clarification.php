@@ -26,31 +26,37 @@ class Clarification extends Model
         'judge_site_id',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
     }
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function judge(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'judge_id', 'user_id');
     }
 
+    /** @return BelongsTo<Site, $this> */
     public function judgeSite(): BelongsTo
     {
         return $this->belongsTo(Site::class, 'judge_site_id');

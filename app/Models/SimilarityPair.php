@@ -18,16 +18,19 @@ class SimilarityPair extends Model
         'similarity_score' => 'float',
     ];
 
+    /** @return BelongsTo<SimilarityCheck, $this> */
     public function check(): BelongsTo
     {
         return $this->belongsTo(SimilarityCheck::class, 'similarity_check_id');
     }
 
+    /** @return BelongsTo<Run, $this> */
     public function runA(): BelongsTo
     {
         return $this->belongsTo(Run::class, 'run_id_a');
     }
 
+    /** @return BelongsTo<Run, $this> */
     public function runB(): BelongsTo
     {
         return $this->belongsTo(Run::class, 'run_id_b');

@@ -42,6 +42,7 @@ class Judgehost extends Model
      */
     protected $hidden = ['token_hash'];
 
+    /** @return HasMany<Run, $this> */
     public function runs(): HasMany
     {
         return $this->hasMany(Run::class);
@@ -50,6 +51,7 @@ class Judgehost extends Model
     /**
      * Issue #117 -- the languages this machine reported it can run.
      */
+    /** @return HasMany<JudgehostCapability, $this> */
     public function capabilities(): HasMany
     {
         return $this->hasMany(JudgehostCapability::class);
@@ -103,6 +105,7 @@ class Judgehost extends Model
         return $declared->contains('extension', $extension);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by', 'user_id');

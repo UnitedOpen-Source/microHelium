@@ -22,11 +22,13 @@ class ProblemLanguageLimit extends Model
         'auto_judge_enabled' => 'boolean',
     ];
 
+    /** @return BelongsTo<Problem, $this> */
     public function problem(): BelongsTo
     {
         return $this->belongsTo(Problem::class);
     }
 
+    /** @return BelongsTo<Language, $this> */
     public function language(): BelongsTo
     {
         return $this->belongsTo(Language::class);

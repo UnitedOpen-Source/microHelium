@@ -12,6 +12,7 @@ class JudgehostCapability extends Model
 {
     protected $fillable = ['judgehost_id', 'extension'];
 
+    /** @return BelongsTo<Judgehost, $this> */
     public function judgehost(): BelongsTo
     {
         return $this->belongsTo(Judgehost::class);

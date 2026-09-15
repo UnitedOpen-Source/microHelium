@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 class Contest extends Model
 {
@@ -133,52 +134,68 @@ class Contest extends Model
         ])));
     }
 
+    /** @return HasMany<Site, $this> */
     public function sites(): HasMany
     {
         return $this->hasMany(Site::class);
     }
 
+    /** @return HasMany<Language, $this> */
     public function languages(): HasMany
     {
         return $this->hasMany(Language::class);
     }
 
+    /** @return HasMany<Answer, $this> */
     public function answers(): HasMany
     {
         return $this->hasMany(Answer::class);
     }
 
+    /** @return HasMany<Problem, $this> */
     public function problems(): HasMany
     {
         return $this->hasMany(Problem::class)->orderBy('sort_order');
     }
 
+    /** @return HasMany<User, $this> */
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
     }
 
+    /** @return HasMany<Run, $this> */
     public function runs(): HasMany
     {
         return $this->hasMany(Run::class);
     }
 
+    /** @return HasMany<Clarification, $this> */
     public function clarifications(): HasMany
     {
         return $this->hasMany(Clarification::class);
     }
 
+    /** @return HasMany<Task, $this> */
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
     }
 
+    /** @return HasMany<ContestLog, $this> */
     public function logs(): HasMany
     {
         return $this->hasMany(ContestLog::class);
     }
 
-    public function getEndTimeAttribute(): ?\DateTime
+    /**
+     * Carbon and not \DateTime: `start_time` has a `datetime` cast, so what
+     * comes back is a Carbon, and this method's own body calls ->copy(),
+     * which \DateTime does not have -- the declared type promised less than
+     * the code relied on, and PHPStan is what noticed. Narrowing is safe
+     * for every caller, because Carbon IS a \DateTime.
+     */
+    public function getEndTimeAttribute(): ?Carbon
     {
         if (! $this->start_time) {
             return null;
@@ -187,7 +204,7 @@ class Contest extends Model
         return $this->start_time->copy()->addMinutes($this->duration);
     }
 
-    public function getFreezeTimeAttribute(): ?\DateTime
+    public function getFreezeTimeAttribute(): ?Carbon
     {
         if (! $this->start_time) {
             return null;

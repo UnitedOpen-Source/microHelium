@@ -36,31 +36,37 @@ class Problem extends Model
         'is_fake' => 'boolean',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return HasMany<TestCase, $this> */
     public function testCases(): HasMany
     {
         return $this->hasMany(TestCase::class)->orderBy('number');
     }
 
+    /** @return HasMany<Run, $this> */
     public function runs(): HasMany
     {
         return $this->hasMany(Run::class);
     }
 
+    /** @return HasMany<Clarification, $this> */
     public function clarifications(): HasMany
     {
         return $this->hasMany(Clarification::class);
     }
 
+    /** @return HasMany<Score, $this> */
     public function scores(): HasMany
     {
         return $this->hasMany(Score::class);
     }
 
+    /** @return HasMany<ProblemLanguageLimit, $this> */
     public function languageLimits(): HasMany
     {
         return $this->hasMany(ProblemLanguageLimit::class);

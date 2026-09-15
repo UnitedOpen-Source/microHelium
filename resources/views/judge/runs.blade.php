@@ -28,10 +28,10 @@
                 </thead>
                 <tbody class="divide-y divide-border">
                     @forelse ($pendingRuns as $run)
-                    <tr class="hover:bg-muted/50 transition-colors {{ $run->is_overdue ? 'bg-destructive-soft/40' : '' }}">
+                    <tr class="hover:bg-muted/50 transition-colors {{ $run->isOverdue() ? 'bg-destructive-soft/40' : '' }}">
                         <td class="px-4 py-3 font-mono text-sm">
                             #{{ $run->run_number }}
-                            @if($run->is_overdue)
+                            @if($run->isOverdue())
                                 <span class="ml-1 px-1.5 py-0.5 text-xs font-medium bg-destructive-soft text-destructive rounded" title="Aguardando julgamento ha mais tempo que o limite do site">Atrasado</span>
                             @endif
                         </td>

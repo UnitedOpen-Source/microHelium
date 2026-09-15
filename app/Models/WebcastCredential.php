@@ -39,11 +39,13 @@ class WebcastCredential extends Model
         'last_used_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by', 'user_id');

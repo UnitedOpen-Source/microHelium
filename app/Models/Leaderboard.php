@@ -21,11 +21,13 @@ class Leaderboard extends Model
         'rank',
     ];
 
+    /** @return BelongsTo<Contest, $this> */
     public function contest(): BelongsTo
     {
         return $this->belongsTo(Contest::class);
     }
 
+    /** @return BelongsTo<\Helium\User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
