@@ -445,6 +445,26 @@ Runs two layers of checks against the live stack: the PHPUnit `Smoke` suite (`te
 
 If you discover a security vulnerability, please send an email to security@example.com. All security vulnerabilities will be promptly addressed.
 
+### Dependency auditing
+
+CI audits dependencies on every push, both ecosystems, split the same way:
+
+```bash
+composer audit --locked --no-dev --abandoned=ignore   # blocking
+composer audit --locked --abandoned=report            # informational
+
+npm audit --omit=dev --audit-level=high               # blocking
+npm audit                                             # informational
+```
+
+Only **production** dependencies block. An advisory in PHPUnit, Pint or
+Vite is a build-machine concern, not something a visitor to the contest
+site can reach, and a red PR the morning of an event costs more than it
+protects. The full tree is still reported in the log.
+
+`--locked` audits the lock file rather than whatever is in `vendor/`, so
+the thing measured is the thing that deploys.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
