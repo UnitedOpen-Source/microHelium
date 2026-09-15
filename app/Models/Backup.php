@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Helium\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,9 +33,18 @@ class Backup extends Model
         return $this->belongsTo(Site::class);
     }
 
+    /**
+     * Found by PHPStan: this named `User::class` with no import at all, so
+     * inside namespace App\Models it resolved to App\Models\User -- a
+     * class that has never existed here. The user model is Helium\User,
+     * imported above, and its primary key is `user_id`, which is why the
+     * relation names both keys. Reading `$backup->user` was a fatal
+     * "Class not found", on a model BackupService writes on every backup,
+     * and nothing in the suite ever read it.
+     */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
     public function getFilePath(): string

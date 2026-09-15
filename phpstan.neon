@@ -1,0 +1,35 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    # Level 1, and the level is the whole decision, so it is written down.
+    #
+    # Level 0 found fifteen problems and every one of them was real: a
+    # relation on a live model pointing at a class that does not exist
+    # (App\Models\User, when the user model is Helium\User -- reading
+    # $backup->user was a fatal), two env() calls that stop working the
+    # moment `config:cache` runs, and three dead Laravel-5-era classes that
+    # could not even be loaded. All fifteen are fixed in the commit that
+    # added this file; there is no baseline, deliberately. A baseline says
+    # "these errors are acceptable", and then nobody reads them again.
+    #
+    # Level 1 costs one more fix. Level 2 is 115 errors, and they are not
+    # 115 separate problems: 113 of them are one root cause, counted rather
+    # than guessed at --
+    #
+    #     76  property.notFound      ($id x17, $name x11, $short_name x7 ...)
+    #     36  method.notFound        (getContestTime(), visibleTo(), ...)
+    #      2  staticMethod.notFound
+    #
+    # -- every one of them reading an attribute or calling a method on a
+    # value PHPStan infers as the generic Illuminate\Database\Eloquent\
+    # Model instead of the concrete model, because the relations and query
+    # methods it came through carry no generic annotation. That is one
+    # systematic fix across the model layer, not 115 fixes, and it is a
+    # piece of work in its own right rather than a side effect of turning
+    # the tool on. Raising the level is the follow-up; shipping a 115-entry
+    # baseline instead would not be.
+    level: 1
+
+    paths:
+        - app

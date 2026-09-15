@@ -68,6 +68,19 @@ jobs:
       - name: PHPUnit
         run: ./vendor/bin/phpunit --no-coverage --exclude-testsuite E2E
 
+      # SAST. Level 0 found fifteen problems on its first run and every one
+      # was real -- a relation on a live model pointing at a class that does
+      # not exist, two env() calls that stop working once `config:cache`
+      # runs, and three dead Laravel-5-era classes that could not be loaded
+      # at all. None of them could fail a test, because none of them ran.
+      #
+      # No baseline, deliberately: everything it found was fixed instead.
+      # A baseline says "these errors are acceptable" and then nobody reads
+      # the list again. The level is pinned in phpstan.neon with the reason
+      # for the number.
+      - name: PHPStan
+        run: composer analyse
+
       # Issue: SCA. The repository had no dependency audit anywhere -- not
       # in CI, not in a schedule -- so "are we shipping a known-vulnerable
       # package?" was a question nobody was asking. It is worth asking on a
