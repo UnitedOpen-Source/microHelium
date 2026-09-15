@@ -216,6 +216,16 @@ class WorkMaterialiser
         $absolute = storage_path('app/'.$relative);
 
         if (is_file($absolute) && hash_file('sha256', $absolute) === $sha256) {
+            // Issue #186 -- the mtime is what `judgehost:prune` reads, so it
+            // has to mean "last used" and not "first downloaded". Without
+            // this touch, the test data of a problem being judged all
+            // through a contest would age out from the moment it arrived
+            // and be deleted mid-event -- the cache would then refetch it,
+            // so nothing would break loudly, which is worse: the host would
+            // quietly stop being warm and nobody would connect the slowdown
+            // to a prune that ran at 3am.
+            @touch($absolute);
+
             return $relative;
         }
 
@@ -260,7 +270,8 @@ class WorkMaterialiser
 
     /**
      * Removes what was written for one run. The digest cache is deliberately
-     * left alone -- it is the thing worth keeping between runs.
+     * left alone -- it is the thing worth keeping between runs, and what
+     * bounds it instead is `judgehost:prune` (#186), by age since last use.
      */
     public function cleanup(int $runId): void
     {
