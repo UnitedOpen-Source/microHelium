@@ -54,6 +54,24 @@ A comprehensive **Hackathon and Programming Contest Management Platform** built 
 - **Node.js**: >= 20.x
 - **Composer**: >= 2.x
 
+### Network, for a multi-site contest
+
+**Every site needs a stable link to the central server, with redundancy.**
+microHelium is one installation: `site_id` is a column, not a deployment.
+A site that loses its link stops being able to submit, see the scoreboard
+or ask a clarification, and there is no local fallback — the server is in
+another city.
+
+This is a deliberate decision, not an oversight, and the evidence behind it
+is written up in [docs/specs/146-site-connectivity.md](docs/specs/146-site-connectivity.md).
+The short version: it is the same requirement the Maratona de Programação
+puts on its own sites (*"as sedes devem garantir o acesso à Internet com
+redundância"*), and DOMjudge documents the same limit in the same words --
+*"teams cannot submit or query the scoreboard if the network is down"*.
+BOCA's per-site installations do survive a partition, but the cost its own
+authors recorded is a second panel of judges per disconnected part of the
+network, which is a rules decision rather than a software one.
+
 ## Installation
 
 ### 1. Clone the Repository
