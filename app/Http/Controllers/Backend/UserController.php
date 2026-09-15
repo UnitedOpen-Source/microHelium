@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
 use App\Models\Site;
+use App\Services\ManagedAccountProvisioner;
 use Helium\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -194,4 +196,33 @@ class UserController extends Controller
 
         return redirect()->route('backend.users')->with('success', 'Usuario excluido com sucesso!');
     }
+
+    /**
+     * Issue #183 -- hand the person a one-time link instead of typing a
+     * password for them.
+     *
+     * The edit form above can set a password directly, and that is exactly
+     * why this exists: whoever types it then knows it, and has to say it
+     * across a room. This mints a link (ManagedAccountProvisioner::
+     * issuePasswordReset(), the same one-time machinery as #47's
+     * activation) and shows it once, so the account holder chooses their
+     * own password and nobody else ever sees it.
+     *
+     * Shown, not e-mailed: this application has never sent an e-mail, and a
+     * reset that needs SMTP working on a LAN contest host is a reset that
+     * fails when it is needed. The organiser is in the room.
+     */
+    public function resetLink(Request $request, User $user): RedirectResponse
+    {
+        $token = app(ManagedAccountProvisioner::class)->issuePasswordReset($user);
+
+        return back()->with('reset_link', [
+            'user' => $user->fullname ?: $user->username,
+            // Relative for the same reason activationPath() is: APP_URL is
+            // frequently wrong on a contest host, and a confidently wrong
+            // absolute link is worse than a path the organiser prefixes.
+            'url' => ManagedAccountProvisioner::activationPath($token),
+        ]);
+    }
+
 }
