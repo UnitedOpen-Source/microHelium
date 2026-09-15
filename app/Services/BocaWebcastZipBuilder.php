@@ -258,7 +258,9 @@ class BocaWebcastZipBuilder
         // broke this contest's export until manually deleted.
         $runs = Run::where('contest_id', $contest->id)
             ->whereIn('user_id', $teamIds)
-            ->with('answer')
+            // `contest` for issue #138's resultCode() gate -- eager, or the
+            // withheld check below is one query per run in the export.
+            ->with(['answer', 'contest:id,verification_required'])
             ->orderBy('id')
             ->get();
 
@@ -331,6 +333,16 @@ class BocaWebcastZipBuilder
     private function resultCode(Run $run): string
     {
         if ($run->status !== 'judged' || ! $run->answer) {
+            return '?';
+        }
+
+        // Issue #138. Exporting this ZIP is admin-only, but the artifact is
+        // not: it feeds a public webcast animator, which is a screen in the
+        // contest hall. '?' is already this format's "no verdict yet", so a
+        // withheld run needs no new encoding on the consumer side -- it
+        // simply has not been judged as far as the broadcast is concerned,
+        // and the next export after verification carries the real code.
+        if ($run->isVerdictWithheld()) {
             return '?';
         }
 

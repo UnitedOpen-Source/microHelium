@@ -847,6 +847,70 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /runs/{run}/verify:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    put:
+      tags: [Runs]
+      summary: Release a judged run's verdict to the team
+      description: >
+        Issue #138. The verification gate, modelled on DOMjudge: while the
+        run's contest has verification_required set, a judged run's verdict
+        is withheld from the team, from the scoreboard, from the balloon
+        queue and from the webcast export until a jury member verifies it.
+        Verifying records verified_at, verified_by and an optional
+        verify_comment, then recomputes the team's score cell -- the run
+        lands on the scoreboard with its ORIGINAL contest_time and the
+        penalty that implies, not the time of verification.
+
+        Judge/admin only (routes/api.php `role:judge,admin`), scoped to the
+        caller's own contest.
+
+        This endpoint deliberately accepts no answer_id. The verifier
+        confirms or rejudges; it cannot change a colleague's verdict in
+        place, because a verdict with two authors and a record of only one
+        is the artifact an appeal cannot work with. A verifier who
+        disagrees calls POST /runs/{run}/rejudge, which leaves a trail.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                verify_comment: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        "200":
+          description: Verified run, with the score recomputed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "403":
+          description: Caller is not a judge/admin, or the run is in another contest
+        "422":
+          description: The run has no verdict to verify yet
+    delete:
+      tags: [Runs]
+      summary: Revoke a run's verification
+      description: >
+        Issue #138. The undo half. Clears verified_at/verified_by/
+        verify_comment and recomputes the score cell, which withdraws the
+        run from the standings again -- attempts and penalty included. A
+        verification given in error has to be revocable, or the only way
+        back is a rejudge that throws away a correct verdict.
+
+        Judge/admin only, scoped to the caller's own contest.
+      responses:
+        "200":
+          description: Run with its verification cleared and the score recomputed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "403":
+          description: Caller is not a judge/admin, or the run is in another contest
+
   /contests/{contest}/scoreboard:
     parameters:
       - $ref: "#/components/parameters/ContestId"
@@ -2293,6 +2357,23 @@ components:
         judge_id: { type: integer, nullable: true }
         judged_time: { type: integer, nullable: true }
         auto_judge_result: { type: string, nullable: true }
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Issue #138. When a jury member released this verdict to the
+            team, or null if nobody has. Only meaningful while the run's
+            contest has verification_required set; with the gate off it
+            stays null on every run and nothing reads it.
+
+            For a caller who is not staff, a withheld run is returned with
+            answer_id, judge_id, judged_time, auto_judge_result and these
+            three verification fields all null and status reported as
+            "judging" -- the verdict is not merely hidden from the body,
+            the run is presented as still being evaluated, because it is.
+        verified_by: { type: integer, nullable: true, description: "user_id of the jury member who verified (issue #138)." }
+        verify_comment: { type: string, nullable: true, description: "Free-text note left by the verifier (issue #138)." }
         created_at: { type: string, format: date-time }
 
     Clarification:

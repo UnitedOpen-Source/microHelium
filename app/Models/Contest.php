@@ -23,6 +23,7 @@ class Contest extends Model
         'is_active',
         'is_public',
         'is_practice',
+        'verification_required',
         'unlock_key',
     ];
 
@@ -31,6 +32,10 @@ class Contest extends Model
         'is_active' => 'boolean',
         'is_public' => 'boolean',
         'is_practice' => 'boolean',
+        // Issue #138 -- DOMjudge's "Is manual verification of judgings by
+        // jury required before publication?", per contest rather than per
+        // installation (see the migration for why).
+        'verification_required' => 'boolean',
     ];
 
     /**

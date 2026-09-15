@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Helium\User;
 
 class Run extends Model
 {
@@ -34,10 +35,9 @@ class Run extends Model
         'reconcile_attempts',
         'judge_id',
         'judge_site_id',
-        'answer1_id',
-        'judge1_id',
-        'answer2_id',
-        'judge2_id',
+        'verified_at',
+        'verified_by',
+        'verify_comment',
         'auto_judge_ip',
         'auto_judge_start',
         'auto_judge_end',
@@ -51,6 +51,8 @@ class Run extends Model
         'auto_judge_end' => 'datetime',
         // Issue #53: the lease reaper compares this against now().
         'claimed_at' => 'datetime',
+        // Issue #138: null means "no jury member has released this verdict".
+        'verified_at' => 'datetime',
     ];
 
     public function contest(): BelongsTo
@@ -99,6 +101,102 @@ class Run extends Model
     public function judgeSite(): BelongsTo
     {
         return $this->belongsTo(Site::class, 'judge_site_id');
+    }
+
+    /**
+     * Issue #138 -- the jury member who released this verdict to the team.
+     *
+     * Deliberately not the same column as judge_id: DOMjudge's verifier and
+     * its judge are different people by design, and which one signed which
+     * half is the whole point of keeping a record.
+     */
+    public function verifier(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by', 'user_id');
+    }
+
+    public function isVerified(): bool
+    {
+        return $this->verified_at !== null;
+    }
+
+    /**
+     * Issue #138 -- is this run's verdict still being held back from the
+     * people competing?
+     *
+     * Two conditions, and the contest half is the one that makes this safe
+     * to ask everywhere: with verification_required off (the default) this
+     * is always false, so every call site below behaves exactly as it did
+     * before the gate existed.
+     *
+     * A soft-deleted contest resolves ->contest to null; treat that as "no
+     * gate" rather than as "withhold forever", matching how the rest of the
+     * codebase reads a null contest (JudgeController::judge()'s
+     * `$run->contest?->getContestTime() ?? 0`).
+     */
+    public function isVerdictWithheld(): bool
+    {
+        if (! $this->contest?->verification_required) {
+            return false;
+        }
+
+        return ! $this->isVerified();
+    }
+
+    /**
+     * Issue #138 -- may this viewer be shown this run's verdict?
+     *
+     * One definition, used by every team-facing path, because the audit for
+     * this issue found the codebase already has two incompatible ideas of
+     * "staff": Api\RunController and SubmissionController ask
+     * `! isAdmin() && ! isJudge()`, while ScoreboardController::
+     * applySiteVisibility() also lets staff, site and spectator accounts
+     * through. Picking one here is what stops the gate drifting the way
+     * #134/#135 describe.
+     *
+     * The line drawn: the people running the event (admin, judge, staff,
+     * site) see every verdict the moment it exists -- that is their job, and
+     * verifying one requires seeing it. Everyone else waits: teams, of
+     * course, but also `score` spectator accounts and anonymous visitors,
+     * because a projector in the contest hall and the public scoreboard are
+     * how a withheld verdict would reach the team anyway. A null viewer is
+     * therefore NOT privileged; that also covers the webcast credential
+     * (App\Http\Middleware\AuthenticateWebcastCredential never calls
+     * Auth::login(), so auth()->user() is null on that route), which is a
+     * broadcast and the last place an unreleased verdict should surface.
+     */
+    public function verdictVisibleTo(?User $viewer): bool
+    {
+        if (! $this->isVerdictWithheld()) {
+            return true;
+        }
+
+        return self::viewerSeesWithheldVerdicts($viewer);
+    }
+
+    /**
+     * The viewer half of verdictVisibleTo(), as a static, because two of
+     * the team-facing screens never build a Run at all:
+     * SubmissionController::index() and HomeController::index() read runs
+     * through DB::table() joins, so they need the same rule without the
+     * model. One definition, asked two ways -- the alternative is the same
+     * predicate written out three times, which is how gates come apart.
+     */
+    public static function viewerSeesWithheldVerdicts(?User $viewer): bool
+    {
+        return (bool) ($viewer?->isAdmin() || $viewer?->isJudge() || $viewer?->isStaff() || $viewer?->isSite());
+    }
+
+    /**
+     * Issue #138 -- does this run count towards the standings yet?
+     *
+     * A verdict withheld from a team must not be scored for them either: a
+     * rank that moves is a verdict announcement. Score::recomputeFor() is
+     * the only caller, and it is the only place the standings are built.
+     */
+    public function countsTowardsScore(): bool
+    {
+        return $this->isJudged() && ! $this->isVerdictWithheld();
     }
 
     public function getSourcePath(): string
