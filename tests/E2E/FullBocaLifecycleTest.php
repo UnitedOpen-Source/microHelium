@@ -164,6 +164,7 @@ class FullBocaLifecycleTest extends TestCase
 
         $manualJudgeResponse = $this->actingAs($judge)->post("/judge/runs/{$run->id}", [
             'answer_id' => $wrongAnswer->id,
+            'password' => 'password',
         ]);
         $manualJudgeResponse->assertRedirect(route('judge.runs'));
         $this->assertDatabaseHas('runs', ['id' => $run->id, 'answer_id' => $wrongAnswer->id, 'judge_id' => $judge->user_id]);

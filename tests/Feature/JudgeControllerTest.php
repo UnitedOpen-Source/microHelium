@@ -64,6 +64,7 @@ class JudgeControllerTest extends TestCase
 
         $response = $this->actingAs($judge)->post("/judge/runs/{$run->id}", [
             'answer_id' => $accepted->id,
+            'password' => 'password',
         ]);
 
         $response->assertRedirect(route('judge.runs'));
@@ -110,6 +111,7 @@ class JudgeControllerTest extends TestCase
 
         $response = $this->actingAs($judge)->post("/judge/runs/{$otherRun->id}", [
             'answer_id' => $otherAnswer->id,
+            'password' => 'password',
         ]);
 
         $response->assertStatus(403);
@@ -140,6 +142,7 @@ class JudgeControllerTest extends TestCase
         // count the attempt in Score -- must be rejected.
         $response = $this->actingAs($judge)->post("/judge/runs/{$run->id}", [
             'answer_id' => $wrong->id,
+            'password' => 'password',
         ]);
 
         $response->assertRedirect();

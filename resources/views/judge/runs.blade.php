@@ -79,6 +79,14 @@
                                         <option value="{{ $answer->id }}">{{ $answer->name }}</option>
                                     @endforeach
                                 </select>
+                                {{-- Issue #201: os requisitos de CCS exigem autenticacao
+                                     separada A CADA veredito manual. Nao e o invasor
+                                     remoto que isto detem: e a estacao da banca aberta
+                                     numa sala com gente passando. --}}
+                                <input type="password" name="password" required autocomplete="current-password"
+                                       aria-label="Sua senha, para confirmar o veredito da submissão {{ $run->run_number }}"
+                                       placeholder="Sua senha"
+                                       class="text-sm px-2 py-1.5 w-32 bg-background border border-border rounded-lg">
                                 <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary-hover transition-colors">
                                     Confirmar
                                 </button>

@@ -251,6 +251,12 @@ class RunController extends Controller
             'answer_id' => 'required|exists:answers,id',
         ]);
 
+        // Issue #201 -- same gate as the web door. A token is "who you were
+        // when it was issued"; this asks who you are now.
+        $this->assertReauthenticated($request);
+
+        $previous = $run->answer;
+
         $answer = Answer::findOrFail($validated['answer_id']);
         $this->assertAnswerBelongsToRunsContest($answer, $run);
 
@@ -267,10 +273,8 @@ class RunController extends Controller
         // Update score
         Score::updateScore($run);
 
-        ContestLog::info($run->contest_id, "Run #{$run->run_number} manually judged", [
-            'judge_id' => auth()->id(),
-            'answer_id' => $validated['answer_id'],
-        ]);
+        // Issue #201 -- registro proprio da troca, com o antes e o depois.
+        $this->recordManualVerdict($run, $previous, $answer, $request->input('reason'));
 
         return response()->json($run->load('answer'));
     }

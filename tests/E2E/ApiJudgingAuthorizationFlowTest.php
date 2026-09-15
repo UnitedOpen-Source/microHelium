@@ -61,7 +61,7 @@ class ApiJudgingAuthorizationFlowTest extends TestCase
         $this->assertDatabaseHas('runs', ['id' => $runId, 'status' => 'pending']);
 
         // --- The team cannot judge or rejudge its own run -----------------
-        $this->putJson("/api/runs/{$runId}/judge", ['answer_id' => $accepted->id])
+        $this->putJson("/api/runs/{$runId}/judge", ['answer_id' => $accepted->id, 'password' => 'password'])
             ->assertStatus(403);
         $this->postJson("/api/runs/{$runId}/rejudge")
             ->assertStatus(403);
@@ -69,14 +69,14 @@ class ApiJudgingAuthorizationFlowTest extends TestCase
 
         // --- A judge assigned to an unrelated contest is also blocked -----
         Sanctum::actingAs($judgeB);
-        $this->putJson("/api/runs/{$runId}/judge", ['answer_id' => $accepted->id])
+        $this->putJson("/api/runs/{$runId}/judge", ['answer_id' => $accepted->id, 'password' => 'password'])
             ->assertStatus(403);
         $this->assertDatabaseHas('runs', ['id' => $runId, 'status' => 'pending']);
 
         // --- The run's own contest judge can judge it, and it really flows
         //     through to Score/Leaderboard -----------------------------
         Sanctum::actingAs($judgeA);
-        $judgeResponse = $this->putJson("/api/runs/{$runId}/judge", ['answer_id' => $accepted->id]);
+        $judgeResponse = $this->putJson("/api/runs/{$runId}/judge", ['answer_id' => $accepted->id, 'password' => 'password']);
         $judgeResponse->assertStatus(200)->assertJsonPath('status', 'judged');
 
         $this->assertDatabaseHas('runs', [

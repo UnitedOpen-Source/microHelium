@@ -235,7 +235,7 @@ class RunControllerTest extends TestCase
         $answer = Answer::factory()->create(['contest_id' => $contest->id]);
         $admin = User::factory()->create(['user_type' => 'admin']);
         Sanctum::actingAs($admin);
-        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id, 'password' => 'password']);
         $response->assertStatus(200)->assertJsonPath('status', 'judged');
     }
 
@@ -258,7 +258,7 @@ class RunControllerTest extends TestCase
         $admin = User::factory()->create(['user_type' => 'admin']);
         Sanctum::actingAs($admin);
 
-        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $wrong->id]);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $wrong->id, 'password' => 'password']);
 
         $response->assertStatus(422);
         $this->assertDatabaseHas('runs', ['id' => $run->id, 'answer_id' => $accepted->id]);
@@ -275,7 +275,7 @@ class RunControllerTest extends TestCase
         $answer = Answer::factory()->create(); // different, unrelated contest
         $admin = User::factory()->create(['user_type' => 'admin']);
         Sanctum::actingAs($admin);
-        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id, 'password' => 'password']);
         $response->assertStatus(422);
     }
 
@@ -290,7 +290,7 @@ class RunControllerTest extends TestCase
         $answer = Answer::factory()->create(['contest_id' => $run->contest_id]);
         $judge = User::factory()->create(['user_type' => 'judge', 'contest_id' => Contest::factory()]);
         Sanctum::actingAs($judge);
-        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id, 'password' => 'password']);
         $response->assertStatus(403);
     }
 
@@ -317,7 +317,7 @@ class RunControllerTest extends TestCase
         $answer = Answer::factory()->create();
         $team = User::factory()->create(['user_type' => 'team']);
         Sanctum::actingAs($team);
-        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id]);
+        $response = $this->putJson("/api/runs/{$run->id}/judge", ['answer_id' => $answer->id, 'password' => 'password']);
         $response->assertStatus(403);
     }
 
