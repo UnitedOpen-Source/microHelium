@@ -34,6 +34,12 @@ class SecurityHeaders
      */
     public const NONCE_ATTRIBUTE = 'csp_nonce';
 
+    /**
+     * Must match `server.port` in vite.config.js, which sets strictPort so
+     * the dev server refuses to move off it.
+     */
+    private const VITE_DEV_PORT = 5173;
+
     public function handle(Request $request, Closure $next): Response
     {
         $nonce = Str::random(24);
@@ -104,11 +110,22 @@ class SecurityHeaders
 
         // Vite's dev server serves the module graph and opens a websocket for
         // hot reload; neither exists in a built deployment.
+        //
+        // The port is a constant, not env('VITE_PORT'), and PHPStan is what
+        // pointed at it. Two reasons, and the second is the real one:
+        // env() outside config/ returns null once `config:cache` has run,
+        // and -- more to the point -- vite.config.js pins the dev server
+        // with `port: 5173, strictPort: true`, so VITE_PORT never moved
+        // anything. Reading it here only created a way for the two halves
+        // to disagree: set VITE_PORT=5174 and the CSP would have allowed
+        // 5174 while Vite still served 5173, blocking the dev server for a
+        // reason nothing would explain. Moving the port means editing both
+        // files, which is the honest cost.
         if (app()->environment('local') && config('app.debug')) {
-            $devServer = 'http://localhost:'.env('VITE_PORT', 5173);
+            $devServer = 'http://localhost:'.self::VITE_DEV_PORT;
             $script[] = $devServer;
             $connect[] = $devServer;
-            $connect[] = 'ws://localhost:'.env('VITE_PORT', 5173);
+            $connect[] = 'ws://localhost:'.self::VITE_DEV_PORT;
         }
 
         return implode('; ', [
