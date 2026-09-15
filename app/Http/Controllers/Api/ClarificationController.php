@@ -18,6 +18,14 @@ class ClarificationController extends Controller
 
         $clarifications = Clarification::query()
             ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
+            // Issue #197 -- a banca filtra por mesa. Uma pergunta de
+            // teclado quebrado e uma sobre o enunciado do C vao para
+            // pessoas diferentes, e ate agora as duas caiam na mesma fila.
+            ->when(
+                in_array($request->get('category'), Clarification::CATEGORIES, true),
+                fn ($q) => $q->where('category', $request->get('category'))
+            )
+            ->when($request->filled('problem_id'), fn ($q) => $q->where('problem_id', $request->get('problem_id')))
             // Issue #134: the broadcast branch below had no contest
             // boundary of its own, so with no contest_id filter a team was
             // handed every broadcast_all clarification in the installation
@@ -50,6 +58,10 @@ class ClarificationController extends Controller
         $validated = $request->validate([
             'contest_id' => 'required|exists:contests,id',
             'problem_id' => 'nullable|exists:problems,id',
+            // Issue #197 -- para onde vai a pergunta. Um problema ja e a
+            // sua propria categoria (`problem_id`); estas tres sao o resto
+            // do conjunto que os requisitos de CCS pedem.
+            'category' => 'nullable|in:'.implode(',', Clarification::CATEGORIES),
             'question' => 'required|string|max:2000',
         ]);
 
@@ -70,7 +82,17 @@ class ClarificationController extends Controller
             'contest_id' => $contest->id,
             'site_id' => $user->site_id ?? $contest->sites()->first()->id,
             'user_id' => $user->user_id,
-            'problem_id' => $validated['problem_id'],
+            // `?? null` e obrigatorio, nao defensivo: uma regra `nullable`
+            // cujo campo nao foi enviado NAO aparece em $validated, entao
+            // ler a chave direto e um ErrorException -- HTTP 500. Ou seja,
+            // qualquer pergunta que nao fosse sobre um problema derrubava o
+            // endpoint, e e exatamente a pergunta que esta issue categoriza.
+            // Nenhum teste pegava: o unico teste de sucesso sempre mandava
+            // problem_id, e o que o omite espera 422 e para antes daqui.
+            'problem_id' => $validated['problem_id'] ?? null,
+            // Uma pergunta sobre problema vale pela categoria do proprio
+            // problema; sem problema, o padrao e `general`.
+            'category' => $validated['category'] ?? Clarification::CATEGORY_GENERAL,
             'clarification_number' => Clarification::getNextClarificationNumber(
                 $contest->id,
                 $user->site_id ?? 1
@@ -82,7 +104,8 @@ class ClarificationController extends Controller
 
         ContestLog::info($contest->id, "Clarification #{$clarification->clarification_number} submitted", [
             'user_id' => $user->user_id,
-            'problem_id' => $validated['problem_id'],
+            'problem_id' => $clarification->problem_id,
+            'category' => $clarification->category,
         ]);
 
         return response()->json($clarification->load('problem'), 201);
@@ -164,10 +187,24 @@ class ClarificationController extends Controller
         $clarifications = Clarification::query()
             ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
             ->where('status', 'pending')
+            // Issue #197 -- a fila da banca filtra por mesa.
+            ->when(
+                in_array($request->get('category'), Clarification::CATEGORIES, true),
+                fn ($q) => $q->where('category', $request->get('category'))
+            )
+            ->when($request->filled('problem_id'), fn ($q) => $q->where('problem_id', $request->get('problem_id')))
             ->with(['problem:id,short_name,name', 'user:user_id,fullname'])
             ->orderBy('created_at')
             ->get();
 
-        return response()->json($clarifications);
+        // Issue #197 -- as respostas prontas viajam com a fila, e nao numa
+        // rota propria: quem abre a fila e exatamente quem vai usa-las, e
+        // uma segunda requisicao para buscar cinco frases fixas seria
+        // trabalho sem retorno.
+        return response()->json([
+            'data' => $clarifications,
+            'predefined_answers' => config('clarifications.predefined_answers', []),
+            'categories' => Clarification::CATEGORIES,
+        ]);
     }
 }

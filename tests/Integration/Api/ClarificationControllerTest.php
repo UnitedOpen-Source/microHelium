@@ -102,6 +102,28 @@ class ClarificationControllerTest extends TestCase
         $response->assertStatus(201)->assertJsonPath('question', $data['question']);
     }
 
+    /**
+     * A pergunta que nao e sobre problema nenhum -- "meu teclado quebrou",
+     * "que horas acaba" -- respondia 500.
+     *
+     * `problem_id` e `nullable`, e uma regra `nullable` cujo campo nao foi
+     * enviado nao entra em $validated; o controller lia a chave direto.
+     * O teste de sucesso acima sempre mandou problem_id e o de contest
+     * fechado para no 422 antes de chegar la, entao o caminho ficou sem
+     * cobertura desde que existe. Ver issue #197.
+     */
+    public function test_store_clarification_without_a_problem()
+    {
+        $contest = Contest::factory()->has(Site::factory())->create(['is_active' => true, 'start_time' => now()]);
+        $user = User::factory()->create(['site_id' => $contest->sites()->first()->id]);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/clarifications', [
+            'contest_id' => $contest->id,
+            'question' => 'Meu teclado parou de funcionar.',
+        ])->assertStatus(201)->assertJsonPath('problem_id', null);
+    }
+
     public function test_store_fails_if_contest_not_running()
     {
         $contest = Contest::factory()->create(['is_active' => false]);
@@ -220,6 +242,11 @@ class ClarificationControllerTest extends TestCase
         Clarification::factory()->count(2)->create(['contest_id' => $contest->id, 'status' => 'answered']);
         Sanctum::actingAs($judge);
         $response = $this->getJson("/api/clarifications/pending?contest_id={$contest->id}");
-        $response->assertStatus(200)->assertJsonCount(3);
+        // 'data', e nao a raiz. A raiz passou a ser um envelope com tres
+        // chaves (data, predefined_answers, categories) na issue #197, e
+        // assertJsonCount(3) sobre ela continuou verde contando o envelope
+        // -- tres chaves, tres pendentes, mesmo numero por coincidencia.
+        // Passaria com zero clarificacoes no banco.
+        $response->assertStatus(200)->assertJsonCount(3, 'data');
     }
 }
