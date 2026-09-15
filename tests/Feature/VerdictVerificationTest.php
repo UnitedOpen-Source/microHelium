@@ -247,6 +247,73 @@ class VerdictVerificationTest extends TestCase
         $this->assertSame(0, (int) $score->attempts);
     }
 
+    /**
+     * Judging order versus submission order, with the gate OFF.
+     *
+     * This is the one place the recompute does NOT reproduce what the
+     * accumulating version produced, and it is worth pinning because the
+     * old answer was wrong. Old behaviour: the first run to be JUDGED won
+     * the cell, and once solved it returned early, so a wrong answer
+     * submitted earlier but judged later never cost its penalty. New
+     * behaviour: the cell is a function of the runs ordered by
+     * contest_time, which is what ICPC counts.
+     *
+     * Not an exotic case. Judging out of submission order is what happens
+     * on a rejudge, on a run a human judges by hand, and -- routinely --
+     * whenever more than one judgehost is pulling work (#53).
+     */
+    public function test_a_wrong_answer_judged_after_the_solve_still_costs_its_penalty(): void
+    {
+        $this->contest->update(['verification_required' => false]);
+
+        $team = $this->team();
+
+        // Submitted second, judged first.
+        $this->judgedRun($team, accepted: true, contestTime: 1200);
+
+        $solvedOnly = $this->scoreFor($team);
+        $this->assertSame(1, (int) $solvedOnly->attempts);
+        $this->assertSame(0, (int) $solvedOnly->penalty_time);
+
+        // Submitted FIRST, judged second. The accumulating version returned
+        // early here because the cell was already solved, and this attempt
+        // -- and its 20 minutes -- vanished.
+        $this->judgedRun($team, accepted: false, contestTime: 600);
+
+        $score = $this->scoreFor($team);
+
+        $this->assertSame(2, (int) $score->attempts, 'the earlier wrong answer was not counted');
+        $this->assertSame(20, (int) $score->penalty_time, 'the team kept a penalty it had not earned');
+        $this->assertTrue((bool) $score->is_solved);
+        $this->assertSame(20, (int) $score->solved_time, 'the solve time moved; it is the AC that sets it');
+    }
+
+    /**
+     * The other place the recompute changes an answer with the gate off,
+     * and again the old one was wrong: `if ($score->is_solved) return;` made
+     * a solved cell permanent. A judge who rejudged an accepted run to
+     * WRONG ANSWER -- which is the whole reason rejudging exists -- left the
+     * team solved on the scoreboard for the rest of the contest.
+     */
+    public function test_rejudging_an_accepted_run_to_wrong_answer_takes_the_solve_away(): void
+    {
+        $this->contest->update(['verification_required' => false]);
+
+        $team = $this->team();
+        $run = $this->judgedRun($team, accepted: true, contestTime: 600);
+
+        $this->assertTrue((bool) $this->scoreFor($team)->is_solved);
+
+        $run->update(['answer_id' => $this->wrong->id]);
+        Score::updateScore($run->fresh());
+
+        $score = $this->scoreFor($team);
+
+        $this->assertFalse((bool) $score->is_solved, 'the cell stayed solved after the AC was taken away');
+        $this->assertSame(0, (int) $score->penalty_time);
+        $this->assertFalse((bool) $score->is_first_solver, 'the first-solve claim outlived the solve');
+    }
+
     public function test_with_verification_switched_off_a_judged_run_scores_immediately_as_it_always_did(): void
     {
         // The gate is opt-in per contest. A practice contest, or any event

@@ -81,7 +81,15 @@ class Score extends Model
      * "reappears with its original contest time and penalty the moment it
      * is verified" is true by construction and not by careful bookkeeping.
      * With verification_required off the countable set is every judged run,
-     * and the result is identical to what the accumulating version produced.
+     * and the result matches the accumulating version wherever runs were
+     * judged in the order they were submitted. Where it does NOT match, the
+     * old answer was wrong: the accumulating version let the first run to
+     * be JUDGED win the cell and then returned early, so a wrong answer
+     * submitted before the accepted one but judged after it never cost its
+     * penalty. That is not an exotic case -- it is what a rejudge, a
+     * hand-judged run, and any contest with more than one judgehost (#53)
+     * produce routinely. Pinned by
+     * VerdictVerificationTest::test_a_wrong_answer_judged_after_the_solve_still_costs_its_penalty.
      *
      * Ordered by contest_time (then id, to break ties deterministically):
      * ICPC penalties are counted in submission order. The old code counted
