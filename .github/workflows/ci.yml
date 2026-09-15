@@ -68,6 +68,38 @@ jobs:
       - name: PHPUnit
         run: ./vendor/bin/phpunit --no-coverage --exclude-testsuite E2E
 
+      # Issue: SCA. The repository had no dependency audit anywhere -- not
+      # in CI, not in a schedule -- so "are we shipping a known-vulnerable
+      # package?" was a question nobody was asking. It is worth asking on a
+      # contest server: it holds every team's source code, and a vulnerable
+      # Laravel or Guzzle is a way into that.
+      #
+      # Measured before adding: at the time this was written, zero
+      # advisories matched any installed version, npm and Composer alike.
+      # The gate exists so that staying clean does not depend on someone
+      # remembering to check.
+      #
+      # --locked audits the lock file rather than whatever happens to be in
+      # vendor/, so this measures what actually deploys.
+      #
+      # --no-dev is the deliberate narrowing. A dev-only advisory (PHPUnit,
+      # Pint, Whoops) is not reachable by a request to the running
+      # application, and blocking a contest fix on one -- possibly the
+      # morning of an event -- costs more than it protects. The dev half is
+      # still reported, in the informational step below.
+      #
+      # --abandoned=ignore because an abandoned package is a maintenance
+      # signal, not a vulnerability, and turning one into a red PR trains
+      # people to ignore this step.
+      - name: Dependency audit (production, blocking)
+        run: composer audit --locked --no-dev --abandoned=ignore
+
+      # Everything, dev included, reported and not enforced. Visible in the
+      # log when someone goes looking, without the power to stop a release.
+      - name: Dependency audit (including dev, informational)
+        continue-on-error: true
+        run: composer audit --locked --abandoned=report --format=summary
+
       # Scoped to files this change ADDS, deliberately. 278 of the repo's
       # 363 PHP files predate Pint, so a repo-wide --test fails today and
       # even an all-changed-files check would redden a PR over formatting it
@@ -208,6 +240,17 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # Same split as the backend job above: production dependencies block,
+      # the full tree is reported. --omit=dev because an advisory in vite or
+      # playwright is a build-machine concern, not something a visitor to
+      # the contest site can reach.
+      - name: Dependency audit (production, blocking)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Dependency audit (including dev, informational)
+        continue-on-error: true
+        run: npm audit
 
       - run: npm run test:frontend
 
