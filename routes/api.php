@@ -175,6 +175,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('contests', ContestController::class)->only(['store', 'update', 'destroy']);
         Route::post('/contests/{contest}/activate', [ContestController::class, 'activate']);
         Route::post('/contests/{contest}/deactivate', [ContestController::class, 'deactivate']);
+        // Issue #189 -- revelar o placar final. E a cerimonia, e por isso
+        // fica com o admin junto do resto do ciclo de vida do evento: um
+        // juiz julga a prova que lhe deram, nao decide quando o resultado
+        // vira publico.
+        Route::post('/contests/{contest}/unfreeze', [ContestController::class, 'unfreeze']);
     });
 });
 

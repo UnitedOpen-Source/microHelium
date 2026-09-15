@@ -131,6 +131,9 @@ class ApiRouteAuthorizationTest extends TestCase
         'DELETE api/contests/{contest}',
         'POST api/contests/{contest}/activate',
         'POST api/contests/{contest}/deactivate',
+        // Issue #189: revelar o placar final e a cerimonia -- fica com o
+        // admin, junto do resto do ciclo de vida do evento.
+        'POST api/contests/{contest}/unfreeze',
         'GET api/contests/{contest}/scoreboard/export',
         'GET api/contests/{contest}/statistics',
         'GET api/clarifications/pending',
