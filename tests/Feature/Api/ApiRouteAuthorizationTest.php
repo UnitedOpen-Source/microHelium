@@ -148,6 +148,12 @@ class ApiRouteAuthorizationTest extends TestCase
         'GET api/problems/{problem}/test-cases',
         'POST api/runs/{run}/rejudge',
         'PUT api/runs/{run}/judge',
+        // Issue #138: verifying is what publishes a verdict to the teams.
+        // A competitor token that reached either of these could release its
+        // own withheld verdict -- or hide a rival's -- which is a strictly
+        // worse hole than reading the verdict early.
+        'PUT api/runs/{run}/verify',
+        'DELETE api/runs/{run}/verify',
     ];
 
     public function test_every_sanctum_api_route_is_classified(): void

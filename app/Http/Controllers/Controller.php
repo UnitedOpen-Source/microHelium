@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Answer;
 use App\Models\Contest;
+use App\Models\ContestLog;
 use App\Models\Run;
+use App\Models\Score;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
@@ -116,6 +118,133 @@ class Controller extends BaseController
         if ($answer->contest_id !== $run->contest_id) {
             abort(422, 'Essa resposta nao pertence ao contest desta submissao.');
         }
+    }
+
+    /**
+     * Issue #138 -- release a judged verdict to the team, and record who
+     * released it.
+     *
+     * Shared by JudgeController::verify() (web) and Api\RunController::
+     * verify() (API), the same way judge() is shared, so the two doors
+     * cannot drift on what verifying means.
+     *
+     * Note what this does NOT accept: a new answer_id. DOMjudge's
+     * verifyAction writes only verified / jury_member / verify_comment and
+     * offers the verifier no way to change the verdict, and that is the
+     * behaviour worth copying. A verifier who disagrees rejudges: a rejudge
+     * puts the run back through judging and leaves a trail (the run returns
+     * to `pending`, a ContestLog entry is written, the next verdict carries
+     * its own judge_id). Letting the second pair of eyes overwrite the
+     * first pair's answer in place would produce the one artefact a contest
+     * appeal cannot work with -- a verdict with two authors and a record of
+     * only one.
+     *
+     * Only a judged run can be verified. Verifying a pending one would
+     * leave verified_at set when the verdict finally lands, which is
+     * exactly the pre-approval the rejudge reset above exists to prevent.
+     */
+    protected function markRunVerified(Run $run, ?string $comment): void
+    {
+        $run->update([
+            'verified_at' => now(),
+            'verified_by' => auth()->id(),
+            'verify_comment' => $comment,
+        ]);
+
+        // The verdict only now becomes countable, so the cell has to be
+        // rebuilt -- with the run's ORIGINAL contest_time, which is what
+        // makes a released verdict land on the scoreboard at the minute the
+        // team actually submitted rather than the minute a judge got to it.
+        Score::recomputeFor($run);
+
+        ContestLog::info($run->contest_id, "Run #{$run->run_number} verdict verified", [
+            'run_id' => $run->id,
+            'verified_by' => auth()->id(),
+            'answer_id' => $run->answer_id,
+        ]);
+    }
+
+    /**
+     * Issue #138 -- take a verdict back off the board.
+     *
+     * The undo half of markRunVerified(): a verification given in error has
+     * to be revocable, or the only way back is a rejudge that discards a
+     * correct verdict. Recomputing here is what withdraws the run from the
+     * standings again, attempts and penalty included.
+     */
+    protected function markRunUnverified(Run $run): void
+    {
+        $run->update([
+            'verified_at' => null,
+            'verified_by' => null,
+            'verify_comment' => null,
+        ]);
+
+        Score::recomputeFor($run);
+
+        ContestLog::info($run->contest_id, "Run #{$run->run_number} verdict verification revoked", [
+            'run_id' => $run->id,
+            'revoked_by' => auth()->id(),
+        ]);
+    }
+
+    /**
+     * Issue #138 -- hand back a run with its verdict removed when the
+     * viewer is not yet entitled to it.
+     *
+     * Hiding `answer` alone is not hiding the verdict. The audit for this
+     * issue found four other attributes on the same row that answer the
+     * same question: `answer_id`, `judged_time` and `judge_id` say a
+     * verdict exists and who gave it, and `auto_judge_result` / `stdout` /
+     * `stderr` frequently contain it in words. `status` is rewritten to
+     * `judging` rather than left at `judged` because "judged, verdict
+     * unknown" is a state no client models -- and it is also true: the run
+     * IS still being evaluated, by the person who has to release it.
+     *
+     * The verification metadata goes too. A team that can see
+     * `verified_at = null` on its own run can tell a withheld verdict from
+     * a queue that is merely slow, and DOMjudge is explicit that an
+     * unverified judging is simply not there as far as the team is
+     * concerned.
+     *
+     * READ PATHS ONLY. This overwrites attributes on the in-memory model;
+     * saving one afterwards would write the mask to the database. Every
+     * caller here renders or serialises and then discards.
+     */
+    protected function maskWithheldVerdict(Run $run): Run
+    {
+        if ($run->verdictVisibleTo(auth()->user())) {
+            return $run;
+        }
+
+        // The relations too, when they were eager-loaded: a serialised
+        // `answer` object or a `judge` name reinstates everything the
+        // attributes below just removed.
+        if ($run->relationLoaded('answer')) {
+            $run->setRelation('answer', null);
+        }
+
+        if ($run->relationLoaded('judge')) {
+            $run->setRelation('judge', null);
+        }
+
+        if ($run->relationLoaded('verifier')) {
+            $run->setRelation('verifier', null);
+        }
+
+        $run->answer_id = null;
+        $run->status = 'judging';
+        $run->judged_time = null;
+        $run->judge_id = null;
+        $run->judge_site_id = null;
+        $run->auto_judge_result = null;
+        $run->auto_judge_stdout = null;
+        $run->auto_judge_stderr = null;
+        $run->verified_at = null;
+        $run->verified_by = null;
+        $run->verify_comment = null;
+
+        return $run;
     }
 
     /**

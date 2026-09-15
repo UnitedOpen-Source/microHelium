@@ -26,9 +26,15 @@ class RunController extends Controller
         $runs = Run::query()
             ->when($contestId, fn ($q) => $q->where('contest_id', $contestId))
             ->when(! $user->isAdmin() && ! $user->isJudge(), fn ($q) => $q->where('user_id', $user->user_id))
-            ->with(['problem:id,short_name,name', 'language:id,name', 'answer:id,name,short_name,is_accepted', 'user:user_id,fullname'])
+            ->with(['problem:id,short_name,name', 'language:id,name', 'answer:id,name,short_name,is_accepted', 'user:user_id,fullname', 'contest:id,verification_required'])
             ->orderByDesc('created_at')
             ->paginate(20);
+
+        // Issue #138: the row-level scoping above already narrowed a team to
+        // its OWN runs -- and its own withheld verdict is exactly the one
+        // this gate exists to hold back, so scoping is not the same as
+        // masking. Staff fall through untouched (Run::verdictVisibleTo()).
+        $runs->getCollection()->transform(fn (Run $run) => $this->maskWithheldVerdict($run));
 
         return response()->json($runs);
     }
@@ -131,9 +137,9 @@ class RunController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        $run->load(['problem', 'language', 'answer', 'user', 'judge']);
+        $run->load(['problem', 'language', 'answer', 'user', 'judge', 'contest']);
 
-        return response()->json($run);
+        return response()->json($this->maskWithheldVerdict($run));
     }
 
     public function downloadSource(Run $run): StreamedResponse
@@ -158,6 +164,15 @@ class RunController extends Controller
             'answer_id' => null,
             'judge_id' => null,
             'judged_time' => null,
+            // Issue #138: a rejudge throws the verdict away, so the
+            // signature that released it has to go with it. Leaving
+            // verified_at set would mean the NEXT verdict -- produced by a
+            // different judging, possibly against different test data --
+            // arrives pre-approved, carrying a jury member's name it was
+            // never shown to.
+            'verified_at' => null,
+            'verified_by' => null,
+            'verify_comment' => null,
             'auto_judge_ip' => null,
             'auto_judge_start' => null,
             'auto_judge_end' => null,
@@ -176,6 +191,50 @@ class RunController extends Controller
         ]);
 
         return response()->json(['message' => 'Run marked for rejudging', 'run' => $run]);
+    }
+
+    /**
+     * PUT /api/runs/{run}/verify -- issue #138.
+     *
+     * The DOMjudge verification gate: "If verification is required, a judge
+     * inspects the judging. Only after it has been approved (marked as
+     * verified) will the result be visible outside the jury interface."
+     *
+     * Any judge/admin may verify, including the one who judged it -- same as
+     * DOMjudge, which puts no separation-of-duty rule on this. The value is
+     * in the second look being recorded, not in policing who took it.
+     *
+     * No answer_id is accepted here; see Controller::markRunVerified().
+     */
+    public function verify(Request $request, Run $run): JsonResponse
+    {
+        $this->authorizeRunAccess($run);
+
+        $validated = $request->validate([
+            'verify_comment' => 'nullable|string|max:2000',
+        ]);
+
+        if (! $run->isJudged()) {
+            return response()->json([
+                'error' => "Run #{$run->run_number} ainda nao tem veredito para verificar.",
+            ], 422);
+        }
+
+        $this->markRunVerified($run, $validated['verify_comment'] ?? null);
+
+        return response()->json($run->fresh()->load('answer'));
+    }
+
+    /**
+     * DELETE /api/runs/{run}/verify -- issue #138, the undo.
+     */
+    public function unverify(Run $run): JsonResponse
+    {
+        $this->authorizeRunAccess($run);
+
+        $this->markRunUnverified($run);
+
+        return response()->json($run->fresh()->load('answer'));
     }
 
     public function judge(Request $request, Run $run): JsonResponse

@@ -274,14 +274,25 @@ class PracticeController extends Controller
             ->orderByDesc('id')
             ->paginate(self::PER_PAGE);
 
-        $items = collect($page->items())->map(function (Run $run) {
-            $verdict = $run->answer?->short_name;
+        $items = collect($page->items())->map(function (Run $run) use ($contest, $request) {
+            // Issue #138. A practice contest has no jury on standby, so
+            // verification_required is false here in every realistic
+            // installation and this branch never fires -- it is written
+            // anyway because "this code path cannot happen" is how the
+            // dead answer2_id columns got there in the first place. If an
+            // operator does turn the gate on for practice, the history must
+            // honour it like every other team-facing list.
+            $withheld = $contest->verification_required
+                && $run->verified_at === null
+                && ! Run::viewerSeesWithheldVerdicts($request->user());
+
+            $verdict = $withheld ? null : $run->answer?->short_name;
 
             return [
                 'id' => (int) $run->id,
                 'problem_name' => (string) ($run->problem?->name ?? 'Problema removido'),
                 'language_name' => (string) ($run->language?->name ?? 'Linguagem removida'),
-                'status' => (string) $run->status,
+                'status' => $withheld ? 'judging' : (string) $run->status,
                 'verdict' => $verdict,
                 'created_at' => $run->created_at?->toIso8601String(),
                 'recovery_message' => $this->recoveryMessage($verdict),
@@ -346,6 +357,12 @@ class PracticeController extends Controller
             ->where('user_id', $user->user_id)
             ->whereIn('problem_id', $problemIds)
             ->whereHas('answer', fn ($query) => $query->where('is_accepted', true))
+            // Issue #138: a green "resolvido" tick is the accepted verdict,
+            // just drawn differently, so it waits for the same release.
+            ->when(
+                $contest->verification_required && ! Run::viewerSeesWithheldVerdicts($user),
+                fn ($query) => $query->whereNotNull('verified_at')
+            )
             ->distinct()
             ->pluck('problem_id')
             ->map(fn ($id) => (int) $id)

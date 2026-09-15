@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Contest;
 use App\Models\Problem;
+use App\Models\Run;
 use Helium\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +46,14 @@ class HomeController extends Controller
                 ->leftJoin('answers', 'runs.answer_id', '=', 'answers.id')
                 ->where('runs.contest_id', $contest->id)
                 ->where('answers.is_accepted', true)
+                // Issue #138: this counter is public (routes/web.php:39 has
+                // no auth) and it is per contest, so an unreleased AC would
+                // tick it up in front of the whole hall -- "somebody just
+                // solved something" is most of the verdict. Staff are not
+                // exempted here because the number is one figure shared by
+                // every viewer of one page; the judge screen is where staff
+                // see withheld work.
+                ->when($contest->verification_required, fn ($q) => $q->whereNotNull('runs.verified_at'))
                 ->count();
             $recentSubmissions = DB::table('runs')
                 ->leftJoin('users', 'runs.user_id', '=', 'users.user_id')
@@ -57,7 +66,35 @@ class HomeController extends Controller
                 ->orderBy('runs.created_at', 'desc')
                 ->limit(10)
                 ->get()
-                ->map(function ($submission) {
+                ->map(function ($submission) use ($contest) {
+                    // Issue #138. This list is OTHER teams' runs, on a page
+                    // anonymous visitors can open, so it is the widest
+                    // verdict disclosure on the site: a withheld verdict
+                    // shown here reaches the team it belongs to by way of
+                    // the projector. Masked for every viewer who is not
+                    // running the event (Run::viewerSeesWithheldVerdicts()).
+                    $withheld = $contest->verification_required
+                        && $submission->verified_at === null
+                        && ! Run::viewerSeesWithheldVerdicts(auth()->user());
+
+                    if ($withheld) {
+                        $submission->result = null;
+                        $submission->status = 'judging';
+                        $submission->answer_id = null;
+                        $submission->judged_time = null;
+                        $submission->auto_judge_result = null;
+                        // The select above is `runs.*`, so the judged
+                        // program's own output rides along -- and for a
+                        // wrong answer that output IS the verdict, readable
+                        // by anyone who opens the page. Found in review:
+                        // Controller::maskWithheldVerdict() and
+                        // SubmissionController::maskWithheldRow() already
+                        // cleared these two and this one did not, which is
+                        // the drift a shared rule is supposed to prevent.
+                        $submission->auto_judge_stdout = null;
+                        $submission->auto_judge_stderr = null;
+                    }
+
                     // home.blade.php renders `$submission->time . 's'` in the
                     // "Tempo" column, and nothing ever selected a `time` --
                     // the dashboard threw "Undefined property: stdClass::

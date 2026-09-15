@@ -147,6 +147,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
         Route::put('/runs/{run}/judge', [RunController::class, 'judge']);
 
+        // Issue #138 -- the verification gate. Staff-only for the obvious
+        // reason and for a second one: verifying is what publishes a
+        // verdict, so a team able to call it could release its own.
+        Route::put('/runs/{run}/verify', [RunController::class, 'verify']);
+        Route::delete('/runs/{run}/verify', [RunController::class, 'unverify']);
+
         // Both of these read the scoreboard WITHOUT the freeze applied --
         // Api\ScoreboardController::export() calls Leaderboard::
         // getScoreboard() with no frozen flag, and statistics() counts

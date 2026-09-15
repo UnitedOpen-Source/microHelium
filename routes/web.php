@@ -221,6 +221,12 @@ Route::post('/password/email', function () {
 
 Route::get('/judge/runs', [JudgeController::class, 'index'])->name('judge.runs');
 Route::post('/judge/runs/{run}', [JudgeController::class, 'judge'])->name('judge.runs.judge');
+// Issue #138 -- releasing a verdict to the teams, and taking it back. Gated
+// by JudgeController's own constructor (['auth', 'role:judge,admin']), like
+// every other action on this controller; these routes carry no middleware of
+// their own, matching the two above.
+Route::post('/judge/runs/{run}/verify', [JudgeController::class, 'verify'])->name('judge.runs.verify');
+Route::post('/judge/runs/{run}/unverify', [JudgeController::class, 'unverify'])->name('judge.runs.unverify');
 
 /*
 |--------------------------------------------------------------------------

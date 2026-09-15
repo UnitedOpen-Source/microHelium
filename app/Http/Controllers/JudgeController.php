@@ -32,10 +32,11 @@ class JudgeController extends Controller
 
         $pendingRuns = collect();
         $judgedRuns = collect();
+        $awaitingVerification = collect();
 
         if ($contest) {
             $query = Run::where('contest_id', $contest->id)
-                ->with(['problem:id,short_name,name', 'language:id,name', 'user:user_id,fullname,username', 'answer:id,name,short_name,is_accepted', 'site:id,name,max_judge_wait_time'])
+                ->with(['problem:id,short_name,name', 'language:id,name', 'user:user_id,fullname,username', 'answer:id,name,short_name,is_accepted', 'site:id,name,max_judge_wait_time', 'verifier:user_id,fullname,username'])
                 ->orderByDesc('created_at');
 
             // A judge stationed at a site only judges their own site's runs
@@ -57,13 +58,24 @@ class JudgeController extends Controller
                 return $run;
             });
             $judgedRuns = $runs->where('status', 'judged')->take(50);
+
+            // Issue #138: with the gate on, a judged run whose verdict has
+            // not been released is work still outstanding -- the team is
+            // sitting there seeing nothing -- so it gets its own list above
+            // the archive rather than being one unremarkable row inside
+            // "Julgadas Recentemente". With the gate off this stays empty
+            // and the section does not render, so the screen is unchanged
+            // for a contest that did not ask for verification.
+            $awaitingVerification = $contest->verification_required
+                ? $runs->where('status', 'judged')->filter(fn (Run $run) => ! $run->isVerified())->values()
+                : collect();
         }
 
         $answers = $contest
             ? Answer::where('contest_id', $contest->id)->orderBy('sort_order')->get()
             : collect();
 
-        return view('judge.runs', compact('contest', 'pendingRuns', 'judgedRuns', 'answers'));
+        return view('judge.runs', compact('contest', 'pendingRuns', 'judgedRuns', 'awaitingVerification', 'answers'));
     }
 
     public function judge(Request $request, Run $run): RedirectResponse
@@ -99,6 +111,48 @@ class JudgeController extends Controller
         ]);
 
         return redirect()->route('judge.runs')->with('success', "Run #{$run->run_number} julgada como {$answer->name}.");
+    }
+
+    /**
+     * Issue #138 -- release a judged verdict to the team.
+     *
+     * Lives on this controller because this is where manual judging already
+     * lives, and because verifying is the same person's next action after
+     * judging by hand. The work itself is Controller::markRunVerified(),
+     * shared with Api\RunController::verify() so the web door and the token
+     * door cannot drift on what verifying means.
+     *
+     * Note there is no answer_id in this request, deliberately: a verifier
+     * confirms a verdict or rejudges it, never edits it in place. See
+     * Controller::markRunVerified() for why that is the right shape.
+     */
+    public function verify(Request $request, Run $run): RedirectResponse
+    {
+        $this->authorizeRunAccess($run);
+
+        if ($run->status !== 'judged') {
+            return back()->withErrors(['verify' => "Run #{$run->run_number} ainda nao tem veredito para verificar."]);
+        }
+
+        $validated = $request->validate([
+            'verify_comment' => 'nullable|string|max:2000',
+        ]);
+
+        $this->markRunVerified($run, $validated['verify_comment'] ?? null);
+
+        return redirect()->route('judge.runs')->with('success', "Veredito da run #{$run->run_number} liberado para a equipe.");
+    }
+
+    /**
+     * Issue #138 -- take a released verdict back off the board.
+     */
+    public function unverify(Run $run): RedirectResponse
+    {
+        $this->authorizeRunAccess($run);
+
+        $this->markRunUnverified($run);
+
+        return redirect()->route('judge.runs')->with('success', "Verificacao da run #{$run->run_number} revogada; o veredito voltou a ficar oculto para a equipe.");
     }
 
     private function resolveContest(): ?Contest
