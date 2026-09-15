@@ -953,6 +953,52 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /contests/{contest}/unfreeze:
+    post:
+      tags: [Contests]
+      summary: Reveal the final standings (end the scoreboard freeze)
+      description: >
+        Issue #189 -- the ceremony. The freeze deliberately outlives the
+        contest: the last hour it hides is revealed on stage, not by the
+        clock running out. Before this existed, `isFrozen()` returned false
+        the moment the contest ended, so the full final standings became
+        public to teams and to anonymous visitors while the teams were still
+        leaving the room.
+
+
+        Admin only, and refused while the contest is still running --
+        revealing then would publish the answers to a live contest.
+        Idempotent: the button is pressed on a stage, and a second press
+        must not read as a failure.
+
+
+        Irreversible by design. Re-freezing after the room has seen the
+        result would be theatre, not a correction.
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The standings are released (or already were)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  unfrozen_at: { type: string, format: date-time, nullable: true }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: The contest is still running
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorMessage" }
+
   /contests/{contest}/scoreboard/export:
     parameters:
       - $ref: "#/components/parameters/ContestId"

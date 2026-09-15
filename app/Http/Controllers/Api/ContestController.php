@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Answer;
 use App\Models\Contest;
+use App\Models\ContestLog;
 use App\Models\Language;
 use App\Models\Site;
 use Illuminate\Http\JsonResponse;
@@ -137,6 +138,43 @@ class ContestController extends Controller
         return response()->json(['message' => 'Contest deactivated', 'contest' => $contest]);
     }
 
+    /**
+     * Issue #189 -- release the standings. This is the ceremony.
+     *
+     * Admin only, and irreversible by design: re-freezing after the room
+     * has seen the result would be theatre, not a correction. The MOJ
+     * refuses to unfreeze before the last site's contest has ended plus a
+     * minute, for the same reason the check below exists -- unfreezing
+     * while anyone is still competing publishes the answers to a live
+     * contest.
+     */
+    public function unfreeze(Contest $contest): JsonResponse
+    {
+        if ($contest->isRunning()) {
+            abort(422, 'A competicao ainda esta em andamento; revelar o placar agora mostraria o resultado a quem ainda esta competindo.');
+        }
+
+        if ($contest->isUnfrozen()) {
+            // Idempotent: the button is pressed on a stage, and a second
+            // press must not look like a failure.
+            return response()->json([
+                'message' => 'O placar ja havia sido revelado.',
+                'unfrozen_at' => $contest->unfrozen_at?->toISOString(),
+            ]);
+        }
+
+        $contest->update(['unfrozen_at' => now()]);
+
+        ContestLog::info($contest->id, 'Placar final revelado', [
+            'user_id' => auth()->id(),
+        ]);
+
+        return response()->json([
+            'message' => 'Placar final revelado.',
+            'unfrozen_at' => $contest->fresh()->unfrozen_at?->toISOString(),
+        ]);
+    }
+
     public function status(Contest $contest): JsonResponse
     {
         // Same gate as show(): start_time and duration of an event you may
@@ -147,6 +185,11 @@ class ContestController extends Controller
             'is_active' => $contest->is_active,
             'is_running' => $contest->isRunning(),
             'is_frozen' => $contest->isFrozen(),
+            // Issue #189: distinct from `! is_frozen`, which is also true
+            // before the window opens. A scoreboard screen needs to know
+            // whether the standings were released.
+            'is_unfrozen' => $contest->isUnfrozen(),
+            'unfrozen_at' => $contest->unfrozen_at?->toISOString(),
             'start_time' => $contest->start_time,
             'end_time' => $contest->end_time,
             'contest_time' => $contest->getContestTime(),

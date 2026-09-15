@@ -19,6 +19,7 @@ class Contest extends Model
         'start_time',
         'duration',
         'freeze_time',
+        'unfrozen_at',
         'penalty',
         'max_file_size',
         'is_active',
@@ -30,6 +31,7 @@ class Contest extends Model
 
     protected $casts = [
         'start_time' => 'datetime',
+        'unfrozen_at' => 'datetime',
         'is_active' => 'boolean',
         'is_public' => 'boolean',
         'is_practice' => 'boolean',
@@ -233,13 +235,54 @@ class Contest extends Model
         return $now->gte($this->start_time) && $now->lte($this->end_time);
     }
 
+    /**
+     * Issue #189 -- the freeze outlives the contest, and ends when somebody
+     * says so.
+     *
+     * This used to begin `if (! $this->isRunning()) return false;`, and
+     * isRunning() requires now() <= end_time. The freeze therefore expired
+     * with the contest: the full final standings, including the last hour
+     * the freeze exists to hide, went public at the exact second the clock
+     * ran out -- to teams and to anonymous visitors, while the teams were
+     * still leaving the room.
+     *
+     * In ICPC the freeze surviving the end IS the ceremony. So the three
+     * conditions are now: the contest has started, the freeze window has
+     * begun, and nobody has released the standings yet.
+     *
+     * `freeze_time` of 0 means "no freeze at all" and must keep meaning
+     * that. Without the guard below, the accessor resolves the freeze
+     * moment to end_time itself, and a contest configured with no freeze
+     * would become frozen the instant it ended and stay that way for ever
+     * -- the same defect, wearing the opposite sign.
+     */
     public function isFrozen(): bool
     {
-        if (! $this->isRunning()) {
+        if (! $this->is_active || ! $this->start_time || now()->lt($this->start_time)) {
+            return false;
+        }
+
+        if ((int) ($this->attributes['freeze_time'] ?? 0) <= 0) {
+            return false;
+        }
+
+        if ($this->unfrozen_at !== null) {
             return false;
         }
 
         return now()->gte($this->freeze_time);
+    }
+
+    /**
+     * Has the freeze already been lifted for this contest?
+     *
+     * Distinct from `! isFrozen()`, which is also true before the window
+     * opens. This is specifically "somebody released the standings", which
+     * is what a scoreboard screen needs in order to say so.
+     */
+    public function isUnfrozen(): bool
+    {
+        return $this->unfrozen_at !== null;
     }
 
     public function getContestTime(): int
