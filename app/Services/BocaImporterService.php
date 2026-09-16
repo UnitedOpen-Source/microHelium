@@ -13,9 +13,14 @@ class BocaImporterService
     protected array $errors = [];
     protected array $imported = [];
 
-    public function __construct()
+    protected SafeZipExtractor $safeZip;
+
+    public function __construct(?SafeZipExtractor $safeZip = null)
     {
         $this->tempPath = storage_path('app/temp/boca_import');
+        // Opcional porque esta classe ainda e construida com `new` na rota
+        // de importacao do BOCA; o padrao mantem aquele caminho funcionando.
+        $this->safeZip = $safeZip ?? new SafeZipExtractor;
     }
 
     /**
@@ -45,8 +50,18 @@ class BocaImporterService
             return $this->getResult();
         }
 
-        $zip->extractTo($extractPath);
-        $zip->close();
+        // Issue #242 -- um caminho com `..` seria reescrito em silencio pelo
+        // extractTo() e passaria por cima de outro arquivo do proprio
+        // pacote. A recusa e nossa, e vem antes de qualquer escrita.
+        try {
+            $this->safeZip->extractTo($zip, $extractPath);
+        } catch (ZipPathException $e) {
+            $this->errors[] = $e->getMessage();
+
+            return $this->getResult();
+        } finally {
+            $zip->close();
+        }
 
         // Find problem directories (BOCA structure)
         $problemDirs = $this->findProblemDirectories($extractPath);

@@ -32,9 +32,15 @@ class ProblemPackageService
 
             // Extract to temp directory
             $tempExtractDir = storage_path('app/temp/extract_' . uniqid());
-            mkdir($tempExtractDir, 0755, true);
-            $zip->extractTo($tempExtractDir);
-            $zip->close();
+
+            // Issue #242 -- um caminho com `..` seria reescrito em silencio
+            // pelo extractTo() e passaria por cima de outro arquivo do
+            // proprio pacote, trocando um caso de teste sem dizer nada.
+            try {
+                (new SafeZipExtractor)->extractTo($zip, $tempExtractDir);
+            } finally {
+                $zip->close();
+            }
 
             // Parse problem.info
             $problemInfo = $this->parseProblemInfo($tempExtractDir);
