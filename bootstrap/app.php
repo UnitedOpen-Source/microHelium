@@ -3,6 +3,7 @@
 use App\Http\Middleware\AuthenticateJudgehost;
 use App\Http\Middleware\AuthenticateWebcastCredential;
 use App\Http\Middleware\CheckRole;
+use App\Http\Middleware\ClicsHeaders;
 use App\Http\Middleware\SecurityHeaders;
 use Helium\Http\Middleware\IsAdminMiddleware;
 use Illuminate\Foundation\Application;
@@ -46,6 +47,25 @@ return Application::configure(basePath: dirname(__DIR__))
                 'judgehost.auth',
             ])
                 ->group(__DIR__.'/../routes/judgehost.php');
+
+            // Issue #195 -- a Contest API da ICPC, fase 1.
+            //
+            // Grupo proprio pela mesma razao dos dois acima: nao herda
+            // sessao, CSRF nem o contrato de auth:sanctum de
+            // routes/api.php. `auth:sanctum` entra como middleware OPCIONAL
+            // (`sanctum` sem `auth:`) porque a leitura e anonima por
+            // desenho -- o que muda com a autenticacao nao e o acesso, e se
+            // a resposta vem congelada ou nao.
+            //
+            // CORS liberado porque a spec pede
+            // `Access-Control-Allow-Origin: *`: as ferramentas que
+            // consomem isto sao paginas servidas de outro lugar.
+            Route::middleware([
+                'throttle:300,1',
+                SubstituteBindings::class,
+                ClicsHeaders::class,
+            ])
+                ->group(__DIR__.'/../routes/clics.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
