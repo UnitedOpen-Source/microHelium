@@ -1698,6 +1698,252 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
+  /contests/{contest}/rejudgings:
+    get:
+      tags: [Rejudgings]
+      summary: Lista os rejulgamentos em lote deste contest
+      description: |
+        Issue #192. Apenas juiz/admin: a previa de um conjunto mostra o
+        veredito que cada equipe teria, isto e, a classificacao inteira
+        antes de ela existir.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Os conjuntos, do mais recente para o mais antigo
+        '403':
+          description: Um token de equipe nao chega aqui
+    post:
+      tags: [Rejudgings]
+      summary: Monta um conjunto de rejulgamento e manda julgar em segundo plano
+      description: |
+        Issue #192, e os requisitos de CCS: "The CCS must support rejudging
+        of submissions, selected by any combination of: submission, problem,
+        language, team, time range, judgement, and judging machine."
+
+        Criar o conjunto NAO muda veredito nenhum. Cada membro e julgado
+        fora do run, o resultado fica guardado, e a equipe continua vendo o
+        que ja via ate que alguem aplique.
+
+        `reason` e obrigatorio: um rejulgamento em lote muda a classificacao
+        de gente que nao pediu nada, e "por que" e a primeira pergunta de
+        quem contesta o resultado depois.
+
+        Envios ACEITOS ficam de fora por padrao. Tirar um AC de uma equipe
+        no meio da prova e a coisa mais cara que um rejulgamento faz, e
+        quase nunca e o que se queria ao pedir "rejulgue o problema C";
+        incluir exige `include_accepted: true`.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 255 }
+                include_accepted: { type: boolean, default: false }
+                run_ids:
+                  type: array
+                  items: { type: integer }
+                problem_id: { type: integer, nullable: true }
+                language_id: { type: integer, nullable: true }
+                user_id: { type: integer, nullable: true }
+                site_id: { type: integer, nullable: true }
+                judgehost_id: { type: integer, nullable: true }
+                answer_id:
+                  type: integer
+                  nullable: true
+                  description: O veredito ATUAL do envio, nao o esperado
+                contest_time_from:
+                  type: integer
+                  nullable: true
+                  description: |
+                    Segundos de tempo de PROVA, a mesma unidade de
+                    runs.contest_time. Horario de parede seria outra coisa:
+                    dois envios com o mesmo contest_time podem ter chegado
+                    em dias diferentes depois de uma importacao.
+                contest_time_to: { type: integer, nullable: true }
+      responses:
+        '201':
+          description: O conjunto, com os membros ja materializados
+        '403':
+          description: Um token de equipe nao chega aqui
+        '422':
+          description: Faltou o motivo, ou um filtro aponta para algo que nao existe
+  /contests/{contest}/rejudgings/dry-run:
+    post:
+      tags: [Rejudgings]
+      summary: Quantos envios um criterio pega, sem criar conjunto nenhum
+      description: |
+        Issue #192. Existe separado porque montar um conjunto dispara
+        julgamento de verdade: descobrir que o filtro pegou 4000 envios em
+        vez de 40 depois de a fila ja estar cheia e tarde. Aqui e so uma
+        contagem.
+
+        `accepted_excluded` diz quantos envios aceitos o padrao deixou de
+        fora, para que a decisao de incluir seja tomada com o numero na
+        frente.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                include_accepted: { type: boolean, default: false }
+                problem_id: { type: integer, nullable: true }
+                language_id: { type: integer, nullable: true }
+                user_id: { type: integer, nullable: true }
+                site_id: { type: integer, nullable: true }
+                judgehost_id: { type: integer, nullable: true }
+                answer_id: { type: integer, nullable: true }
+                contest_time_from: { type: integer, nullable: true }
+                contest_time_to: { type: integer, nullable: true }
+      responses:
+        '200':
+          description: A contagem
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  matches: { type: integer }
+                  accepted_excluded: { type: integer }
+                  include_accepted: { type: boolean }
+        '403':
+          description: Um token de equipe nao chega aqui
+  /rejudgings/{rejudging}:
+    get:
+      tags: [Rejudgings]
+      summary: O conjunto e a previa do efeito de aplica-lo
+      description: |
+        Issue #192, e o segundo requisito de CCS: "It must be possible to
+        preview the effect of a rejudgement without committing to it."
+
+        `preview.changes` conta quantos vereditos mudariam. Um membro que
+        ainda nao rodou, ou que falhou, NAO conta: a previa diz o que
+        mudaria, e um julgamento que nao aconteceu nao tem opiniao sobre
+        isso.
+      security:
+        - sanctum: []
+      parameters:
+        - name: rejudging
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: O conjunto e a previa
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rejudging: { type: object }
+                  preview:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      judged:
+                        type: integer
+                        description: So os que produziram veredito -- erros nao entram
+                      errors: { type: integer }
+                      changes: { type: integer }
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            run_id: { type: integer }
+                            run_number: { type: integer, nullable: true }
+                            from: { type: string, nullable: true }
+                            to: { type: string, nullable: true }
+                            changes: { type: boolean }
+                            error: { type: string, nullable: true }
+        '403':
+          description: Um token de equipe nao chega aqui
+  /rejudgings/{rejudging}/apply:
+    post:
+      tags: [Rejudgings]
+      summary: Grava os vereditos novos do conjunto inteiro
+      description: |
+        Issue #192. So um conjunto pronto -- todos os membros julgados --
+        pode ser aplicado: gravar os ja julgados e deixar o resto para tras
+        seria meio conjunto, que e exatamente o que "aplicavel como
+        conjunto" existe para impedir.
+
+        Os vereditos ANTIGOS nao sao apagados: ficam nas linhas do conjunto,
+        e e o que permite responder depois o que aquele lote fez. O
+        rejulgamento de um envio so (`POST /runs/{run}/rejudge`) apaga.
+
+        Um membro que FALHOU fica como estava. Trocar um veredito real por
+        uma falha de infraestrutura seria a equipe pagando por um defeito
+        nosso.
+
+        Toda verificacao (#138) dos envios tocados e revogada: a assinatura
+        que liberou o veredito anterior foi dada sobre outro julgamento,
+        possivelmente contra outros casos de teste.
+
+        Durante o congelamento aplicar e permitido, e a razao esta em
+        docs/specs/192-rejulgamento.md: so celulas ANTERIORES ao corte
+        mudam, e aquelas ja eram publicas. Um envio feito durante o
+        congelamento continua invisivel, com veredito novo ou velho.
+      security:
+        - sanctum: []
+      parameters:
+        - name: rejudging
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Aplicado
+        '403':
+          description: Um token de equipe nao chega aqui
+        '422':
+          description: O conjunto nao esta pronto, ou ja foi decidido
+  /rejudgings/{rejudging}/cancel:
+    post:
+      tags: [Rejudgings]
+      summary: Descarta o conjunto sem tocar em envio nenhum
+      description: |
+        Issue #192. Nao ha nada para desfazer, e esse e o desenho: enquanto
+        o conjunto nao foi aplicado, os envios nunca sairam do estado em que
+        estavam.
+      security:
+        - sanctum: []
+      parameters:
+        - name: rejudging
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Cancelado
+        '403':
+          description: Um token de equipe nao chega aqui
+        '422':
+          description: O conjunto ja foi aplicado ou cancelado
   /remote-judges/v1/languages:
     get:
       tags: [Judgehost]
