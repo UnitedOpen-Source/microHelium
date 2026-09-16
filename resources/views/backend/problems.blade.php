@@ -3,7 +3,7 @@
 @section('title', 'Gerenciar Problemas')
 
 @section('description', 'Selecione a competição, confira os desafios e adicione problemas do acervo.')
-@section('page-actions')<a href="{{ route('backend.problem-bank') }}" class="button-secondary">Abrir banco de problemas</a>@endsection
+@section('page-actions')<a href="{{ route('backend.import-package') }}" class="button-secondary">Importar pacote ICPC/Kattis</a><a href="{{ route('backend.problem-bank') }}" class="button-secondary">Abrir banco de problemas</a>@endsection
 
 @section('content')
 <div class="space-y-6">

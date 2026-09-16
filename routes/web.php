@@ -6,6 +6,7 @@ use App\Http\Controllers\Backend\ContestWizardController;
 use App\Http\Controllers\Backend\LanguageController;
 use App\Http\Controllers\Backend\ProblemBankController;
 use App\Http\Controllers\Backend\ProblemManagementController;
+use App\Http\Controllers\Backend\ProblemPackageImportController;
 use App\Http\Controllers\Backend\UserController;
 use App\Http\Controllers\ClarificationController;
 use App\Http\Controllers\HomeController;
@@ -309,6 +310,12 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     // Problem Management (real Problem/TestCase rows -- see issue #34;
     // replaces the old "Exercises Management" that targeted the legacy,
     // disconnected `exercises` table)
+    // Issue #200/#233 -- importar um pacote da ICPC/Kattis PARA UMA
+    // COMPETICAO. Separado de `backend.import-boca`, que traz um contest
+    // inteiro do BOCA para o BANCO: contrato e destino diferentes.
+    Route::get('/import-package', [ProblemPackageImportController::class, 'show'])->name('backend.import-package');
+    Route::post('/import-package', [ProblemPackageImportController::class, 'store'])->name('backend.import-package.store');
+
     Route::get('/exercises', [ProblemManagementController::class, 'index'])->name('backend.exercises');
     Route::post('/exercises', [ProblemManagementController::class, 'store']);
 
