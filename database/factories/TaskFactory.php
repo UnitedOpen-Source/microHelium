@@ -2,19 +2,20 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\Contest;
 use App\Models\Site;
+use App\Models\Task;
 use Helium\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Task>
+ * @extends Factory<Task>
  */
 class TaskFactory extends Factory
 {
+    private static int $sequence = 0;
+
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -23,9 +24,11 @@ class TaskFactory extends Factory
             'contest_id' => Contest::factory(),
             'site_id' => Site::factory(),
             'user_id' => User::factory(),
-            'task_number' => $this->faker->unique()->numberBetween(1, 1000),
+            // Issue #228 -- sequencia em vez de unique()->numberBetween,
+            // que tinha teto de mil valores.
+            'task_number' => ++self::$sequence,
             'description' => $this->faker->sentence,
-            'contest_time' => $this->faker->numberBetween(0, 3600),
+            'contest_time' => 30 * 60,
             'status' => 'pending',
         ];
     }

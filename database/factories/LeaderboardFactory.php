@@ -2,12 +2,13 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\Contest;
+use App\Models\Leaderboard;
 use Helium\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Leaderboard>
+ * @extends Factory<Leaderboard>
  */
 class LeaderboardFactory extends Factory
 {
@@ -21,9 +22,14 @@ class LeaderboardFactory extends Factory
         return [
             'contest_id' => Contest::factory(),
             'user_id' => User::factory(),
-            'problems_solved' => $this->faker->numberBetween(0, 10),
-            'total_time' => $this->faker->numberBetween(0, 1000),
-            'rank' => $this->faker->numberBetween(1, 100),
+            // Issue #228 -- os tres eram sorteados INDEPENDENTEMENTE, entao
+            // nada garantia que `rank` fosse coerente com os outros dois: um
+            // teste de ordenacao usando o factory estava afirmando algo sobre
+            // dados que nao poderiam existir. Zerados e coerentes; quem quer
+            // uma linha com pontuacao diz quanto.
+            'problems_solved' => 0,
+            'total_time' => 0,
+            'rank' => 1,
         ];
     }
 }
