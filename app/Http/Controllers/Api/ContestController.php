@@ -9,6 +9,7 @@ use App\Models\ContestLog;
 use App\Models\Language;
 use App\Models\Site;
 use App\Services\Clics\ContestEventRecorder;
+use App\Services\ContestClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -153,6 +154,29 @@ class ContestController extends Controller
     {
         if ($contest->isRunning()) {
             abort(422, 'A competicao ainda esta em andamento; revelar o placar agora mostraria o resultado a quem ainda esta competindo.');
+        }
+
+        // Issue #198/#233 -- nenhuma SEDE pode estar submetendo.
+        //
+        // `isRunning()` responde pelo relogio da competicao, e desde o #198
+        // ele nao e o unico: uma sede que perdeu quarenta minutos por queda
+        // de energia submete quarenta minutos depois de as outras acabarem.
+        // Revelar nesse intervalo mostra o resultado a quem ainda esta
+        // competindo -- que e exatamente o que a condicao acima existe para
+        // impedir, so que por um relogio que ela nao consulta.
+        //
+        // Aqui e nao no adaptador de sessao: as duas portas tem que
+        // concordar, e duas copias de uma regra sobre publicar
+        // classificacao e como uma delas fica para tras -- foi o que o #225
+        // encontrou nos atalhos legados.
+        $clock = app(ContestClock::class);
+
+        $aindaSubmetendo = $contest->sites()
+            ->pluck('id')
+            ->filter(fn ($siteId) => $clock->isRunningFor($contest, (int) $siteId));
+
+        if ($aindaSubmetendo->isNotEmpty()) {
+            abort(422, 'Ha sede com tempo devolvido ainda submetendo. Revelar agora mostraria o resultado a quem ainda esta competindo.');
         }
 
         if ($contest->isUnfrozen()) {

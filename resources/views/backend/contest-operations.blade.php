@@ -65,8 +65,126 @@
             @endif
         </section>
     </div>
+    {{-- Issue #198/#233 -- intervalos que a prova não conta.
+
+         Cai a energia numa sede às 14h e volta às 14h40: as equipes daquela
+         sede perderam quarenta minutos e as outras não. O Manual do Diretor
+         de Sede da Maratona tem protocolo escrito para isso, e até o #198
+         era impossível aplicar no sistema — a sede fazia a conta no papel e
+         a classificação não batia com o placar. --}}
     <section class="surface feature-panel">
-        <h2>3. Premiação</h2>
+        <h2>3. Tempo removido da competição</h2>
+        <p class="feature-help">
+            Um intervalo removido não conta para ninguém que ele atinge: o placar recalcula,
+            e o prazo de envio daquela sede anda para frente pelo mesmo tanto.
+            Deixe a sede em branco para atingir a competição inteira.
+        </p>
+
+        @if($adjustments->isEmpty())
+            <p class="feature-help mt-3">Nenhum intervalo removido até agora.</p>
+        @else
+            <div class="overflow-x-auto mt-4"><table class="w-full text-sm">
+                <caption class="sr-only">Intervalos removidos de {{ $contest->name }}</caption>
+                <thead><tr>
+                    <th scope="col" class="text-left p-3">Escopo</th>
+                    <th scope="col" class="text-left p-3">Início</th>
+                    <th scope="col" class="text-left p-3">Fim</th>
+                    <th scope="col" class="text-left p-3">Duração</th>
+                    <th scope="col" class="text-left p-3">Motivo</th>
+                    <th scope="col" class="text-left p-3">Ação</th>
+                </tr></thead>
+                <tbody class="divide-y divide-border">
+                @foreach($adjustments as $adjustment)
+                    <tr @class(['opacity-60' => $adjustment->trashed()])>
+                        <th scope="row" class="text-left p-3 font-medium">
+                            {{ $adjustment->site?->name ?? 'Competição inteira' }}
+                            @if($adjustment->trashed())<span class="feature-badge">Desfeito</span>@endif
+                        </th>
+                        <td class="p-3">{{ $adjustment->starts_at->format('d/m/Y H:i') }}</td>
+                        <td class="p-3">{{ $adjustment->ends_at->format('d/m/Y H:i') }}</td>
+                        <td class="p-3">{{ (int) round($adjustment->seconds() / 60) }} min</td>
+                        <td class="p-3">{{ $adjustment->reason }}</td>
+                        <td class="p-3">
+                            @unless($adjustment->trashed())
+                                {{-- Desfazer é uma exigência da spec de CCS: "The removal of a
+                                     time interval must be reversible." --}}
+                                <form method="POST"
+                                      action="{{ route('backend.contest.time-adjustments.destroy', [$contest, $adjustment]) }}"
+                                      data-confirm="Desfazer a remoção deste intervalo? O placar volta a contar esses {{ (int) round($adjustment->seconds() / 60) }} min para {{ $adjustment->site?->name ?? 'todas as sedes' }}.">
+                                    @csrf @method('DELETE')
+                                    <button class="button-secondary" type="submit">Desfazer</button>
+                                </form>
+                            @else
+                                <span class="feature-help">Mantido no registro</span>
+                            @endunless
+                        </td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table></div>
+        @endif
+
+        @if($siteDeadlines->isNotEmpty())
+            {{-- O fim efetivo por sede: sem isto a extensão fica invisível
+                 até a prova acabar torto. --}}
+            <details class="feature-details mt-4">
+                <summary>Prazo de envio por sede</summary>
+                <ul class="feature-sublist">
+                    @foreach($siteDeadlines as $id => $deadline)
+                        <li>{{ $sites[$id] }}: {{ $deadline?->format('d/m/Y H:i') ?? '—' }}</li>
+                    @endforeach
+                </ul>
+            </details>
+        @endif
+
+        <form method="POST" action="{{ route('backend.contest.time-adjustments.store', $contest) }}" class="feature-form mt-4">
+            @csrf
+            <h3>Registrar intervalo</h3>
+
+            <div class="feature-field">
+                <label for="ajuste-sede">Sede atingida</label>
+                <select id="ajuste-sede" name="site_id">
+                    <option value="">Competição inteira</option>
+                    @foreach($sites as $id => $name)
+                        <option value="{{ $id }}" @selected(old('site_id') == $id)>{{ $name }}</option>
+                    @endforeach
+                </select>
+                @error('site_id')<p class="feature-message feature-error">{{ $message }}</p>@enderror
+            </div>
+
+            {{-- Horários de PAREDE, e não tempo de prova: quem registra sabe
+                 o horário do relógio. Converter na gravação congelaria a
+                 conversão — se um segundo intervalo for removido antes deste,
+                 ela muda. --}}
+            <div class="feature-field">
+                <label for="ajuste-inicio">Início da parada (horário do relógio)</label>
+                <input id="ajuste-inicio" name="starts_at" type="datetime-local" value="{{ old('starts_at') }}" required>
+                @error('starts_at')<p class="feature-message feature-error">{{ $message }}</p>@enderror
+            </div>
+
+            <div class="feature-field">
+                <label for="ajuste-fim">Retorno</label>
+                <input id="ajuste-fim" name="ends_at" type="datetime-local" value="{{ old('ends_at') }}" required>
+                @error('ends_at')<p class="feature-message feature-error">{{ $message }}</p>@enderror
+            </div>
+
+            <div class="feature-field">
+                <label for="ajuste-motivo">Motivo</label>
+                <input id="ajuste-motivo" name="reason" type="text" maxlength="255" value="{{ old('reason') }}" required
+                       placeholder="queda de energia na sede">
+                {{-- Obrigatório: um pedaço de prova que não conta muda a
+                     classificação de gente que não pediu nada, e "por quê" é a
+                     primeira pergunta de quem contesta o resultado. --}}
+                <p class="feature-help">Fica no registro da competição junto com quem registrou.</p>
+                @error('reason')<p class="feature-message feature-error">{{ $message }}</p>@enderror
+            </div>
+
+            <button class="button-primary" type="submit">Remover este intervalo</button>
+        </form>
+    </section>
+
+    <section class="surface feature-panel">
+        <h2>4. Premiação</h2>
         @if(!$contest->isFinalized())
             <p class="feature-help mt-3">Disponível após a finalização. Nenhum resultado oculto é antecipado nesta tela.</p>
         @elseif(!$prizes)
