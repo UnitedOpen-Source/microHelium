@@ -24,6 +24,22 @@ use Illuminate\Support\Collection;
  *
  * O que a fase 1 NAO faz: habilitar o resolver. O resolver le o event feed,
  * que e a fase 2. Ver docs/specs/195-contest-api.md.
+ *
+ * ACESSO: leitura anonima, MAS atras da porta do #134.
+ *
+ * Isto quase saiu errado. Registrar o grupo fora de routes/api.php tira a
+ * sessao e o Sanctum -- e tirou junto, sem que ninguem pedisse, a regra de
+ * visibilidade de contest que todo o resto do sistema aplica. Medido antes
+ * de consertar: um visitante anonimo recebia o conjunto de problemas
+ * inteiro de um contest NAO PUBLICO QUE AINDA NAO TINHA COMECADO --
+ * exatamente a divulgacao que o #134 existe para impedir, e que o proprio
+ * Contest.php descreve: "The gate matters most before an event opens:
+ * is_public defaults to false, and a contest that has not started still has
+ * its whole problem set loaded."
+ *
+ * O corte do congelamento NAO cobria isso: ele esconde vereditos, e a
+ * pergunta aqui e outra -- se esta prova pode ser vista. Duas portas
+ * diferentes, e so uma estava no lugar.
  */
 class ContestApiController extends Controller
 {
@@ -69,30 +85,43 @@ class ContestApiController extends Controller
         ]);
     }
 
-    public function contests(): JsonResponse
+    public function contests(Request $request): JsonResponse
     {
         return response()->json(
-            Contest::query()->competition()->get()->map(fn (Contest $contest) => $this->presenter->contest($contest))->all()
+            Contest::query()
+                ->competition()
+                ->visibleTo($request->user())
+                ->get()
+                ->map(fn (Contest $contest) => $this->presenter->contest($contest))
+                ->values()
+                ->all()
         );
     }
 
     public function contest(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->contest($contest));
     }
 
     public function state(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->state($contest));
     }
 
     public function problems(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->problems($contest));
     }
 
     public function teams(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
         OrganizationMembershipLookup::flush();
 
         return response()->json($this->presenter->teams(ScoreboardTeams::forContest($contest)));
@@ -100,6 +129,7 @@ class ContestApiController extends Controller
 
     public function organizations(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
         OrganizationMembershipLookup::flush();
 
         return response()->json($this->presenter->organizations(ScoreboardTeams::forContest($contest)));
@@ -107,16 +137,22 @@ class ContestApiController extends Controller
 
     public function groups(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->groups($contest));
     }
 
     public function languages(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->languages($contest));
     }
 
     public function judgementTypes(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->judgementTypes($contest));
     }
 
@@ -129,6 +165,8 @@ class ContestApiController extends Controller
      */
     public function submissions(Request $request, Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->submissions($contest, $this->runs($contest)));
     }
 
@@ -142,6 +180,8 @@ class ContestApiController extends Controller
      */
     public function judgements(Request $request, Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         $runs = $this->runs($contest)->filter(fn (Run $run) => $run->answer_id !== null);
 
         if ($this->frozenFor($request, $contest)) {
@@ -154,6 +194,8 @@ class ContestApiController extends Controller
 
     public function scoreboard(Request $request, Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         return response()->json($this->presenter->scoreboard($contest, $this->frozenFor($request, $contest)));
     }
 
@@ -168,6 +210,8 @@ class ContestApiController extends Controller
      */
     public function awards(Contest $contest): JsonResponse
     {
+        $this->authorizeContestVisibility($contest);
+
         if (! $contest->isFinalized()) {
             return response()->json([], 404);
         }

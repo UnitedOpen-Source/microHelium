@@ -127,6 +127,83 @@ class ContestApiTest extends TestCase
         $this->getJson("/api/clics/contests/{$this->contest->id}/event-feed")->assertStatus(404);
     }
 
+    // -- visibilidade de contest (#134) -------------------------------------
+
+    /**
+     * A porta que quase nao existiu.
+     *
+     * Registrar o grupo fora de routes/api.php tira a sessao e o Sanctum --
+     * e tirou junto, sem que ninguem pedisse, a regra de visibilidade que
+     * todo o resto do sistema aplica. Medido antes de consertar: um
+     * visitante anonimo recebia o conjunto de problemas INTEIRO de um
+     * contest nao publico que ainda nem tinha comecado.
+     *
+     * E o cenario que o proprio Contest.php descreve: "The gate matters most
+     * before an event opens: is_public defaults to false, and a contest that
+     * has not started still has its whole problem set loaded."
+     */
+    public function test_an_anonymous_reader_cannot_open_an_unannounced_contest(): void
+    {
+        $secreto = Contest::factory()->notStarted()->create(['is_public' => false]);
+        Problem::factory()->create(['contest_id' => $secreto->id, 'name' => 'Problema Sigiloso']);
+
+        foreach (['', '/state', '/problems', '/teams', '/organizations', '/groups', '/languages', '/judgement-types', '/submissions', '/judgements', '/scoreboard', '/awards'] as $suffix) {
+            $this->getJson("/api/clics/contests/{$secreto->id}{$suffix}")
+                ->assertStatus(404, "GET /contests/{id}{$suffix} abriu um contest nao anunciado");
+        }
+    }
+
+    /**
+     * 404 e nao 403, pela mesma razao ja escrita em
+     * Controller::authorizeContestVisibility(): um 403 confirma que o id
+     * nomeia um contest de verdade, e um evento nao anunciado e algo que nao
+     * se deve confirmar por incremento.
+     */
+    public function test_an_unannounced_contest_is_not_listed(): void
+    {
+        Contest::factory()->notStarted()->create(['is_public' => false, 'name' => 'Seletiva Secreta']);
+
+        $nomes = array_column($this->getJson('/api/clics/contests')->assertStatus(200)->json(), 'name');
+
+        $this->assertNotContains('Seletiva Secreta', $nomes);
+    }
+
+    /**
+     * Controle positivo: a porta nao pode estar simplesmente fechada para
+     * todos. Um contest publico continua legivel por qualquer um -- que e o
+     * caso de uso inteiro desta API.
+     */
+    public function test_a_public_contest_stays_readable_by_anyone(): void
+    {
+        $nomes = array_column($this->getJson('/api/clics/contests')->assertStatus(200)->json(), 'name');
+
+        $this->assertContains($this->contest->name, $nomes);
+        $this->getJson("/api/clics/contests/{$this->contest->id}/problems")->assertStatus(200);
+    }
+
+    /**
+     * E quem COMPETE no contest nao publico o enxerga: a regra e
+     * Contest::isVisibleTo(), e nao "publico ou nada".
+     */
+    public function test_a_team_of_the_contest_sees_its_own_unannounced_contest(): void
+    {
+        $secreto = Contest::factory()->notStarted()->create(['is_public' => false]);
+        $membro = $this->createTestUser(['user_type' => 'team', 'contest_id' => $secreto->id]);
+
+        Sanctum::actingAs($membro);
+
+        $this->getJson("/api/clics/contests/{$secreto->id}/problems")->assertStatus(200);
+    }
+
+    public function test_the_jury_sees_an_unannounced_contest(): void
+    {
+        $secreto = Contest::factory()->notStarted()->create(['is_public' => false]);
+
+        Sanctum::actingAs($this->staff());
+
+        $this->getJson("/api/clics/contests/{$secreto->id}/problems")->assertStatus(200);
+    }
+
     // -- o congelamento, que e normativo ------------------------------------
 
     public function test_a_public_client_does_not_get_judgements_from_the_freeze_window(): void

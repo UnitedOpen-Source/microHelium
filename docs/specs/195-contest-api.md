@@ -53,6 +53,28 @@ Porque isto implementa uma especificação **externa e versionada**, cujo contra
 
 Mesmo raciocínio já escrito para `/api/frontend/*`, um passo mais forte.
 
+## Acesso: leitura anônima, mas atrás da porta do #134
+
+Isto quase saiu errado, e vale registrar como saiu.
+
+Registrar o grupo fora de `routes/api.php` tira a sessão e o Sanctum — e tirou junto, **sem que ninguém pedisse**, a regra de visibilidade de contest que todo o resto do sistema aplica. Medido antes de consertar, num contest não público que ainda não tinha começado:
+
+```
+/contests anônimo lista o contest não público: SIM
+/problems anônimo devolve: ["Problema Sigiloso"]
+/contests/{id} anônimo devolve: "Seletiva Secreta"
+```
+
+É exatamente a divulgação que o #134 existe para impedir, e que o próprio `Contest.php` descreve:
+
+> The gate matters most before an event opens: is_public defaults to false, and a contest that has not started still has its whole problem set loaded.
+
+**O corte do congelamento não cobria isso.** Ele esconde *vereditos*; a pergunta aqui é outra — se esta prova pode ser vista. Duas portas diferentes, e só uma estava no lugar. A primeira versão desta entrega afirmava que "o que protege não é autenticação, é o corte do congelamento", e essa frase estava errada.
+
+Agora toda leitura de um contest passa por `Controller::authorizeContestVisibility()`, e a listagem por `scopeVisibleTo()`. **404 e não 403**, pela razão já escrita naquele método: um 403 confirma que o id nomeia um contest de verdade, e um evento não anunciado é algo que não se deve confirmar por incremento.
+
+O caso de uso continua funcionando: um contest público é legível por qualquer um, sem conta — e há teste de controle positivo para isso, porque uma porta fechada para todos também passaria nos testes de vazamento.
+
 ## Duas coisas que a verificação encontrou
 
 **Um `language_id` que `/languages` não listava.** O teste de integridade referencial pegou na primeira execução — era artefato do fixture (`RunFactory` cria a linguagem com contest próprio), mas é exatamente o defeito que quebra um consumidor em silêncio: uma linha faltando num painel.
