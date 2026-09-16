@@ -23,6 +23,10 @@
                 </div>
             </div>
 
+            {{-- Issue #224: sair com codigo ainda nao enviado pede
+                 confirmacao. Durante a prova, colar quarenta linhas e clicar
+                 em "Voltar ao Problema" para reler o enunciado apagava tudo
+                 em silencio, com o relogio andando. --}}
             <form action="{{ route('exercise.submit', $problem) }}" method="POST" enctype="multipart/form-data" class="p-6 space-y-6">
                 @csrf
 
@@ -66,7 +70,7 @@
                 <!-- Code Textarea -->
                 <div>
                     <label for="code_text" class="block text-sm font-medium text-foreground mb-2">Ou cole seu código aqui:</label>
-                    <textarea id="code_text" name="code_text" rows="12" spellcheck="false" autocapitalize="none" autocomplete="off" translate="no" aria-describedby="code-priority-hint" class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-y" placeholder="#include <stdio.h>
+                    <textarea id="code_text" name="code_text" data-draft-field rows="12" spellcheck="false" autocapitalize="none" autocomplete="off" translate="no" aria-describedby="code-priority-hint" class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground font-mono text-sm focus:ring-2 focus:ring-primary focus:border-transparent resize-y" placeholder="#include <stdio.h>
 
 int main() {
     // Seu codigo aqui

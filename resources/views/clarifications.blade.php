@@ -83,6 +83,8 @@
             </div>
             <div class="p-6">
                 @auth
+                {{-- Issue #224: a pergunta pode ter dois mil caracteres
+                     escritos com cuidado; sair sem enviar pede confirmacao. --}}
                 <form action="/clarifications" method="POST" class="space-y-4">
                     @csrf
                     <div class="space-y-2">
@@ -103,6 +105,7 @@
                         <textarea
                             name="question"
                             id="question"
+                            data-draft-field
                             rows="4"
                             required
                             placeholder="Descreva sua dúvida de forma clara e objetiva..."
