@@ -2,20 +2,21 @@
 
 namespace Database\Factories;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
+use App\Models\Clarification;
 use App\Models\Contest;
+use App\Models\Problem;
 use App\Models\Site;
 use Helium\User;
-use App\Models\Problem;
+use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Clarification>
+ * @extends Factory<Clarification>
  */
 class ClarificationFactory extends Factory
 {
+    private static int $sequence = 0;
+
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -25,10 +26,11 @@ class ClarificationFactory extends Factory
             'site_id' => Site::factory(),
             'user_id' => User::factory(),
             'problem_id' => Problem::factory(),
-            'clarification_number' => $this->faker->unique()->numberBetween(1, 1000),
+            // Issue #228 -- sequencia em vez de unique()->numberBetween.
+            'clarification_number' => ++self::$sequence,
             'question' => $this->faker->sentence,
             'answer' => null,
-            'contest_time' => $this->faker->numberBetween(0, 3600),
+            'contest_time' => 30 * 60,
             'answered_time' => null,
             'status' => 'pending',
             'judge_id' => null,
