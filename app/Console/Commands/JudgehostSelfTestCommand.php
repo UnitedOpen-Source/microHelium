@@ -57,27 +57,55 @@ class JudgehostSelfTestCommand extends Command
 
     public function handle(AutoJudgeService $judge, CgroupMemoryLimiter $cgroup): int
     {
-        $this->line('Autoteste do sandbox de julgamento -- '.gethostname());
-        $this->newLine();
+        // Com --json, NADA alem do JSON sai daqui.
+        //
+        // O cabecalho saia antes desta linha, e isso quebrava o modo que
+        // existe justamente para ser lido por outra coisa: a saida era um
+        // titulo, uma linha em branco e so entao o documento, e json_decode
+        // -- ou `jq`, ou qualquer consumidor -- devolvia null sobre o
+        // conjunto. Um formato de maquina com uma saudacao em cima nao e um
+        // formato de maquina. O job Judging do CI foi quem mostrou.
+        if (! $this->option('json')) {
+            $this->line('Autoteste do sandbox de julgamento -- '.gethostname());
+            $this->newLine();
+        }
 
         // A informacao mais importante que este comando pode dar, e por isso
         // vem antes de qualquer caso: uma instalacao com o bwrap desligado
         // julga codigo submetido sem confinamento nenhum e nao avisa
         // ninguem. A variavel existe para a suite rodar em maquina de
         // desenvolvedor; numa maquina que julga, ela e a falha.
+        //
+        // A recusa tambem sai como JSON quando foi pedido JSON: um script
+        // que recebesse texto solto aqui nao conseguiria distinguir "esta
+        // maquina nao confina" de "o comando quebrou", e as duas coisas
+        // pedem reacoes diferentes.
         if (! config('autojudge.use_bwrap', true)) {
-            $this->error('AUTOJUDGE_USE_BWRAP esta DESLIGADO.');
-            $this->error('Esta maquina executa codigo submetido sem confinamento. Nao use em prova.');
-
-            return self::FAILURE;
+            return $this->report([$this->result(
+                'sandbox_enabled',
+                'O sandbox esta ligado',
+                'AUTOJUDGE_USE_BWRAP ligado',
+                false,
+                // Curto porque tem que caber numa linha de terminal. A
+                // primeira versao explicava, na mesma frase, que a maquina
+                // executa codigo submetido sem confinamento -- e o texto
+                // passava de oitenta colunas, entao a frase acionavel
+                // ("nao use em prova") quebrava no meio. Um aviso que so
+                // cabe na tela do autor nao e um aviso.
+                'AUTOJUDGE_USE_BWRAP esta DESLIGADO. Nao use em prova.'
+            )]);
         }
 
         $this->workspace = sys_get_temp_dir().'/mh-selftest-'.getmypid();
 
         if (! @mkdir($this->workspace, 0o700, true) && ! is_dir($this->workspace)) {
-            $this->error("Nao foi possivel criar o diretorio de trabalho em {$this->workspace}.");
-
-            return self::FAILURE;
+            return $this->report([$this->result(
+                'workspace',
+                'Diretorio de trabalho',
+                'criavel',
+                false,
+                "Nao foi possivel criar o diretorio de trabalho em {$this->workspace}."
+            )]);
         }
 
         try {

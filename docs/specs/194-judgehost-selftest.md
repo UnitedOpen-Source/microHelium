@@ -27,6 +27,27 @@ caso falhar, e a regra é a do `mojtools`, categórica de propósito:
 
 > Se **qualquer** caso falhar, não use aquela máquina em prova.
 
+### `--json` só imprime JSON
+
+Inclusive a recusa. Um script que recebesse texto solto no caminho de erro
+não conseguiria distinguir *"esta máquina não confina"* de *"o comando
+quebrou"*, e as duas coisas pedem reações diferentes.
+
+Isso não é higiene: o cabeçalho humano era impresso antes de o modo ser
+consultado, então a saída era um título, uma linha em branco e só então o
+documento — e `json_decode`, ou `jq`, devolvia `null` sobre o conjunto. Um
+formato de máquina com uma saudação em cima não é um formato de máquina.
+
+E o documento em si já tinha chegado **vazio** uma vez: um dos casos leva
+`stderr` do próprio bwrap no relatório, bytes que não formam UTF-8 válido
+fazem `json_encode()` devolver `false`, e `(string) false` é a string
+vazia. O comando imprimia uma linha em branco e saía com código zero. Um
+relatório de confinamento que se apaga sozinho é pior do que um que falha:
+uma saída vazia com `exit 0` é um "passou".
+
+Duas barreiras contra isso: todo texto vindo do sandbox passa por
+`printable()`, e o `json_encode` leva `JSON_INVALID_UTF8_SUBSTITUTE`.
+
 ## O primeiro caso é o mais importante
 
 Com `AUTOJUDGE_USE_BWRAP` desligado o comando **falha de cara**, antes de
