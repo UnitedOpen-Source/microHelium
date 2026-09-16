@@ -8,6 +8,7 @@ use App\Models\Problem;
 use Helium\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Testing\TestResponse;
+use PHPUnit\Framework\Attributes\TestWith;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -302,6 +303,55 @@ YAML])
             ->assertSessionMissing('diagnostico');
 
         $this->assertSame(0, Problem::where('contest_id', $this->contest->id)->count());
+    }
+
+    /**
+     * Um caminho que sai do próprio diretório é recusado, e nada é extraído.
+     *
+     * O `extractTo()` do PHP não deixa escapar -- medi: `../a.txt`,
+     * `x/../../c.txt` e `/tmp/abs.txt` caem todos DENTRO do destino. Ele
+     * resolve isso REESCREVENDO o caminho em silêncio, e é aí que está o
+     * problema que sobra: `x/../../data/secret/01.ans` vira
+     * `data/secret/01.ans` e passa por cima de um caso de teste legítimo do
+     * mesmo pacote. O pacote seria aceito, o problema importado, e o caso
+     * trocado só apareceria quando uma submissão correta fosse reprovada
+     * durante a prova.
+     */
+    #[TestWith(['x/../../data/secret/01.ans'])]
+    #[TestWith(['/data/secret/01.ans'])]
+    public function test_a_path_that_escapes_the_package_is_refused(string $entrada): void
+    {
+        $antes = glob(storage_path('app/temp/import_*')) ?: [];
+
+        $zipPath = $this->workspace.'/travessia-'.uniqid().'.zip';
+        $zip = new ZipArchive;
+        $zip->open($zipPath, ZipArchive::CREATE);
+        $zip->addFromString('problem.yaml', "problem_format_version: legacy-icpc\nname: X\n");
+        $zip->addFromString($entrada, 'resposta trocada');
+        $zip->close();
+
+        $this->actingAs($this->admin)
+            ->from(route('backend.import-package'))
+            ->post(route('backend.import-package.store'), [
+                'contest_id' => $this->contest->id,
+                'package' => new UploadedFile($zipPath, 'travessia.zip', 'application/zip', null, true),
+            ])
+            ->assertRedirect(route('backend.import-package'))
+            ->assertSessionHas('error', fn (string $erro) => str_contains($erro, 'sai do próprio diretório'))
+            ->assertSessionMissing('diagnostico');
+
+        $this->assertSame(0, Problem::where('contest_id', $this->contest->id)->count());
+        $this->assertSame($antes, glob(storage_path('app/temp/import_*')) ?: [], 'nada pode ter sido extraído');
+    }
+
+    /**
+     * Controle positivo: dois pontos no meio de um nome de arquivo são
+     * legítimos e não podem ser confundidos com travessia -- senão a guarda
+     * recusaria pacotes bons e ninguém descobriria por que.
+     */
+    public function test_a_dotted_file_name_is_not_mistaken_for_traversal(): void
+    {
+        $this->enviar([], ['dry_run' => '1'])->assertSessionHas('diagnostico');
     }
 
     public function test_a_package_that_is_not_a_zip_is_refused_by_validation(): void

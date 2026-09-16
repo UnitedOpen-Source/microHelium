@@ -64,6 +64,12 @@ class ProblemPackageImportController extends Controller
                 return back()->with('error', 'Não foi possível abrir o arquivo ZIP.')->withInput();
             }
 
+            if (($fora = $this->nomeQueEscapa($zip)) !== null) {
+                $zip->close();
+
+                return back()->with('error', "O pacote tem um caminho que sai do próprio diretório: {$fora}")->withInput();
+            }
+
             @mkdir($extractDir, 0o755, true);
             $zip->extractTo($extractDir);
             $zip->close();
@@ -101,6 +107,36 @@ class ProblemPackageImportController extends Controller
         } finally {
             $this->apagar($extractDir);
         }
+    }
+
+    /**
+     * O primeiro nome do ZIP que sai do diretório de extração, ou null.
+     *
+     * O `extractTo()` do PHP não deixa escapar -- medi: `../a.txt`,
+     * `x/../../c.txt` e `/tmp/abs-d.txt` caem todos DENTRO do destino. Mas
+     * ele resolve isso REESCREVENDO o caminho em silêncio, e é aí que mora o
+     * problema que sobra: `x/../../data/secret/01.ans` vira
+     * `data/secret/01.ans` e passa por cima de um caso de teste legítimo do
+     * mesmo pacote. O pacote é aceito, o problema é importado, e o caso de
+     * teste trocado só aparece quando uma submissão correta é reprovada na
+     * prova.
+     *
+     * Então a recusa é nossa, e não do PHP: um pacote com caminho assim
+     * volta como frase, sem nada extraído. Não depender da limpeza da
+     * biblioteca também é o que mantém isto verdadeiro se a versão do libzip
+     * da imagem mudar.
+     */
+    private function nomeQueEscapa(ZipArchive $zip): ?string
+    {
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $nome = (string) $zip->getNameIndex($i);
+
+            if (str_starts_with($nome, '/') || preg_match('#(^|[\\\\/])\.\.([\\\\/]|$)#', $nome)) {
+                return $nome;
+            }
+        }
+
+        return null;
     }
 
     /**

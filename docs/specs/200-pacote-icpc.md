@@ -94,6 +94,14 @@ Dois números do diagnóstico têm consequência na prova e aparecem como frase,
 
 Os problemas da prova de treino são instantâneos versionados publicados pelo `PracticePublisher` (#43). Um problema posto ali à mão diverge da biblioteca e não volta sozinho. A prova de treino fica fora do seletor **e** o POST montado à mão é recusado com 404 — as duas portas concordam.
 
+### Caminho que sai do próprio diretório
+
+Medi o que o `extractTo()` do PHP faz com `../a.txt`, `x/../../c.txt` e `/tmp/abs.txt`: **nenhum escapa** — todos caem dentro do destino. Mas ele resolve isso **reescrevendo o caminho em silêncio**, e é aí que está o problema que sobra.
+
+`x/../../data/secret/01.ans` vira `data/secret/01.ans` e passa por cima de um caso de teste legítimo do mesmo pacote. O pacote seria aceito, o problema importado, e o caso trocado só apareceria quando uma submissão correta fosse reprovada **durante a prova**.
+
+Então a recusa é nossa, e não da biblioteca: um nome absoluto ou com `..` volta como frase, sem nada extraído. Não depender da limpeza do libzip também é o que mantém isto verdadeiro se a versão da imagem mudar.
+
 ### O diretório de extração não sobrevive à requisição
 
 Nem quando a leitura falha: a limpeza está num `finally`. Um pacote recusado que deixasse o ZIP extraído em `storage/` encheria o disco da máquina que serve a prova, e o sintoma apareceria longe da causa.
