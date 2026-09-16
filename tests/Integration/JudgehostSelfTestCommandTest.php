@@ -3,6 +3,7 @@
 namespace Tests\Integration;
 
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\Artisan;
 use Symfony\Component\Console\Output\BufferedOutput;
 use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\TestCase;
@@ -81,19 +82,19 @@ class JudgehostSelfTestCommandTest extends TestCase
         $this->skipUnlessJudgeSandboxAvailable();
         $this->enableJudgeSandbox();
 
-        $this->artisan('judgehost:selftest --json')->assertExitCode(0);
+        // Artisan::call()/output() e nao artisan(): o helper de teste devolve
+        // um PendingCommand para asserções sobre a saida, nao a saida crua, e
+        // e a saida crua que precisa ser JSON valido -- a primeira versao
+        // deste teste leu de um BufferedOutput passado ao kernel e recebeu
+        // null do json_decode no CI.
+        $exitCode = Artisan::call('judgehost:selftest', ['--json' => true]);
+        $raw = Artisan::output();
 
-        // artisan() nao devolve a saida crua, entao o JSON e reconstruido
-        // rodando o comando pelo kernel do console com um buffer proprio.
-        $output = new BufferedOutput;
-        $exitCode = $this->app[Kernel::class]
-            ->call('judgehost:selftest', ['--json' => true], $output);
+        $payload = json_decode($raw, true);
 
-        $payload = json_decode($output->fetch(), true);
-
-        $this->assertSame(0, $exitCode);
-        $this->assertIsArray($payload);
-        $this->assertTrue($payload['passed']);
+        $this->assertIsArray($payload, "a saida --json nao foi JSON valido:\n".$raw);
+        $this->assertSame(0, $exitCode, $raw);
+        $this->assertTrue($payload['passed'], $raw);
 
         $keys = array_column($payload['cases'], 'key');
 
