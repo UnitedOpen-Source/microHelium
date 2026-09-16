@@ -2,17 +2,20 @@
 
 namespace Tests\Unit;
 
+use App\Models\Answer;
+use App\Models\Clarification;
 use App\Models\Contest;
+use App\Models\ContestLog;
 use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Site;
-use Helium\User;
-use App\Models\Answer;
-use App\Models\Clarification;
 use App\Models\Task;
-use App\Models\ContestLog;
+use Helium\User;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class ContestModelTest extends TestCase
@@ -51,7 +54,7 @@ class ContestModelTest extends TestCase
      */
     public function test_required_fields(): void
     {
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
 
         // Attempting to create a contest without required fields should fail
         Contest::create([]);
@@ -62,7 +65,7 @@ class ContestModelTest extends TestCase
      */
     public function test_name_is_required(): void
     {
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
 
         Contest::create([
             'start_time' => now()->addDay(),
@@ -86,7 +89,7 @@ class ContestModelTest extends TestCase
         $contest = $contest->fresh();
 
         $this->assertEquals(20, $contest->penalty);
-        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $contest->freeze_time);
+        $this->assertInstanceOf(Carbon::class, $contest->freeze_time);
     }
 
     /**
@@ -131,7 +134,7 @@ class ContestModelTest extends TestCase
             'duration' => 300,
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $contest->start_time);
+        $this->assertInstanceOf(Carbon::class, $contest->start_time);
         $this->assertEquals($startTime->toDateTimeString(), $contest->start_time->toDateTimeString());
     }
 
@@ -196,7 +199,7 @@ class ContestModelTest extends TestCase
             'is_active' => true,
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->languages);
+        $this->assertInstanceOf(Collection::class, $contest->languages);
         $this->assertCount(2, $contest->languages);
         $this->assertTrue($contest->languages->contains($language1));
         $this->assertTrue($contest->languages->contains($language2));
@@ -235,7 +238,7 @@ class ContestModelTest extends TestCase
             'sort_order' => 2,
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->problems);
+        $this->assertInstanceOf(Collection::class, $contest->problems);
         $this->assertCount(2, $contest->problems);
         $this->assertTrue($contest->problems->contains($problem1));
         $this->assertTrue($contest->problems->contains($problem2));
@@ -353,7 +356,7 @@ class ContestModelTest extends TestCase
             'status' => 'judged',
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->runs);
+        $this->assertInstanceOf(Collection::class, $contest->runs);
         $this->assertCount(2, $contest->runs);
         $this->assertTrue($contest->runs->contains($run1));
         $this->assertTrue($contest->runs->contains($run2));
@@ -377,7 +380,7 @@ class ContestModelTest extends TestCase
             'ip' => '127.0.0.1',
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->sites);
+        $this->assertInstanceOf(Collection::class, $contest->sites);
         $this->assertCount(1, $contest->sites);
         $this->assertTrue($contest->sites->contains($site));
     }
@@ -408,7 +411,7 @@ class ContestModelTest extends TestCase
             'fullname' => 'Test User',
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->users);
+        $this->assertInstanceOf(Collection::class, $contest->users);
         $this->assertCount(1, $contest->users);
         $this->assertTrue($contest->users->contains($user));
     }
@@ -431,7 +434,7 @@ class ContestModelTest extends TestCase
             'is_accepted' => true,
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->answers);
+        $this->assertInstanceOf(Collection::class, $contest->answers);
         $this->assertCount(1, $contest->answers);
         $this->assertTrue($contest->answers->contains($answer));
     }
@@ -471,7 +474,7 @@ class ContestModelTest extends TestCase
             'contest_time' => 100,
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->clarifications);
+        $this->assertInstanceOf(Collection::class, $contest->clarifications);
         $this->assertCount(1, $contest->clarifications);
         $this->assertTrue($contest->clarifications->contains($clarification));
     }
@@ -511,7 +514,7 @@ class ContestModelTest extends TestCase
             'contest_time' => 50,
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->tasks);
+        $this->assertInstanceOf(Collection::class, $contest->tasks);
         $this->assertCount(1, $contest->tasks);
         $this->assertTrue($contest->tasks->contains($task));
     }
@@ -533,7 +536,7 @@ class ContestModelTest extends TestCase
             'message' => 'Contest was created',
         ]);
 
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $contest->logs);
+        $this->assertInstanceOf(Collection::class, $contest->logs);
         $this->assertCount(1, $contest->logs);
         $this->assertTrue($contest->logs->contains($log));
     }
@@ -772,10 +775,20 @@ class ContestModelTest extends TestCase
         }
     }
 
-    public function test_is_frozen_returns_false_if_contest_not_running()
+    /**
+     * Issue #225 -- o que este teste fixa e "sem inicio nao ha
+     * congelamento", e nao "inativo descongela".
+     *
+     * A segunda leitura seria falsa desde o #225: desativar um contest NAO
+     * o descongela mais, porque desativar era um botao de publicar a
+     * classificacao. O caso continua valendo pelo `start_time` nulo.
+     */
+    public function test_is_frozen_returns_false_without_a_start_time()
     {
         $contest = new Contest(['is_active' => false]);
         $this->assertFalse($contest->isFrozen());
+
+        $this->assertFalse((new Contest(['is_active' => true]))->isFrozen());
     }
 
     public function test_get_contest_time_returns_zero_for_future_contest()
