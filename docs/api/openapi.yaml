@@ -1827,6 +1827,113 @@ paths:
                           items: { type: integer }
         '403':
           description: Um token de equipe nao chega aqui
+  /contests/{contest}/time-adjustments:
+    get:
+      tags: [Contests]
+      summary: Os intervalos de tempo removidos desta prova
+      description: |
+        Issue #198. Inclui os DESFEITOS, marcados com `reverted: true`:
+        "reversivel" nao combina com sumir do registro, e alguem vai
+        perguntar depois por que aquela sede teve quarenta minutos a mais.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Os intervalos, do mais antigo para o mais recente
+        '403':
+          description: Um token de equipe nao chega aqui
+    post:
+      tags: [Contests]
+      summary: Remove um intervalo de tempo da prova
+      description: |
+        Issue #198, e os requisitos de CCS: "The CCS must support removing
+        time intervals from the contest."
+
+        Cai a energia numa sede as 14h e volta as 14h40: as equipes daquela
+        sede perderam quarenta minutos e as outras nao. O Manual do Diretor
+        de Sede da Maratona tem protocolo escrito para isso.
+
+        `site_id` NULO e a prova inteira (o intervalo removido que a ICPC
+        especifica); preenchido e so aquela sede (a extensao por sede). Um
+        mecanismo, duas formas.
+
+        Os instantes sao de PAREDE, nao tempo de prova: quem registra sabe o
+        horario do relogio da parede, e converter na gravacao congelaria a
+        conversao -- se um segundo intervalo for removido antes deste, ela
+        muda.
+
+        Criar ja recompoe o placar da prova inteira. Nenhum
+        `runs.contest_time` e reescrito: o ajuste acontece na leitura, que e
+        o que torna a remocao reversivel.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [starts_at, ends_at, reason]
+              properties:
+                site_id:
+                  type: integer
+                  nullable: true
+                  description: Nulo = a prova inteira
+                starts_at: { type: string, format: date-time }
+                ends_at: { type: string, format: date-time }
+                reason:
+                  type: string
+                  maxLength: 255
+                  description: |
+                    Obrigatorio: um pedaco de prova que nao conta muda a
+                    classificacao de gente que nao pediu nada.
+      responses:
+        '201':
+          description: Registrado, e o placar ja recomposto
+        '403':
+          description: Um token de equipe nao chega aqui
+        '422':
+          description: Faltou o motivo, ou o intervalo termina antes de comecar
+  /contests/{contest}/time-adjustments/{adjustment}:
+    delete:
+      tags: [Contests]
+      summary: Desfaz a remocao de um intervalo
+      description: |
+        Issue #198, e a segunda exigencia da spec: "The removal of a time
+        interval must be reversible."
+
+        Um soft delete e um recalculo. Como nenhum `runs.contest_time` foi
+        reescrito, desfazer nao precisa lembrar de nada -- o placar volta a
+        ser o que era porque e derivado, e nao acumulado. O intervalo
+        continua listado, marcado como desfeito.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: adjustment
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Desfeito, e o placar recomposto
+        '403':
+          description: Um token de equipe nao chega aqui
+        '404':
+          description: Este intervalo nao e desta prova
   /contests/{contest}/rejudgings:
     get:
       tags: [Rejudgings]

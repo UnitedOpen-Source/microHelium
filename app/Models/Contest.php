@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ContestClock;
 use Helium\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -221,7 +222,17 @@ class Contest extends Model
             return null;
         }
 
-        return Carbon::instance($this->start_time->copy()->addMinutes($this->duration));
+        // Issue #198 -- os intervalos removidos DA PROVA INTEIRA empurram o
+        // fim para frente. A prova acaba quando as equipes tiverem vivido
+        // `duration` de tempo que CONTA, e nao de relogio de parede.
+        //
+        // So os globais (site_id nulo). Uma extensao de uma sede so nao pode
+        // mexer no fim das outras, e quem precisa do fim DAQUELA sede
+        // pergunta a ContestClock::endTimeFor() -- ver a limitacao anotada
+        // em docs/specs/198-intervalos-removidos.md.
+        $extension = app(ContestClock::class)->extensionSeconds($this, null);
+
+        return Carbon::instance($this->start_time->copy()->addMinutes($this->duration)->addSeconds($extension));
     }
 
     public function getFreezeTimeAttribute(): ?Carbon

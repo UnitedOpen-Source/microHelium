@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ClarificationController;
 use App\Http\Controllers\Api\ContestController;
 use App\Http\Controllers\Api\ContestFinalizationController;
+use App\Http\Controllers\Api\ContestTimeAdjustmentController;
 use App\Http\Controllers\Api\ProblemController;
 use App\Http\Controllers\Api\RejudgingController;
 use App\Http\Controllers\Api\RunController;
@@ -155,6 +156,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/contests/{contest}/finalize/preflight', [ContestFinalizationController::class, 'preflight']);
         Route::post('/contests/{contest}/finalize', [ContestFinalizationController::class, 'finalize']);
         Route::get('/contests/{contest}/awards', [ContestFinalizationController::class, 'awards']);
+
+        // Issue #198 -- intervalos removidos da prova (queda de energia numa
+        // sede, por exemplo). Junto do resto do que a banca opera, e nao no
+        // grupo de admin: quem decide que a sede perdeu quarenta minutos e
+        // quem esta conduzindo a prova.
+        Route::get('/contests/{contest}/time-adjustments', [ContestTimeAdjustmentController::class, 'index']);
+        Route::post('/contests/{contest}/time-adjustments', [ContestTimeAdjustmentController::class, 'store']);
+        Route::delete('/contests/{contest}/time-adjustments/{adjustment}', [ContestTimeAdjustmentController::class, 'destroy']);
 
         Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
 

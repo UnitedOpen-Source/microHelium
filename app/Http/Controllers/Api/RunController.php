@@ -11,6 +11,7 @@ use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Score;
+use App\Services\ContestClock;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -63,8 +64,13 @@ class RunController extends Controller
             'Voce nao pode submeter para um contest do qual nao participa.'
         );
 
-        // Validate contest is running
-        if (! $contest->isRunning()) {
+        // Issue #198 -- corre AINDA para a sede desta equipe.
+        //
+        // Uma sede que perdeu quarenta minutos por queda de energia submete
+        // quarenta minutos depois de as outras terem acabado, e esse e o
+        // ponto inteiro: sem isto o intervalo removido corrigiria o placar e
+        // deixaria a equipe sem poder usar o tempo que lhe foi devolvido.
+        if (! app(ContestClock::class)->isRunningFor($contest, $user->site_id !== null ? (int) $user->site_id : null)) {
             return response()->json(['error' => 'Contest is not running'], 422);
         }
 

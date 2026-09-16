@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Models\Clarification;
 use App\Models\Contest;
+use App\Models\ContestTimeAdjustment;
 use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Rejudging;
@@ -153,6 +154,13 @@ class ApiRouteAuthorizationTest extends TestCase
         'GET api/contests/{contest}/finalize/preflight',
         'POST api/contests/{contest}/finalize',
         'GET api/contests/{contest}/awards',
+        // Issue #198 -- tirar um pedaco de tempo da prova muda a
+        // classificacao de todo mundo daquela sede. A LEITURA tambem e de
+        // staff: a lista diz que a sede X ganhou quarenta minutos, o que e
+        // informacao de conducao da prova.
+        'GET api/contests/{contest}/time-adjustments',
+        'POST api/contests/{contest}/time-adjustments',
+        'DELETE api/contests/{contest}/time-adjustments/{adjustment}',
         'GET api/clarifications/pending',
         'DELETE api/clarifications/{clarification}',
         'PUT api/clarifications/{clarification}/answer',
@@ -504,6 +512,13 @@ class ApiRouteAuthorizationTest extends TestCase
         // casa, e a resposta e 404. "404 nao e 403", entao a caminhada
         // passaria sem nunca ter chegado na rota -- que e o modo de falha
         // que este teste inteiro existe para impedir.
+        $adjustment = ContestTimeAdjustment::create([
+            'contest_id' => $contest->id,
+            'starts_at' => now()->subHour(),
+            'ends_at' => now()->subMinutes(30),
+            'reason' => 'walk',
+        ]);
+
         $rejudging = Rejudging::create([
             'contest_id' => $contest->id,
             'reason' => 'walk',
@@ -512,8 +527,8 @@ class ApiRouteAuthorizationTest extends TestCase
         ]);
 
         return '/'.str_replace(
-            ['{contest}', '{problem}', '{run}', '{clarification}', '{token}', '{rejudging}'],
-            [$contest->id, $problem->id, $run->id, $clarification->id, $tokenId, $rejudging->id],
+            ['{contest}', '{problem}', '{run}', '{clarification}', '{token}', '{rejudging}', '{adjustment}'],
+            [$contest->id, $problem->id, $run->id, $clarification->id, $tokenId, $rejudging->id, $adjustment->id],
             $uri
         );
     }

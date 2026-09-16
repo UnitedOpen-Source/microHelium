@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\BalloonService;
+use App\Services\ContestClock;
 use Helium\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -120,8 +121,20 @@ class Score extends Model
      * @param  iterable<Run>  $countable  em ordem de contest_time, depois id
      * @return array{attempts: int, is_solved: bool, solved_time: int, penalty_time: int}
      */
-    public static function reduceCell(iterable $countable, int $penalty): array
+    public static function reduceCell(iterable $countable, int $penalty, ?callable $secondsOf = null): array
     {
+        // Issue #198 -- a ORDEM vem do tempo cru, o VALOR vem do ajustado.
+        //
+        // `$countable` ja chega ordenado por `contest_time` cru, e e assim
+        // que tem que ser: dois envios feitos dentro de um intervalo
+        // removido colapsam para o mesmo instante ajustado, e se a ordem
+        // viesse dali eles empatariam. A spec exige o contrario -- "If
+        // submission S_i arrived before submission S_j during a removed
+        // interval, S_i must still be considered to have arrived strictly
+        // before S_j". O valor que a celula mostra e paga, porem, e o
+        // ajustado.
+        $secondsOf ??= fn (Run $run) => (int) $run->contest_time;
+
         $attempts = 0;
 
         foreach ($countable as $candidate) {
@@ -131,7 +144,7 @@ class Score extends Model
                 return [
                     'attempts' => $attempts,
                     'is_solved' => true,
-                    'solved_time' => (int) floor($candidate->contest_time / 60),
+                    'solved_time' => (int) floor($secondsOf($candidate) / 60),
                     // ICPC: so as tentativas ANTES da aceita pagam.
                     'penalty_time' => ($attempts - 1) * $penalty,
                 ];
@@ -141,6 +154,20 @@ class Score extends Model
         // ICPC: submissoes depois da aceita nao sao contadas -- o `return`
         // acima e o que garante isso.
         return ['attempts' => $attempts, 'is_solved' => false, 'solved_time' => 0, 'penalty_time' => 0];
+    }
+
+    /**
+     * Issue #198 -- quanto tempo de prova um envio vale para a SEDE dele.
+     *
+     * Resolvido aqui e nao dentro de reduceCell() para que a reducao
+     * continue pura: ela recebe uma funcao e nao um servico, e os testes da
+     * regra da celula seguem sem precisar de banco.
+     */
+    private static function adjustedSecondsResolver(Contest $contest): callable
+    {
+        $clock = app(ContestClock::class);
+
+        return fn (Run $run) => $clock->adjusted($contest, $run->site_id !== null ? (int) $run->site_id : null, (int) $run->contest_time);
     }
 
     public static function recomputeFor(Run $run): void
@@ -169,7 +196,11 @@ class Score extends Model
             ->orderBy('id')
             ->get();
 
-        $cell = self::reduceCell($candidates, (int) ($contest?->penalty ?? 0));
+        $cell = self::reduceCell(
+            $candidates,
+            (int) ($contest?->penalty ?? 0),
+            $contest ? self::adjustedSecondsResolver($contest) : null
+        );
 
         $attempts = $cell['attempts'];
         $isSolved = $cell['is_solved'];
