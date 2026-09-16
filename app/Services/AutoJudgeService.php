@@ -824,7 +824,23 @@ class AutoJudgeService
         // tolerance, order-independent results, etc. that a plain diff can't
         // handle. Convention: `<script> <input> <expected_output> <actual_output>`,
         // exit code 0 = correct, anything else = incorrect.
+        // Issue #200 -- a convencao do BOCA e por LINGUAGEM (compare/<ext>),
+        // e faz sentido la: o pacote traz um script por linguagem aceita. O
+        // formato da ICPC/Kattis tem `output_validators/`, que pertence ao
+        // PROBLEMA -- um validador de saida nao muda porque a equipe
+        // escreveu em Python.
+        //
+        // Por isso o importador do #200 escreve um `compare/default`, e a
+        // escolha e feita AQUI e nao em Problem::getCompareScriptPath():
+        // aquele metodo e um construtor de caminho puro, testavel sem disco,
+        // e escolher entre dois caminhos e decisao de quem ja esta olhando o
+        // disco de qualquer forma.
         $compareScript = $problem->getCompareScriptPath($language->extension);
+
+        if (! file_exists($compareScript)) {
+            $compareScript = $problem->getCompareScriptPath('default');
+        }
+
         if ($inputFile && $expectedOutputFile && $actualOutputFile && file_exists($compareScript)) {
             return $this->runCompareScript($compareScript, $inputFile, $expectedOutputFile, $actualOutputFile);
         }
