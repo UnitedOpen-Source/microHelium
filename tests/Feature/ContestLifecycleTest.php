@@ -243,6 +243,56 @@ class ContestLifecycleTest extends TestCase
         );
     }
 
+    /**
+     * Issue #240 -- e tem que encerrar agora tambem quando o relogio nao
+     * esta redondo.
+     *
+     * `duration` e em MINUTOS. Arredondando para cima, um encerramento
+     * pedido a 100min01s virava 101 minutos de prova: `isRunning()` seguia
+     * verdadeiro por mais 59 segundos e a prova continuava aceitando envios.
+     *
+     * O caso acima nao pegava isso por sorte de relogio -- passava quando a
+     * maquina era rapida o bastante para chamar `endEarly()` dentro do mesmo
+     * segundo em que a competicao foi criada, e falhava no CI quando nao
+     * era. O `travel` abaixo tira a sorte da conta.
+     */
+    public function test_ending_early_ends_now_on_a_second_that_is_not_a_whole_minute(): void
+    {
+        $this->travel(1)->seconds();
+
+        app(ContestLifecycle::class)->endEarly($this->contest->fresh(), $this->admin);
+        app(ContestClock::class)->forget();
+
+        $encerrada = $this->contest->fresh();
+
+        $this->assertFalse(
+            $encerrada->isRunning(),
+            'um segundo quebrado nao pode comprar 59 segundos a mais de prova'
+        );
+        $this->assertTrue(
+            $encerrada->end_time->lte(now()),
+            'o fim gravado nao pode cair depois do instante em que se pediu o encerramento'
+        );
+    }
+
+    /**
+     * Abortar a prova no primeiro minuto encerra de verdade.
+     *
+     * O `max(1, ...)` que estava aqui punha o fim a um minuto no futuro
+     * exatamente no caso em que mais importa parar: um problema errado no
+     * ar, a prova recem-comecada e a organizacao mandando parar.
+     */
+    public function test_a_contest_aborted_in_its_first_minute_stops_immediately(): void
+    {
+        $recem = Contest::factory()->running(0)->create();
+        $this->travel(30)->seconds();
+
+        app(ContestLifecycle::class)->endEarly($recem->fresh(), $this->admin);
+        app(ContestClock::class)->forget();
+
+        $this->assertFalse($recem->fresh()->isRunning(), 'abortar no primeiro minuto tem que parar a prova');
+    }
+
     // -- preflight ----------------------------------------------------------
 
     /**
