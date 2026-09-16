@@ -92,7 +92,7 @@ class JudgehostSelfTestCommandTest extends TestCase
 
         $payload = json_decode($raw, true);
 
-        $this->assertIsArray($payload, "a saida --json nao foi JSON valido:\n".$raw);
+        $this->assertIsArray($payload, "a saida --json nao foi JSON valido (exit {$exitCode}, ".strlen($raw)." bytes):\n".$raw);
         $this->assertSame(0, $exitCode, $raw);
         $this->assertTrue($payload['passed'], $raw);
 

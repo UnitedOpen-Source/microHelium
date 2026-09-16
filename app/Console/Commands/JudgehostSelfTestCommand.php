@@ -433,6 +433,8 @@ class JudgehostSelfTestCommand extends Command
      */
     private function result(string $key, string $title, string $expected, bool $passed, string $detail): array
     {
+        $detail = self::printable($detail);
+
         return compact('key', 'title', 'expected', 'passed', 'detail');
     }
 
@@ -444,12 +446,17 @@ class JudgehostSelfTestCommand extends Command
         $failed = array_values(array_filter($results, fn (array $r) => ! $r['passed']));
 
         if ($this->option('json')) {
+            // JSON_INVALID_UTF8_SUBSTITUTE como segunda barreira: printable()
+            // ja limpa cada detalhe, mas um json_encode que falha aqui volta
+            // `false` e vira uma linha em branco -- silencio no lugar do
+            // relatorio. Melhor um caractere substituido do que um autoteste
+            // que se apaga.
             $this->line((string) json_encode([
                 'host' => gethostname(),
                 'generated_at' => now()->toISOString(),
                 'passed' => $failed === [],
                 'cases' => $results,
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
 
             return $failed === [] ? self::SUCCESS : self::FAILURE;
         }
@@ -481,7 +488,23 @@ class JudgehostSelfTestCommand extends Command
 
     private function firstLine(string $text): string
     {
-        return trim(strtok($text, "\n") ?: '');
+        return self::printable(trim(strtok($text, "\n") ?: ''));
+    }
+
+    /**
+     * Texto que saiu do sandbox, seguro para json_encode().
+     *
+     * Nao e higiene defensiva: a saida em JSON chegou VAZIA no job Judging
+     * do CI, e a causa era esta. Um dos casos carrega stderr do proprio
+     * bwrap no relatorio, bytes que nao formam UTF-8 valido fazem
+     * json_encode() devolver `false`, e `(string) false` e a string vazia --
+     * o comando imprimia uma linha em branco e saia com codigo zero. Um
+     * relatorio de confinamento que se apaga sozinho e pior do que um que
+     * falha: ninguem vai conferir um autoteste que "passou".
+     */
+    private static function printable(string $text): string
+    {
+        return mb_convert_encoding($text, 'UTF-8', 'UTF-8');
     }
 
     private function removeWorkspace(): void
