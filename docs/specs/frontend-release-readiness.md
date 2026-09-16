@@ -12,7 +12,7 @@ Rotas de sessão, CSRF e middleware `auth` + `admin`:
 
 A confirmação visual não autoriza nada por si só. O servidor reaplica as regras. `contest_not_started` foi acrescentado ao serviço compartilhado para recusar eventos futuros ou sem início, tanto na tela quanto no preflight API.
 
-`GET /api/contest/current` mantém seu formato e acrescenta `is_finalized`. O relógio usa os booleanos do servidor para congelamento/revelação e finalização. O contador entre consultas é uma indicação da agenda, não uma autorização para envio; o backend continua decidindo se uma submissão é permitida.
+`GET /api/contest/current` mantém seu formato e acrescenta `is_finalized`, `end_time` (término global calculado pelo servidor) e `server_time` (referência para corrigir a diferença de relógio do navegador). O relógio usa os booleanos do servidor para congelamento/revelação e finalização. O contador entre consultas é uma indicação da agenda, não uma autorização para envio; o backend continua decidindo se uma submissão é permitida.
 
 ## Bloqueador #225: transições legadas
 
@@ -24,7 +24,7 @@ Aceite obrigatório: evento identificado → congelar → terminar antecipadamen
 
 Sedes e linguagens enviam `_form_key` como contexto de apresentação, nunca como identificador autorizado do registro. Identidade e autorização continuam na rota/modelo. O redirect de validação deve preservar esse campo com o restante de `old input`; a tela usa-o para reabrir somente o formulário correto. `max_judge_wait_time` continua inteiro em **segundos**: a interface agora expõe exatamente essa unidade.
 
-## Futuras entregas já comentadas nas issues
+## Integrações com as entregas do backend
 
 | Issue | Resposta/estado necessário | Aceite de UI |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ Sedes e linguagens enviam `_form_key` como contexto de apresentação, nunca com
 | #198 | Estratégia escolhida, sede(s), motivo, intervalo/extensão, término efetivo anterior/novo, ator e reversão | Prévia de impacto e confirmação; relógio consome término efetivo do servidor; histórico explica mudanças |
 | #200 | Formatos/versões suportados, diagnóstico por arquivo/campo, resumo e resultado atômico ou parcial explicitamente contratado | Seleção informa formato; erro mantém contexto; nenhuma solução/teste privado aparece no enunciado; importação parcial não parece sucesso total |
 
-Os nomes de campos das entregas futuras devem ser acordados nas respectivas specs; esta tabela define a semântica necessária sem criar endpoints que o backend ainda não implementa.
+Atualização de 16/09: #188, #195, #196 (fase 1), #198 e #200 foram integradas durante esta revisão. Use agora os contratos publicados em `188-organizacoes.md`, `195-contest-api.md`, `196-tempo-medido.md`, `198-intervalos-removidos.md` e `200-pacote-icpc.md`; não invente campos com base nesta tabela semântica. O frontend dessas operações adicionais ainda exige uma entrega própria. #219 também foi integrada no PR #232 (`219-event-feed.md`); falta homologação com resolver real. Os fluxos adicionais de interface estão reunidos em #233. A comparação da fase 1 de #196 usa envios aceitos já existentes, portanto não depende de importação de soluções de referência.
 
 ## Recuperação e dados desatualizados
 
