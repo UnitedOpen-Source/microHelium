@@ -1,27 +1,27 @@
 {
-  "_FeaturePager-D-onjTnr.js": {
-    "file": "assets/FeaturePager-D-onjTnr.js",
+  "_FeaturePager-CV_o5zuw.js": {
+    "file": "assets/FeaturePager-CV_o5zuw.js",
     "name": "FeaturePager",
     "imports": [
       "resources/js/app.js"
     ]
   },
-  "_FeatureState-CQ-cOE0U.js": {
-    "file": "assets/FeatureState-CQ-cOE0U.js",
+  "_FeatureState-DJwKPjVD.js": {
+    "file": "assets/FeatureState-DJwKPjVD.js",
     "name": "FeatureState",
     "imports": [
       "resources/js/app.js"
     ]
   },
-  "_FieldError-C-K7mT-l.js": {
-    "file": "assets/FieldError-C-K7mT-l.js",
+  "_FieldError-D8zFlHkW.js": {
+    "file": "assets/FieldError-D8zFlHkW.js",
     "name": "FieldError",
     "imports": [
       "resources/js/app.js"
     ]
   },
-  "_ReportChart-CH6XOM04.js": {
-    "file": "assets/ReportChart-CH6XOM04.js",
+  "_ReportChart-CusKSBky.js": {
+    "file": "assets/ReportChart-CusKSBky.js",
     "name": "ReportChart",
     "imports": [
       "resources/js/app.js"
@@ -37,7 +37,7 @@
     "isEntry": true
   },
   "resources/js/app.js": {
-    "file": "assets/app-B8QiE2G8.js",
+    "file": "assets/app-7V322nbH.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true,
@@ -46,111 +46,122 @@
     ]
   },
   "resources/js/features/BankGovernance.vue": {
-    "file": "assets/BankGovernance-9Ip9ypFv.js",
+    "file": "assets/BankGovernance-DnwZ4aXE.js",
     "name": "BankGovernance",
     "src": "resources/js/features/BankGovernance.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js",
-      "_FieldError-C-K7mT-l.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js",
+      "_FieldError-D8zFlHkW.js"
     ]
   },
   "resources/js/features/JudgeHistory.vue": {
-    "file": "assets/JudgeHistory-DaDmI9Dr.js",
+    "file": "assets/JudgeHistory-BmEoOeje.js",
     "name": "JudgeHistory",
     "src": "resources/js/features/JudgeHistory.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js",
-      "_ReportChart-CH6XOM04.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js",
+      "_ReportChart-CusKSBky.js"
     ]
   },
   "resources/js/features/JudgeMachines.vue": {
-    "file": "assets/JudgeMachines-DeuaHfF9.js",
+    "file": "assets/JudgeMachines-DhRojaMx.js",
     "name": "JudgeMachines",
     "src": "resources/js/features/JudgeMachines.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js"
+      "_FeatureState-DJwKPjVD.js"
     ]
   },
   "resources/js/features/JudgingHealth.vue": {
-    "file": "assets/JudgingHealth-DtBm3enH.js",
+    "file": "assets/JudgingHealth-_96jeMWk.js",
     "name": "JudgingHealth",
     "src": "resources/js/features/JudgingHealth.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js"
     ]
   },
   "resources/js/features/ManagedAccounts.vue": {
-    "file": "assets/ManagedAccounts-DK-HbAp8.js",
+    "file": "assets/ManagedAccounts-CQ5ZNnJ1.js",
     "name": "ManagedAccounts",
     "src": "resources/js/features/ManagedAccounts.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js",
-      "_FieldError-C-K7mT-l.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js",
+      "_FieldError-D8zFlHkW.js"
+    ]
+  },
+  "resources/js/features/Organizations.vue": {
+    "file": "assets/Organizations-DjaC8qvR.js",
+    "name": "Organizations",
+    "src": "resources/js/features/Organizations.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FeatureState-DJwKPjVD.js",
+      "_FieldError-D8zFlHkW.js"
     ]
   },
   "resources/js/features/Practice.vue": {
-    "file": "assets/Practice-3f1QgUJT.js",
+    "file": "assets/Practice-BvUHFeGw.js",
     "name": "Practice",
     "src": "resources/js/features/Practice.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js",
-      "_FieldError-C-K7mT-l.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js",
+      "_FieldError-D8zFlHkW.js"
     ]
   },
   "resources/js/features/Similarity.vue": {
-    "file": "assets/Similarity-BFw1Fnh3.js",
+    "file": "assets/Similarity-5LY2QQZH.js",
     "name": "Similarity",
     "src": "resources/js/features/Similarity.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js",
-      "_FieldError-C-K7mT-l.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js",
+      "_FieldError-D8zFlHkW.js"
     ]
   },
   "resources/js/features/SiteReport.vue": {
-    "file": "assets/SiteReport-CWGu1AGi.js",
+    "file": "assets/SiteReport-BbtxajOt.js",
     "name": "SiteReport",
     "src": "resources/js/features/SiteReport.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_ReportChart-CH6XOM04.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_ReportChart-CusKSBky.js"
     ]
   },
   "resources/js/features/Webcast.vue": {
-    "file": "assets/Webcast-CnzaCUFw.js",
+    "file": "assets/Webcast-CqGV9d4F.js",
     "name": "Webcast",
     "src": "resources/js/features/Webcast.vue",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.js",
-      "_FeatureState-CQ-cOE0U.js",
-      "_FeaturePager-D-onjTnr.js",
-      "_FieldError-C-K7mT-l.js"
+      "_FeatureState-DJwKPjVD.js",
+      "_FeaturePager-CV_o5zuw.js",
+      "_FieldError-D8zFlHkW.js"
     ]
   },
   "resources/js/features/mount.js": {
-    "file": "assets/mount-Dmb7unb3.js",
+    "file": "assets/mount-joC0sAb0.js",
     "name": "mount",
     "src": "resources/js/features/mount.js",
     "isDynamicEntry": true,
@@ -166,7 +177,8 @@
       "resources/js/features/ManagedAccounts.vue",
       "resources/js/features/SiteReport.vue",
       "resources/js/features/JudgeHistory.vue",
-      "resources/js/features/JudgeMachines.vue"
+      "resources/js/features/JudgeMachines.vue",
+      "resources/js/features/Organizations.vue"
     ]
   }
 }
