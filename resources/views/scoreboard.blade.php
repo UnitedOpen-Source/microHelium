@@ -17,6 +17,16 @@
             </h2>
             <p class="text-sm text-muted-foreground">Classificação dos times participantes. Recarregue para consultar novos resultados.</p>
         </div>
+        {{-- Issue #211: até aqui o congelamento não escondia nada, e esta
+             página nem chegava a perguntar. Agora que esconde, ela precisa
+             dizer que esconde -- um placar congelado sem aviso é um placar
+             errado. --}}
+        @if($frozen ?? false)
+        <div class="border-b border-warning/40 bg-warning-soft px-6 py-3">
+            <p class="text-sm font-medium text-warning">Placar congelado</p>
+            <p class="text-sm text-muted-foreground">As submissões feitas a partir do congelamento aparecem como pendentes (<span class="font-mono">?</span>) e não alteram a classificação. A competição continua.</p>
+        </div>
+        @endif
         @include('partials.table-filter', ['tableId' => 'scoreboard-table', 'searchLabel' => 'times', 'difficulty' => false])
         <div class="overflow-x-auto">
             <table id="scoreboard-table" class="w-full">
@@ -62,6 +72,16 @@
                                 @if($ps && $ps['is_solved'])
                                     <span class="inline-flex flex-col items-center justify-center w-10 h-9 rounded bg-success-soft text-xs font-medium text-success ring-1 ring-inset ring-success/20" title="{{ $problem->name }}: Aceito na tentativa {{ $ps['attempts'] }}">
                                         +{{ $ps['attempts'] > 1 ? $ps['attempts'] - 1 : '' }}
+                                    </span>
+                                {{-- Issue #211: sem este estado, uma célula
+                                     congelada com quatro submissões dentro
+                                     caía no "Não tentado" lá embaixo, que é
+                                     falso e é justamente a informação que a
+                                     ICPC mantém visível durante o
+                                     congelamento. --}}
+                                @elseif($ps && ($ps['pending'] ?? 0) > 0)
+                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-warning-soft text-xs font-medium text-warning ring-1 ring-inset ring-warning/20" title="{{ $problem->name }}: {{ $ps['attempts'] + $ps['pending'] }} submissão(ões), resultado não divulgado durante o congelamento">
+                                        ?{{ $ps['attempts'] + $ps['pending'] }}
                                     </span>
                                 @elseif($ps && $ps['attempts'] > 0)
                                     <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-destructive-soft text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20" title="{{ $problem->name }}: {{ $ps['attempts'] }} tentativa(s) incorreta(s)">

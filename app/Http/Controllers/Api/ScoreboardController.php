@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\Leaderboard;
 use App\Models\Problem;
+use App\Models\Run;
 use App\Models\Score;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,16 @@ class ScoreboardController extends Controller
         // off /contests/{contest}.
         $this->authorizeContestVisibility($contest);
 
-        $frozen = $contest->isFrozen() && ! auth()->user()?->isAdmin();
+        // Issue #211 -- este valor era calculado e descartado: o
+        // getScoreboard() que o recebia nunca o lia. Agora ele corta de
+        // verdade.
+        //
+        // A isencao deixou de ser so admin e passou a ser a regra ja nomeada
+        // em Run::viewerSeesWithheldVerdicts() -- admin, juiz, staff e sede.
+        // Um juiz que nao pudesse ver o placar descongelado nao conseguiria
+        // fazer o trabalho dele durante a ultima hora, e a lista de "quem e
+        // da organizacao" nao pode existir em duas versoes.
+        $frozen = $contest->isFrozen() && ! Run::viewerSeesWithheldVerdicts(auth()->user());
 
         $scoreboard = Leaderboard::getScoreboard($contest->id, $frozen);
 

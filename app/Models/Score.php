@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Services\BalloonService;
+use Helium\User;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -33,10 +34,10 @@ class Score extends Model
         return $this->belongsTo(Contest::class);
     }
 
-    /** @return BelongsTo<\Helium\User, $this> */
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
     /** @return BelongsTo<Problem, $this> */
@@ -47,15 +48,16 @@ class Score extends Model
 
     public function getTotalTime(): int
     {
-        if (!$this->is_solved) {
+        if (! $this->is_solved) {
             return 0;
         }
+
         return $this->solved_time + $this->penalty_time;
     }
 
     public static function updateScore(Run $run): void
     {
-        if (!$run->isJudged()) {
+        if (! $run->isJudged()) {
             return;
         }
 
@@ -99,6 +101,48 @@ class Score extends Model
      * in *judging* order, which is the same thing only while nothing is
      * rejudged and no run waits on a human.
      */
+    /**
+     * A regra da celula, sozinha: dados os runs que contam, em ordem de
+     * submissao, quanto vale esta celula.
+     *
+     * Extraida de recomputeFor() para a issue #211, onde o placar congelado
+     * precisa da MESMA reducao sobre um subconjunto diferente -- so os runs
+     * anteriores ao momento do congelamento. A alternativa era escrever a
+     * contagem de tentativas e a penalidade de novo do lado do congelamento,
+     * e duas formulacoes da mesma regra que por acaso concordam e como a
+     * proxima pessoa muda uma e esquece a outra. O #171 ja documenta essa
+     * armadilha neste arquivo, com um caso em que ela aconteceu.
+     *
+     * Pura de proposito: nao consulta nada, nao escreve nada, e por isso o
+     * congelamento pode aplica-la sobre uma colecao em memoria sem que nada
+     * seja gravado.
+     *
+     * @param  iterable<Run>  $countable  em ordem de contest_time, depois id
+     * @return array{attempts: int, is_solved: bool, solved_time: int, penalty_time: int}
+     */
+    public static function reduceCell(iterable $countable, int $penalty): array
+    {
+        $attempts = 0;
+
+        foreach ($countable as $candidate) {
+            $attempts++;
+
+            if ($candidate->answer?->is_accepted) {
+                return [
+                    'attempts' => $attempts,
+                    'is_solved' => true,
+                    'solved_time' => (int) floor($candidate->contest_time / 60),
+                    // ICPC: so as tentativas ANTES da aceita pagam.
+                    'penalty_time' => ($attempts - 1) * $penalty,
+                ];
+            }
+        }
+
+        // ICPC: submissoes depois da aceita nao sao contadas -- o `return`
+        // acima e o que garante isso.
+        return ['attempts' => $attempts, 'is_solved' => false, 'solved_time' => 0, 'penalty_time' => 0];
+    }
+
     public static function recomputeFor(Run $run): void
     {
         $score = self::firstOrCreate([
@@ -125,22 +169,12 @@ class Score extends Model
             ->orderBy('id')
             ->get();
 
-        $attempts = 0;
-        $isSolved = false;
-        $solvedTime = 0;
-        $penaltyTime = 0;
+        $cell = self::reduceCell($candidates, (int) ($contest?->penalty ?? 0));
 
-        foreach ($candidates as $candidate) {
-            $attempts++;
-
-            if ($candidate->answer?->is_accepted) {
-                $isSolved = true;
-                $solvedTime = (int) floor($candidate->contest_time / 60);
-                $penaltyTime = ($attempts - 1) * (int) ($contest?->penalty ?? 0);
-                // ICPC: submissions after the accepted one are not counted.
-                break;
-            }
-        }
+        $attempts = $cell['attempts'];
+        $isSolved = $cell['is_solved'];
+        $solvedTime = $cell['solved_time'];
+        $penaltyTime = $cell['penalty_time'];
 
         $isFirstSolver = (bool) $score->is_first_solver;
 

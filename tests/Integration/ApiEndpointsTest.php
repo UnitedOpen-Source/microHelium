@@ -120,7 +120,21 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_scoreboard_api_returns_correct_data()
     {
-        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        // start_time fixado, e nao o do factory. ContestFactory sorteia
+        // start_time entre -1 e +1 mes, entao se este contest esta ou nao
+        // congelado era cara ou coroa -- so que ate a issue #211 o
+        // congelamento nao fazia nada, e a moeda nunca aparecia. Agora o
+        // placar congelado e calculado a partir dos RUNS, e este teste semeia
+        // linhas de leaderboard sem run nenhum por tras: num sorteio
+        // congelado ele passava a ver zero resolvidos, corretamente. O
+        // assunto do teste e a ordenacao por rank, entao o contest e fixado
+        // em "comecou agora", fora da janela de congelamento.
+        $contest = \App\Models\Contest::factory()->create([
+            'is_active' => true,
+            'start_time' => now(),
+            'duration' => 300,
+            'freeze_time' => 60,
+        ]);
         $alpha = \Helium\User::factory()->create(['fullname' => 'Team Alpha']);
         $beta = \Helium\User::factory()->create(['fullname' => 'Team Beta']);
 
@@ -144,7 +158,15 @@ class ApiEndpointsTest extends TestCase
      */
     public function test_scoreboard_export_csv_returns_correct_format()
     {
-        $contest = \App\Models\Contest::factory()->create(['is_active' => true]);
+        // Mesmo motivo do teste acima: o factory sorteia start_time, e o
+        // placar congelado nao le `leaderboard` -- ele recalcula a partir
+        // dos runs, que aqui nao existem. Ver a issue #211.
+        $contest = \App\Models\Contest::factory()->create([
+            'is_active' => true,
+            'start_time' => now(),
+            'duration' => 300,
+            'freeze_time' => 60,
+        ]);
         $user = \Helium\User::factory()->create(['fullname' => 'Team Test']);
         \App\Models\Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $user->user_id, 'problems_solved' => 3, 'total_time' => 150, 'rank' => 1]);
 
