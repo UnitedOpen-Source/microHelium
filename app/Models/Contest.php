@@ -277,7 +277,20 @@ class Contest extends Model
      */
     public function isFrozen(): bool
     {
-        if (! $this->is_active || ! $this->start_time || now()->lt($this->start_time)) {
+        // Issue #225 -- `is_active` SAIU desta condicao, e a remocao e o
+        // conserto de um vazamento.
+        //
+        // Enquanto ela estava aqui, desativar um contest o descongelava: o
+        // atalho legado `POST /backend/contest/end` grava
+        // `is_active = false`, e medido ponta a ponta o placar passava de
+        // esconder o solve da janela para MOSTRA-LO. Encerrar publicava a
+        // classificacao -- exatamente o vazamento que o #189 fechou, por
+        // outra porta.
+        //
+        // Estar ativo e "este e o evento corrente", e nao "a classificacao
+        // ja foi liberada". A unica coisa que termina um congelamento e
+        // alguem revelar, e isso e `unfrozen_at`.
+        if (! $this->start_time || now()->lt($this->start_time)) {
             return false;
         }
 

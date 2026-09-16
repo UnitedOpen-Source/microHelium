@@ -2,13 +2,12 @@
 
 namespace Tests\E2E;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use App\Models\Contest;
-use App\Models\Language;
 use App\Models\ProblemBank;
 use Helium\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
 
 class AdminContestManagementTest extends TestCase
 {
@@ -376,13 +375,24 @@ class AdminContestManagementTest extends TestCase
         $response->assertRedirect(route('backend.configurations'));
         $response->assertSessionHas('success');
 
-        // Verify scoreboard is frozen (freeze_time set to 0)
-        $this->assertDatabaseHas('contests', [
-            'id' => $contestId,
-            'freeze_time' => 0,
-        ]);
+        // Issue #225 -- a assercao aqui era `freeze_time => 0`, com o
+        // comentario "scoreboard is frozen (freeze_time set to 0)".
+        //
+        // Zero significa SEM CONGELAMENTO desde o #189, entao este teste
+        // fixava exatamente o defeito: o botao escrito "Placar congelado!"
+        // descongelava o placar, e o teste conferia que ele tinha feito
+        // isso. Medido ponta a ponta, o placar passava de esconder um solve
+        // da janela para mostra-lo.
+        //
+        // O que se afirma agora e a PROPRIEDADE -- o placar esta congelado
+        // -- e nao o valor de uma coluna cuja semantica o teste tinha ao
+        // contrario.
+        $this->assertTrue(
+            Contest::find($contestId)->isFrozen(),
+            'o atalho de congelar tem que congelar'
+        );
 
-        // Verify the frozen contest is still active
+        // E congelar nao desativa: sao decisoes separadas.
         $this->assertDatabaseHas('contests', [
             'id' => $contestId,
             'is_active' => true,
@@ -422,11 +432,16 @@ class AdminContestManagementTest extends TestCase
         $response->assertRedirect(route('backend.configurations'));
         $response->assertSessionHas('success');
 
-        // Verify contest is now inactive
-        $this->assertDatabaseHas('contests', [
-            'id' => $contestId,
-            'is_active' => false,
-        ]);
+        // Issue #225 -- a assercao era `is_active => false`.
+        //
+        // Encerrar nao e desativar, e confundir os dois era o vazamento:
+        // isFrozen() devolvia falso para contest inativo, entao o botao de
+        // encerrar PUBLICAVA a classificacao. O contest continua sendo o
+        // evento corrente ate alguem trocar.
+        $contest = Contest::find($contestId);
+
+        $this->assertFalse($contest->isRunning(), 'a prova tem que ter acabado');
+        $this->assertTrue((bool) $contest->is_active, 'encerrar nao desativa');
 
         // Verify success message
         $successMessage = session('success');
@@ -552,7 +567,7 @@ class AdminContestManagementTest extends TestCase
         // Issue #190: e uma tabela so. Conferir a copia legada era conferir
         // a duplicacao que este issue removeu.
         $this->assertDatabaseCount('hackathons', 0);
-        $this->assertFalse((bool)$contest->is_active);
+        $this->assertFalse((bool) $contest->is_active);
 
         // Step 2: Edit the contest
         $updateData = [
@@ -593,21 +608,20 @@ class AdminContestManagementTest extends TestCase
             ->post('/backend/contest/freeze');
 
         $response->assertRedirect(route('backend.configurations'));
-        $this->assertDatabaseHas('contests', [
-            'id' => $contest->id,
-            'freeze_time' => 0,
-            'is_active' => true,
-        ]);
+        // Issue #225 -- a propriedade, e nao `freeze_time => 0`, que
+        // significava o contrario.
+        $this->assertTrue(Contest::find($contest->id)->isFrozen());
+        $this->assertTrue((bool) Contest::find($contest->id)->is_active);
 
         // Step 5: End the contest
         $response = $this->actingAs($this->admin)
             ->post('/backend/contest/end');
 
         $response->assertRedirect(route('backend.configurations'));
-        $this->assertDatabaseHas('contests', [
-            'id' => $contest->id,
-            'is_active' => false,
-        ]);
+        // Encerrar termina a prova E MANTEM o placar congelado -- revelar e
+        // uma decisao separada (#189, #202).
+        $this->assertFalse(Contest::find($contest->id)->isRunning());
+        $this->assertTrue(Contest::find($contest->id)->isFrozen());
 
         // Step 6: Delete the contest
         $response = $this->actingAs($this->admin)
@@ -743,20 +757,15 @@ class AdminContestManagementTest extends TestCase
 
         $response->assertRedirect(route('backend.configurations'));
 
-        // All contests should now be inactive
-        $this->assertDatabaseHas('contests', [
-            'id' => $contest1Id,
-            'is_active' => false,
-        ]);
+        // Issue #225 -- encerrar termina a prova ATIVA sem desativa-la, e
+        // sem tocar nas outras. A assercao anterior era "todas inativas", o
+        // que so era verdade porque encerrar desativava -- e desativar
+        // publicava a classificacao.
+        $this->assertFalse(Contest::find($contest3Id)->isRunning(), 'a ativa acabou');
+        $this->assertTrue((bool) Contest::find($contest3Id)->is_active, 'e continua sendo o evento corrente');
 
-        $this->assertDatabaseHas('contests', [
-            'id' => $contest2Id,
-            'is_active' => false,
-        ]);
-
-        $this->assertDatabaseHas('contests', [
-            'id' => $contest3Id,
-            'is_active' => false,
-        ]);
+        // As outras seguem desativadas pela troca de evento, como antes.
+        $this->assertDatabaseHas('contests', ['id' => $contest1Id, 'is_active' => false]);
+        $this->assertDatabaseHas('contests', ['id' => $contest2Id, 'is_active' => false]);
     }
 }

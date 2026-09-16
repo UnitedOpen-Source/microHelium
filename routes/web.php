@@ -20,9 +20,11 @@ use App\Http\Controllers\SosQueueController;
 use App\Http\Controllers\StaffController;
 use App\Http\Controllers\SubmissionController;
 use App\Http\Controllers\SubmitController;
+use App\Models\Contest;
 use App\Models\ContestLog;
 use App\Models\ProblemBank;
 use App\Services\BocaImporterService;
+use App\Services\ContestLifecycle;
 use Helium\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -490,32 +492,40 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
         return redirect()->route('backend.configurations')->with('success', 'Maratona excluida com sucesso!');
     });
 
-    Route::post('/contest/freeze', function () {
-        $contest = DB::table('contests')->where('is_active', true)->first();
-        if ($contest) {
-            DB::table('contests')->where('id', $contest->id)->update([
-                'freeze_time' => 0, // Freeze immediately
-                'updated_at' => now(),
-            ]);
+    // Issue #225 -- os dois atalhos faziam o OPOSTO do que prometiam.
+    //
+    // Escreviam direto na tabela com DB::table, sem passar pelo modelo, e
+    // por isso ninguem tinha notado: `freeze_time = 0` significa "sem
+    // congelamento" desde o #189, entao o botao "Placar congelado!"
+    // descongelava; e `is_active = false` fazia isFrozen() devolver falso,
+    // entao o botao de encerrar publicava a classificacao.
+    //
+    // Agora chamam o mesmo servico que a API chama. A competicao vem pelo
+    // scope competition(), e nao pelo primeiro is_active da tabela: o
+    // contest de treino do #43 nunca e "o evento".
+    Route::post('/contest/freeze', function (Request $request, ContestLifecycle $lifecycle) {
+        $contest = Contest::query()->competition()->where('is_active', true)->first();
 
-            return redirect()->route('backend.configurations')->with('success', 'Placar congelado!');
+        if (! $contest) {
+            return redirect()->route('backend.configurations')->with('error', 'Nenhuma maratona ativa');
         }
 
-        return redirect()->route('backend.configurations')->with('error', 'Nenhuma maratona ativa');
+        $lifecycle->freezeNow($contest, $request->user());
+
+        return redirect()->route('backend.configurations')->with('success', 'Placar congelado a partir de agora.');
     });
 
-    Route::post('/contest/end', function () {
-        $contest = DB::table('contests')->where('is_active', true)->first();
-        if ($contest) {
-            DB::table('contests')->where('id', $contest->id)->update([
-                'is_active' => false,
-                'updated_at' => now(),
-            ]);
+    Route::post('/contest/end', function (Request $request, ContestLifecycle $lifecycle) {
+        $contest = Contest::query()->competition()->where('is_active', true)->first();
 
-            return redirect()->route('backend.configurations')->with('success', 'Competicao encerrada!');
+        if (! $contest) {
+            return redirect()->route('backend.configurations')->with('error', 'Nenhuma maratona ativa');
         }
 
-        return redirect()->route('backend.configurations')->with('error', 'Nenhuma maratona ativa');
+        $lifecycle->endEarly($contest, $request->user());
+
+        return redirect()->route('backend.configurations')
+            ->with('success', 'Competicao encerrada. O placar continua congelado ate alguem revelar.');
     });
 
     // Problem Bank Management

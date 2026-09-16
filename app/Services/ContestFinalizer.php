@@ -38,6 +38,29 @@ class ContestFinalizer
     {
         $blockers = [];
 
+        // Issue #225 -- uma prova que NAO COMECOU passava no preflight sem
+        // nenhum impedimento.
+        //
+        // `isRunning()` e falso para ela, entao a condicao "ainda esta
+        // correndo" nao disparava; e sem envio, sem erro de julgamento e sem
+        // clarificacao pendente -- que e o estado natural de uma prova que
+        // nao aconteceu -- a lista saia vazia. Medido: `[]`.
+        //
+        // Finalizar e a organizacao AFIRMANDO que nao sobrou nada pendente
+        // que pudesse mudar a classificacao. De uma prova que nao comecou
+        // sobra tudo.
+        if (! $contest->start_time) {
+            $blockers[] = [
+                'code' => 'contest_not_scheduled',
+                'message' => 'Esta prova nao tem horario de inicio.',
+            ];
+        } elseif (now()->lt($contest->start_time)) {
+            $blockers[] = [
+                'code' => 'contest_not_started',
+                'message' => 'Esta prova ainda nao comecou.',
+            ];
+        }
+
         if ($contest->isRunning()) {
             $blockers[] = [
                 'code' => 'contest_running',
