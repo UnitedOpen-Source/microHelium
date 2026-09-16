@@ -13,6 +13,10 @@ const pages = {
     // Issue #53, fase 4. O contrato esta em
     // docs/specs/53-judge-management.md.
     'judge-machines': () => import('./JudgeMachines.vue'),
+    // Issue #188/#233. A #46 entregou a governanca do banco e nenhum jeito
+    // de criar a organizacao que ela pede -- o seletor de proprietario
+    // abria vazio. docs/specs/188-organizacoes.md.
+    organizations: () => import('./Organizations.vue'),
 };
 export async function mountFeaturePages() {
     for (const element of document.querySelectorAll('[data-feature-page]')) {

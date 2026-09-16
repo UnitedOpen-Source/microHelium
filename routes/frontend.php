@@ -29,4 +29,9 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     // routes/frontend_api_judgehosts.php: acrescentar ou desligar maquina
     // muda a capacidade do evento, e isso e decisao de quem dirige a prova.
     Route::view('/judge-machines', 'features.judge-machines')->name('backend.judge-machines');
+    // Issue #188/#233. `admin`, igual as rotas de dados em
+    // routes/frontend_api_organizations.php: aqui o assunto e QUEM E
+    // EDITOR, e deixar um editor gerenciar a propria membership seria
+    // deixar que ele se promova.
+    Route::view('/organizations', 'features.organizations')->name('backend.organizations');
 });
