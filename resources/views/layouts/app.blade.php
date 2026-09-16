@@ -243,7 +243,7 @@
                                 <a href="/backend/tools" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/tools', 'backend/similarity', 'backend/webcast', 'backend/bank-governance', 'backend/managed-accounts') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z" /></svg>Ferramentas
                                 </a>
-                                <a href="/backend/configurations" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/configurations*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
+                                <a href="/backend/configurations" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/configurations*', 'backend/contest/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -270,7 +270,7 @@
             </aside>
 
             <!-- Mobile sidebar backdrop -->
-            <div id="sidebar-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden lg:hidden" onclick="toggleSidebar()"></div>
+            <div id="sidebar-backdrop" class="fixed inset-0 z-40 bg-black/50 hidden lg:hidden"></div>
 
             <!-- Main content -->
             <div id="app-content" class="app-content flex-1 flex flex-col min-w-0 lg:ml-0">
@@ -280,7 +280,7 @@
                     <button
                         type="button"
                         class="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                        onclick="toggleSidebar()" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false" id="sidebar-toggle"
+                        aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false" id="sidebar-toggle"
                     >
                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -301,7 +301,7 @@
                             <!-- User dropdown -->
                             <div class="relative">
                                 <button
-                                    id="user-menu-toggle" aria-label="Menu da conta" aria-controls="user-menu" aria-expanded="false" onclick="toggleUserMenu()"
+                                    id="user-menu-toggle" aria-label="Menu da conta" aria-controls="user-menu" aria-expanded="false"
                                     class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                                 >
                                     <span class="hidden sm:inline">{{ Auth::user()->fullname ?? Auth::user()->username }}</span>

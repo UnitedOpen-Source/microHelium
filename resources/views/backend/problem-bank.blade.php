@@ -33,14 +33,14 @@
     <div class="bg-card border border-border rounded-lg p-4">
         <div class="flex flex-wrap gap-2 items-center">
             <span class="text-sm font-medium text-foreground">Filtrar:</span>
-            <button onclick="filterProblems('all')" class="filter-btn px-3 py-1 bg-primary text-primary-foreground rounded text-sm" data-filter="all">Todos</button>
-            <button onclick="filterProblems('easy')" class="filter-btn px-3 py-1 bg-success-soft text-success rounded text-sm" data-filter="easy">Fácil</button>
-            <button onclick="filterProblems('medium')" class="filter-btn px-3 py-1 bg-warning-soft text-warning rounded text-sm" data-filter="medium">Médio</button>
-            <button onclick="filterProblems('hard')" class="filter-btn px-3 py-1 bg-destructive-soft text-destructive rounded text-sm" data-filter="hard">Difícil</button>
+            <button class="filter-btn px-3 py-1 bg-primary text-primary-foreground rounded text-sm" data-filter="all">Todos</button>
+            <button class="filter-btn px-3 py-1 bg-success-soft text-success rounded text-sm" data-filter="easy">Fácil</button>
+            <button class="filter-btn px-3 py-1 bg-warning-soft text-warning rounded text-sm" data-filter="medium">Médio</button>
+            <button class="filter-btn px-3 py-1 bg-destructive-soft text-destructive rounded text-sm" data-filter="hard">Difícil</button>
             <div class="flex-1"></div>
             <input type="search" id="searchInput" aria-label="Buscar problemas" placeholder="Buscar problema…"
                 class="px-3 py-1 bg-background border border-border rounded text-sm text-foreground w-full sm:w-64"
-                oninput="searchProblems(this.value)">
+                data-bank-search>
         </div>
     </div>
 
@@ -102,7 +102,7 @@
                         </td>
                         <td class="px-4 py-3">
                             <div class="flex gap-1">
-                                <button onclick="viewProblem({{ $problem->id }})" class="p-1.5 text-muted-foreground hover:text-primary rounded" title="Ver detalhes">
+                                <button data-view-problem="{{ $problem->id }}" class="p-1.5 text-muted-foreground hover:text-primary rounded" title="Ver detalhes">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -116,7 +116,7 @@
                                         </svg>
                                     </button>
                                 </form>
-                                <form method="POST" action="/backend/problem-bank/{{ $problem->id }}" class="inline" onsubmit="return confirm('Tem certeza que deseja remover este problema?')">
+                                <form method="POST" action="/backend/problem-bank/{{ $problem->id }}" class="inline" data-confirm="Tem certeza que deseja remover este problema?">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="p-1.5 text-muted-foreground hover:text-destructive rounded" title="Remover">
@@ -148,11 +148,11 @@
 </div>
 
 <!-- Problem Detail Modal -->
-<div id="problemModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+<div data-dialog id="problemModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
     <div class="bg-card rounded-lg border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div class="p-6 border-b border-border flex flex-wrap items-center justify-between gap-3">
             <h3 id="modalTitle" class="text-xl font-semibold text-foreground">Detalhes do Problema</h3>
-            <button onclick="closeModal()" class="p-2 hover:bg-muted rounded">
+            <button data-dialog-close="problemModal" class="p-2 hover:bg-muted rounded">
                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -198,6 +198,9 @@ function applyProblemFilters(save = false) {
 function filterProblems(difficulty) { activeDifficulty = difficulty; applyProblemFilters(true); }
 function searchProblems(query) { activeQuery = query; applyProblemFilters(true); }
 
+document.querySelectorAll('[data-filter]').forEach(button => button.addEventListener('click', () => filterProblems(button.dataset.filter)));
+document.querySelector('[data-bank-search]').addEventListener('input', event => searchProblems(event.target.value));
+document.querySelectorAll('[data-view-problem]').forEach(button => button.addEventListener('click', () => viewProblem(Number(button.dataset.viewProblem))));
 applyProblemFilters();
 for (const event of ['pageshow', 'popstate']) window.addEventListener(event, () => {
     const params = new URL(location.href).searchParams;

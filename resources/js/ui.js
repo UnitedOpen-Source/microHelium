@@ -1,3 +1,4 @@
+import { initializeActions } from './ui/actions.js';
 import { initializeDialogs } from './ui/dialogs.js';
 import { initializeForms } from './ui/forms.js';
 import { initializeWizard } from './ui/wizard.js';
@@ -56,6 +57,7 @@ export function initializeUI() {
     initializeWizard();
     const dialogs = initializeDialogs();
     initializeForms(dialogs);
+    initializeActions();
     document.addEventListener('keydown', event => {
         const root = sidebar?.classList.contains('is-open') ? sidebar : null;
         if (event.key === 'Escape') {

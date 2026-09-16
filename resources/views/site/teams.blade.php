@@ -16,7 +16,7 @@
                     <p class="text-sm text-muted-foreground mt-1">{{ $site?->name ?? 'Nenhum site vinculado' }}</p>
                 </div>
                 @if($site)
-                <button onclick="openModal('addTeamModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
+                <button data-dialog-open="addTeamModal" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
@@ -63,13 +63,13 @@
 
 @if($site)
 <!-- Modal Novo time -->
-<div id="addTeamModal" class="fixed inset-0 z-50 hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('addTeamModal')"></div>
+<div data-dialog id="addTeamModal" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" data-dialog-close="addTeamModal"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-card rounded-xl shadow-xl border border-border w-full max-w-lg">
             <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
                 <h3 class="text-xl font-semibold text-foreground">Novo time em {{ $site->name }}</h3>
-                <button onclick="closeModal('addTeamModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
+                <button data-dialog-close="addTeamModal" class="p-2 hover:bg-muted rounded-lg transition-colors">
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -97,7 +97,7 @@
                     </div>
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">
-                    <button type="button" onclick="closeModal('addTeamModal')" class="px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors">Cancelar</button>
+                    <button type="button" data-dialog-close="addTeamModal" class="px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors">Cancelar</button>
                     <button type="submit" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">Salvar</button>
                 </div>
             </form>
@@ -105,12 +105,4 @@
     </div>
 </div>
 @endif
-@endsection
-
-@section('scripts')
-<script @cspNonce>
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.body.style.overflow = ''; }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { document.querySelectorAll('[id$="Modal"]').forEach(modal => { if (!modal.classList.contains('hidden')) closeModal(modal.id); }); } });
-</script>
 @endsection

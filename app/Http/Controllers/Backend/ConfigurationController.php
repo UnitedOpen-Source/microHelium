@@ -3,16 +3,21 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\Answer;
+use App\Models\Contest;
+use App\Models\Language;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\View\View;
 
 class ConfigurationController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\View\View
+     * @return View
      */
     public function index()
     {
@@ -21,7 +26,7 @@ class ConfigurationController extends Controller
         // the wizard and this screen ever wrote, so a contest created by
         // the API, by the event importer (#147), by a seeder or by the
         // practice contest (#43) did not appear here at all.
-        $contests = DB::table('contests')->orderByDesc('id')->get();
+        $contests = Contest::competition()->orderByDesc('id')->get();
 
         return view('backend.configurations', compact('contests'));
     }
@@ -29,8 +34,7 @@ class ConfigurationController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\RedirectResponse
+     * @return RedirectResponse
      */
     public function store(Request $request)
     {
@@ -81,7 +85,7 @@ class ConfigurationController extends Controller
 
             // Create languages for this contest
             if (Schema::hasTable('languages')) {
-                $allLanguages = \App\Models\Language::getDefaultLanguages();
+                $allLanguages = Language::getDefaultLanguages();
 
                 foreach ($allLanguages as $lang) {
                     $isActive = in_array($lang['extension'], $selectedLanguages);
@@ -105,7 +109,7 @@ class ConfigurationController extends Controller
                 // run that earns that verdict gets a null answer_id and looks
                 // like nothing happened -- see the test in
                 // tests/Feature/DefaultAnswersTest.php.
-                $defaultAnswers = \App\Models\Answer::getDefaultAnswers();
+                $defaultAnswers = Answer::getDefaultAnswers();
 
                 foreach ($defaultAnswers as $answer) {
                     DB::table('answers')->insert(array_merge($answer, [

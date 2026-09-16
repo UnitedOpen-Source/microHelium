@@ -135,7 +135,7 @@
     .page-content td[colspan] { padding-block: 3rem; }
     .page-content button, .page-content a[class*='rounded'] { min-height: 44px; }
     .page-content button[class*='p-1'], .page-content button[class*='p-2'] { min-width: 44px; }
-    .page-content .overflow-x-auto { overscroll-behavior-x: contain; }
+    .page-content .overflow-x-auto { position: relative; overscroll-behavior-x: contain; }
     .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: .6rem; color: var(--color-muted-foreground); }
     .icon-button:hover { background: var(--color-accent); color: var(--color-accent-foreground); }
     .button-primary, .button-secondary { display: inline-flex; justify-content: center; align-items: center; gap: .65rem; min-height: 44px; border-radius: .65rem; padding: .65rem 1rem; font-size: .85rem; font-weight: 650; transition: background .18s, box-shadow .18s; }
@@ -200,8 +200,8 @@
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
-[id$="Modal"] > .fixed.flex { overflow-y: auto; align-items: safe center; }
-[id$="Modal"] .bg-card { max-height: calc(100dvh - 2rem); overflow-y: auto; }
+[data-dialog] > .fixed.flex { overflow-y: auto; align-items: safe center; }
+[data-dialog] .bg-card { max-height: calc(100dvh - 2rem); overflow-y: auto; }
 
 /* Accessible feedback, larger hit areas, and focus that clears the sticky header. */
 @layer components {
@@ -218,7 +218,7 @@ html { scroll-padding-top: 6rem; }
 :where(h1,h2,h3,h4,input,select,textarea,button,a,[tabindex]) { scroll-margin-top: 6rem; }
 :where(button,summary,a) { touch-action: manipulation; }
 #user-menu :is(button, a) { min-height: 44px; }
-[id$="Modal"] .bg-card { overscroll-behavior: contain; }
+[data-dialog] .bg-card { overscroll-behavior: contain; }
 :where(.page-content,.auth-form) :where(input[type=checkbox],input[type=radio]) + label { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
 @media (max-width: 767px) {
     .page-content { padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
@@ -321,8 +321,6 @@ input[type=file]::file-selector-button { background: var(--color-accent); color:
 .feature-statement section { margin-top: 1.5rem; }
 .feature-statement pre { overflow: auto; max-width: 100%; padding: 1rem; background: var(--color-muted); border-radius: .5rem; }
 .feature-link { text-decoration: underline; text-underline-offset: .2em; font-weight: 600; }
-.button-danger { display: inline-flex; align-items: center; padding: .7rem 1rem; border-radius: .6rem; background: var(--color-destructive); color: var(--color-destructive-foreground); font-weight: 600; }
-.button-danger:hover { background: var(--color-destructive-hover); }
 .feature-stack button:disabled { opacity: .6; cursor: not-allowed; }
 .feature-stack [aria-current=page] { background: var(--color-accent); color: var(--color-accent-foreground); box-shadow: inset 0 -3px 0 var(--color-primary); }
 
@@ -350,3 +348,13 @@ input[type=file]::file-selector-button { background: var(--color-accent); color:
     .report-chart-canvas { height: 14rem; }
     .feature-form input, .feature-form select, .feature-form textarea, .feature-search input, .feature-search select { font-size: 1rem; }
 }
+
+/* Confirmation is part of the page's design system, including dark mode. */
+.confirm-dialog { margin: auto; width: min(32rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; border: 1px solid var(--color-border); border-radius: 1rem; padding: 1.5rem; background: var(--color-card); color: var(--color-foreground); box-shadow: 0 24px 80px #0005; }
+.confirm-dialog::backdrop { background: #101a22aa; }
+.confirm-dialog h2 { font-size: 1.25rem; font-weight: 650; }
+.confirm-dialog p { margin-block: 1rem 1.5rem; line-height: 1.6; overflow-wrap: anywhere; }
+.button-danger { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: .65rem 1rem; border-radius: .6rem; background: var(--color-destructive); color: var(--color-destructive-foreground); font-weight: 600; }
+.button-danger:hover { background: var(--color-destructive-hover); }
+[data-dialog] { overscroll-behavior: contain; }
+form[data-form-key] { min-width: 0; }

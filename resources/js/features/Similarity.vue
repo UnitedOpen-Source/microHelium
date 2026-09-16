@@ -18,8 +18,8 @@ async function start(event) {
 <template>
     <div class="feature-stack">
         <div class="feature-message"><strong>Compare com contexto.</strong> Similaridade é um indício para revisão humana. O resultado não aplica penalidades automaticamente.</div>
-        <FeatureState :loading="loading" :error="error" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
-        <template v-if="data && !error">
+        <FeatureState :loading="loading" :error="error" :stale="!!data" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
+        <template v-if="data">
             <section class="surface feature-panel"><h2>Nova análise</h2><p class="feature-help">Compara a última solução aceita de cada equipe, no mesmo problema e linguagem.</p>
                 <form class="feature-form" @submit.prevent="start">
                     <label>Problema<select v-model="problem" name="problem_id" required :disabled="busy" :aria-invalid="!!actionError?.errors?.problem_id" aria-describedby="problem_id-error" @change="language = ''"><option value="">Selecione um problema</option><option v-for="item in data.problems" :key="item.id" :value="item.id">{{ item.contest_name }} · {{ item.name }}</option></select><FieldError :error="actionError" name="problem_id" /></label>

@@ -46,9 +46,9 @@ async function setEnabled(host, enabled) {
 </script>
 <template>
     <div class="feature-stack">
-        <FeatureState :loading="loading" :error="error" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
+        <FeatureState :loading="loading" :error="error" :stale="!!data" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
 
-        <template v-if="data && !error">
+        <template v-if="data">
             <dl class="feature-metrics">
                 <div class="surface stat-card"><dt>Máquinas</dt><dd>{{ data.meta?.total ?? '—' }}</dd></div>
                 <div class="surface stat-card"><dt>Habilitadas</dt><dd>{{ data.meta?.enabled ?? '—' }}</dd></div>

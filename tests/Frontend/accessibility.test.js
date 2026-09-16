@@ -27,7 +27,7 @@ const submit = form => {
 };
 
 test('nested modal isolates background, traps both directions and restores focus/inert on Escape', async () => {
-    page(`<header><a href="/">Home</a></header><aside inert>Already unavailable</aside><main><button id="open" onclick="openModal('createModal')">Create</button><div id="createModal" class="hidden"><h2>Create user</h2><input id="name"><button onclick="closeModal('createModal')">Cancel</button></div></main>`);
+    page(`<header><a href="/">Home</a></header><aside inert>Already unavailable</aside><main><button id="open" data-dialog-open="createModal">Create</button><div id="createModal" class="hidden"><h2>Create user</h2><input id="name"><button data-dialog-close="createModal">Cancel</button></div></main>`);
     initializeDialogs();
     const trigger = document.getElementById('open'); trigger.focus(); trigger.click();
     const dialog = document.getElementById('createModal');
@@ -160,4 +160,32 @@ test('clarification status filters expose pressed state, empty feedback and rest
     assert.equal(document.querySelector('[role=status]').textContent, '1 de 1 perguntas');
     assert.equal(new URL(location.href).searchParams.get('contest'), '3');
     assert.equal(new URL(location.href).searchParams.get('ui-questions'), 'answered');
+});
+
+test('record-specific dialog and server errors target only the submitted form', () => {
+    page(`<div data-error-summary data-form-key="edit2"><li data-error-field="name">Nome duplicado.</li></div><form data-form-key="edit1"><input name="name" id="first"></form><div data-dialog id="editSiteModal2" class="hidden"><h2>Editar sede 2</h2><form data-form-key="edit2"><input id="second" name="name" value="Tentativa"></form></div>`);
+    initializeForms(initializeDialogs());
+    assert.equal(document.activeElement.id, 'second');
+    assert.equal(document.getElementById('first').hasAttribute('aria-invalid'), false);
+    assert.equal(document.getElementById('editSiteModal2').getAttribute('role'), 'dialog');
+    assert.equal(document.querySelector('[data-error-summary] a').hash, '#second');
+});
+
+test('destructive confirmation cancels safely and resubmits exactly once with the original submitter', async () => {
+    const { initializeActions } = await import('../../resources/js/ui/actions.js');
+    page('<form method="POST" data-confirm="Excluir a sede Norte?"><button type="submit" name="action" value="delete">Excluir</button></form>');
+    window.HTMLDialogElement.prototype.showModal = function () { this.open = true; this.querySelector('[autofocus]').focus(); };
+    window.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new window.Event('close')); };
+    initializeForms({}); initializeActions();
+    const form = document.querySelector('form'), button = form.querySelector('button'), dialog = document.querySelector('dialog');
+    let submitted = 0;
+    form.requestSubmit = original => { assert.equal(original, button); const event = submit(form); if (!event.defaultPrevented) submitted++; };
+    button.focus(); assert.equal(submit(form).defaultPrevented, true);
+    assert.equal(dialog.open, true);
+    assert.match(dialog.textContent, /sede Norte/);
+    assert.equal(document.activeElement.textContent, 'Cancelar');
+    dialog.querySelector('button').click(); assert.equal(submitted, 0); assert.equal(document.activeElement, button);
+    submit(form); dialog.querySelector('.button-danger').click(); await tick();
+    assert.equal(submitted, 1); assert.equal(form.getAttribute('aria-busy'), 'true');
+    assert.equal(submit(form).defaultPrevented, true);
 });

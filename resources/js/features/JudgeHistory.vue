@@ -38,8 +38,8 @@ const judgeChart = computed(() => ({
 
 <template>
     <div class="feature-stack">
-        <FeatureState :loading="loading" :error="error" @retry="load()" />
-        <template v-if="data && !error">
+        <FeatureState :loading="loading" :error="error" :stale="!!data" @retry="load()" />
+        <template v-if="data">
             <div class="feature-message">
                 <strong>{{ data.contest?.name }}</strong> — histórico de julgamento.
                 <p class="feature-help">
