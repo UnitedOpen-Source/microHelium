@@ -40,7 +40,7 @@
             <form action="/backend/import-boca/upload" method="POST" enctype="multipart/form-data" class="p-6">
                 @csrf
                 <div id="dropZone" class="border-2 border-dashed border-input rounded-lg p-6 text-center focus-within:ring-2 focus-within:ring-primary">
-                    <input type="file" name="boca_zip" id="fileInput" accept=".zip" class="sr-only" required onchange="updateFileName(this)" aria-describedby="zip-hint">
+                    <input type="file" name="boca_zip" id="fileInput" accept=".zip" class="sr-only" required aria-describedby="zip-hint">
                     <label for="fileInput" class="cursor-pointer">
                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -162,6 +162,7 @@
 
 @section('scripts')
 <script @cspNonce>
+document.querySelector('input[type=file]').addEventListener('change', event => updateFileName(event.target));
 function updateFileName(input) {
     const fileName = document.getElementById('fileName');
     if (input.files.length > 0) {

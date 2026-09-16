@@ -23,7 +23,7 @@ export function initializeDialogs() {
     let restoreBackground = () => {};
     let returnFocus = null;
     let previousOverflow = '';
-    const dialogs = [...document.querySelectorAll('[id$="Modal"]')];
+    const dialogs = [...document.querySelectorAll('[data-dialog], [id$="Modal"]')];
     const sync = dialog => {
         const open = !dialog.classList.contains('hidden');
         if (open && active !== dialog) {
@@ -60,14 +60,16 @@ export function initializeDialogs() {
         new MutationObserver(() => sync(dialog)).observe(dialog, { attributes: true, attributeFilter: ['class'] });
         sync(dialog);
     });
-    document.querySelectorAll('[onclick]').forEach(trigger => {
-        const match = trigger.getAttribute('onclick').match(/^(openModal|closeModal)\('([\w-]+)'\)$/);
-        if (!match) return;
-        const dialog = document.getElementById(match[2]);
+    document.querySelectorAll('[data-dialog-open], [data-dialog-close]').forEach(trigger => {
+        const dialog = document.getElementById(trigger.dataset.dialogOpen || trigger.dataset.dialogClose);
         if (!dialog) return;
-        trigger.removeAttribute('onclick');
+        if (trigger.dataset.dialogOpen) {
+            trigger.setAttribute('aria-haspopup', 'dialog');
+            trigger.setAttribute('aria-controls', dialog.id);
+        }
         trigger.addEventListener('click', () => {
-            dialog.classList.toggle('hidden', match[1] === 'closeModal');
+            dialog.classList.toggle('hidden', Boolean(trigger.dataset.dialogClose));
+            if (trigger.dataset.dialogClose) dialog.classList.remove('flex');
             sync(dialog);
         });
     });

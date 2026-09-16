@@ -13,17 +13,17 @@ export function useFeature(endpoint) {
             const search = new URLSearchParams(Object.entries(filters).filter(([, value]) => value !== '' && value != null));
             const result = await request(`${endpoint}${search.size ? `?${search}` : ''}`, { signal: active.signal });
             if (alive && active === controller) data.value = result;
-        } catch (failure) { if (!active.signal.aborted && alive) error.value = failure; }
+        } catch (failure) { if (!active.signal.aborted && alive && active === controller) { error.value = failure; if ([401, 403].includes(failure.status)) data.value = null; } }
         finally { if (active === controller && alive) loading.value = false; }
     }
     function filter(values) {
         Object.assign(query, values);
         const url = new URL(location.href);
         Object.entries(query).forEach(([key, value]) => value === '' || value == null ? url.searchParams.delete(key) : url.searchParams.set(key, value));
-        history.replaceState(null, '', url); return load();
+        if (url.href !== location.href) history.pushState(history.state, '', url); return load();
     }
     async function act(path, body, message, method = 'POST', form) {
-        if (busy.value) return null;
+        if (busy.value || loading.value || error.value) return null;
         busy.value = true; notice.value = ''; actionError.value = null;
         try {
             const signature = JSON.stringify([path, method, body]);

@@ -38,6 +38,15 @@ class ContestFinalizer
     {
         $blockers = [];
 
+        // A scheduled or undated event has not produced a final result yet.
+        // !isRunning() alone also includes these states (release audit #225).
+        if (! $contest->start_time || now()->lt($contest->start_time)) {
+            $blockers[] = [
+                'code' => 'contest_not_started',
+                'message' => 'A competição ainda não começou. Confira a agenda antes de finalizar.',
+            ];
+        }
+
         if ($contest->isRunning()) {
             $blockers[] = [
                 'code' => 'contest_running',

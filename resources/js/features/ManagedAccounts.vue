@@ -17,9 +17,9 @@ watch(() => query.q, value => { search.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack"><div class="feature-message"><strong>Privacidade desde o cadastro.</strong> Contas gerenciadas começam privadas. Datas de nascimento ficam restritas à administração; não aparecem na biblioteca nem no histórico público.</div>
-        <FeatureState :loading="loading" :error="error" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
+        <FeatureState :loading="loading" :error="error" :stale="!!data" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
         <div v-if="activation" class="feature-message feature-success"><label class="feature-secret">Link de ativação da conta<input :value="activation" readonly autocomplete="off" @focus="$event.target.select()"></label><p>Entregue este link apenas ao participante pelo canal institucional. Ele é de uso único.</p><button type="button" class="button-secondary" @click="activation = null">Já entreguei, ocultar link</button></div>
-        <template v-if="data && !error">
+        <template v-if="data">
             <section v-if="data.capabilities?.can_create" class="surface feature-panel"><h2>Criar conta gerenciada</h2><p class="feature-help">Use os dados fornecidos à organização. Não é necessário vincular uma conta externa.</p>
                 <form class="feature-form" @submit.prevent="create">
                     <label>Nome completo<input v-model="fullname" name="fullname" required maxlength="255" autocomplete="off" :disabled="busy" :aria-invalid="!!actionError?.errors?.fullname" aria-describedby="fullname-error"><FieldError :error="actionError" name="fullname" /></label>

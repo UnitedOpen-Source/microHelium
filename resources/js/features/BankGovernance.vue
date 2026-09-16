@@ -21,8 +21,8 @@ watch(() => query.q, value => { search.value = value || ''; });
 </script>
 <template>
     <div class="feature-stack"><div class="feature-message"><strong>Responsabilidade e assunto são informações diferentes.</strong> A organização proprietária define quem pode editar. Etiquetas ajudam a encontrar problemas e não concedem acesso.</div>
-        <FeatureState :loading="loading" :error="error" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
-        <template v-if="data && !error">
+        <FeatureState :loading="loading" :error="error" :stale="!!data" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
+        <template v-if="data">
             <form class="surface feature-panel feature-search" role="search" @submit.prevent="editing = null; filter({ q: search, organization_id: organization, page: 1 })"><label>Buscar no banco<input v-model="search" name="q" type="search" maxlength="100" placeholder="Nome ou etiqueta…"></label><label>Organização proprietária<select v-model="organization" name="organization_id"><option value="">Todas</option><option value="unassigned">Sem organização</option><option v-for="org in data.organizations" :key="org.id" :value="org.id">{{ org.name }}</option></select></label><button class="button-primary" :disabled="busy || loading">Filtrar</button></form>
             <section v-if="editing" class="surface feature-panel"><h2 id="bank-edit-title" tabindex="-1">Organizar: {{ editing.name }}</h2><form class="feature-form" @submit.prevent="save">
                 <label>Organização proprietária<select v-model="owner" name="owning_org_id" :disabled="busy || !editing.capabilities?.can_transfer" aria-describedby="owner-help owning_org_id-error" :aria-invalid="!!actionError?.errors?.owning_org_id"><option value="">Sem organização</option><option v-for="org in data.organizations" :key="org.id" :value="org.id">{{ org.name }}</option></select><small id="owner-help">Trocar a organização muda quem pode editar este problema.</small><FieldError :error="actionError" name="owning_org_id" /></label>

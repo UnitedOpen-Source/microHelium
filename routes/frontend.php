@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Backend\ContestOperationsController;
 use Illuminate\Support\Facades\Route;
 
 // Presentation only. Data/mutation contracts: docs/specs/README.md.
@@ -16,6 +17,9 @@ Route::view('/judge/health', 'features.judging-health')->middleware(['auth', 'ro
 Route::view('/judge/history', 'features.judge-history')->middleware(['auth', 'role:admin,judge'])->name('judge.history');
 Route::view('/staff/report', 'features.site-report')->middleware(['auth', 'role:admin,staff,site'])->name('staff.report');
 Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
+    Route::get('/contest/{contest}/operations', [ContestOperationsController::class, 'show'])->name('backend.contest.operations');
+    Route::post('/contest/{contest}/finalize', [ContestOperationsController::class, 'finalize'])->name('backend.contest.finalize');
+    Route::post('/contest/{contest}/unfreeze', [ContestOperationsController::class, 'unfreeze'])->name('backend.contest.unfreeze');
     Route::view('/tools', 'features.tools')->name('backend.tools');
     Route::view('/similarity', 'features.similarity')->name('backend.similarity');
     Route::view('/webcast', 'features.webcast')->name('backend.webcast');

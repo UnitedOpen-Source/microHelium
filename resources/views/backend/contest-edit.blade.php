@@ -134,7 +134,7 @@
                     <p class="font-medium text-destructive">Excluir Maratona</p>
                     <p class="text-sm text-destructive">Esta acao e irreversivel. Todos os dados serao perdidos.</p>
                 </div>
-                <form action="/backend/contest/{{ $contest->id }}/delete" method="POST" onsubmit="return confirm('Tem certeza que deseja excluir esta maratona? Esta acao nao pode ser desfeita.')">
+                <form action="/backend/contest/{{ $contest->id }}/delete" method="POST" data-confirm="Tem certeza que deseja excluir esta maratona? Esta acao nao pode ser desfeita.">
                     @csrf
                     @method('DELETE')
                     <button type="submit" class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive-hover transition-colors">

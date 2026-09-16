@@ -22,8 +22,8 @@ watch(() => query.contest_id, value => { contest.value = value || ''; });
 <template>
     <div class="feature-stack">
         <div class="feature-message"><strong>Placar completo para a premiação.</strong> Quem recebe uma credencial pode ver resultados após o congelamento. Compartilhe apenas com a equipe responsável pela cerimônia.</div>
-        <FeatureState :loading="loading" :error="error" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
-        <template v-if="data && !error">
+        <FeatureState :loading="loading" :error="error" :stale="!!data" :busy="busy" :notice="notice" :action-error="actionError" @retry="load()" />
+        <template v-if="data">
             <form class="surface feature-panel feature-search" @submit.prevent="changeContest"><label>Competição<select v-model="contest" name="contest_id" required><option value="">Selecione uma competição</option><option v-for="item in data.contests" :key="item.id" :value="item.id">{{ item.name }}</option></select></label><button class="button-primary" :disabled="loading || busy">Abrir transmissão</button></form>
             <template v-if="data.contest">
                 <section class="surface feature-panel"><div class="feature-heading"><div><p class="eyebrow">TRANSMISSÃO</p><h2>{{ data.contest.name }}</h2></div><span class="feature-badge">Placar sem congelamento</span></div>

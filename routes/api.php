@@ -246,5 +246,6 @@ Route::get('/contest/current', function () {
         'freeze_time' => $contest->getRawOriginal('freeze_time') ?? 60,
         'is_running' => $contest->isRunning(),
         'is_frozen' => $contest->isFrozen(),
+        'is_finalized' => $contest->isFinalized(),
     ]);
 });

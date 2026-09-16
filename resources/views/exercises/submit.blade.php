@@ -42,7 +42,7 @@
                     <label for="source_file" class="block text-sm font-medium text-foreground mb-2">Arquivo de código-fonte</label>
                     <div class="relative rounded-lg focus-within:ring-2 focus-within:ring-primary">
                         <input type="file" name="source_file" id="source_file"
-                               class="sr-only" onchange="updateFileName(this)">
+                               class="sr-only">
                         <label for="source_file" class="flex flex-col items-center justify-center w-full min-h-40 p-4 border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
                             <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-placeholder">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-muted-foreground mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -182,6 +182,7 @@ int main() {
 
 @section('scripts')
 <script @cspNonce>
+document.querySelector('input[type=file]').addEventListener('change', event => updateFileName(event.target));
 function updateFileName(input) {
     const placeholder = document.getElementById('upload-placeholder');
     const selected = document.getElementById('upload-selected');

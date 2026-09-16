@@ -44,8 +44,11 @@ export function initializeForms(dialogs) {
     // Server messages remain readable without JavaScript, then become linked inline errors.
     document.querySelectorAll('[data-error-summary]').forEach(summary => {
         let first;
+        const scope = summary.dataset.formKey
+            ? [...document.forms].find(form => form.dataset.formKey === summary.dataset.formKey)
+            : document;
         summary.querySelectorAll('[data-error-field]').forEach(item => {
-            const field = [...document.querySelectorAll('input[name],select[name],textarea[name]')].find(field => field.name === item.dataset.errorField || field.name === `${item.dataset.errorField}[]`);
+            const field = [...(scope?.querySelectorAll('input[name],select[name],textarea[name]') || [])].find(field => field.name === item.dataset.errorField || field.name === `${item.dataset.errorField}[]`);
             if (!field) return;
             markFieldError(field, item.textContent.trim());
             const link = document.createElement('a');

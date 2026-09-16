@@ -14,7 +14,7 @@
                     <h2 class="text-xl font-semibold text-foreground">Contas cadastradas</h2>
                     <p class="text-sm text-muted-foreground mt-1">Lista de todos os usuarios do sistema</p>
                 </div>
-                <button onclick="openModal('addUserModal')" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
+                <button data-dialog-open="addUserModal" class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
@@ -74,7 +74,7 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                     </svg>
                                 </a>
-                                <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" onsubmit="return confirm('Excluir este usuario?')">
+                                <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" data-confirm="Excluir este usuario?">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="p-1.5 text-destructive hover:bg-destructive-soft rounded transition-colors" title="Excluir {{ $user->fullname }}">
@@ -104,13 +104,13 @@
 </div>
 
 <!-- Modal Novo usuário -->
-<div id="addUserModal" class="fixed inset-0 z-50 hidden">
-    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('addUserModal')"></div>
+<div data-dialog id="addUserModal" class="fixed inset-0 z-50 hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm" data-dialog-close="addUserModal"></div>
     <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="bg-card rounded-xl shadow-xl border border-border w-full max-w-lg">
             <div class="flex flex-wrap items-center justify-between gap-3 p-6 border-b border-border">
                 <h3 class="text-xl font-semibold text-foreground">Novo usuário</h3>
-                <button onclick="closeModal('addUserModal')" class="p-2 hover:bg-muted rounded-lg transition-colors">
+                <button data-dialog-close="addUserModal" class="p-2 hover:bg-muted rounded-lg transition-colors">
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -167,7 +167,7 @@
                     </div>
                 </div>
                 <div class="flex items-center justify-end gap-3 p-6 border-t border-border bg-muted/30">
-                    <button type="button" onclick="closeModal('addUserModal')" class="px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors">Cancelar</button>
+                    <button type="button" data-dialog-close="addUserModal" class="px-4 py-2 text-foreground hover:bg-muted rounded-lg transition-colors">Cancelar</button>
                     <button type="submit" class="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors">Salvar</button>
                 </div>
             </form>
@@ -175,12 +175,4 @@
     </div>
 </div>
 
-@endsection
-
-@section('scripts')
-<script @cspNonce>
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.body.style.overflow = ''; }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { document.querySelectorAll('[id$="Modal"]').forEach(modal => { if (!modal.classList.contains('hidden')) closeModal(modal.id); }); } });
-</script>
 @endsection
