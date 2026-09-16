@@ -20,6 +20,11 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/contest/{contest}/operations', [ContestOperationsController::class, 'show'])->name('backend.contest.operations');
     Route::post('/contest/{contest}/finalize', [ContestOperationsController::class, 'finalize'])->name('backend.contest.finalize');
     Route::post('/contest/{contest}/unfreeze', [ContestOperationsController::class, 'unfreeze'])->name('backend.contest.unfreeze');
+    // Issue #198/#233 -- intervalos removidos, na operacao da competicao.
+    Route::post('/contest/{contest}/time-adjustments', [ContestOperationsController::class, 'storeTimeAdjustment'])
+        ->name('backend.contest.time-adjustments.store');
+    Route::delete('/contest/{contest}/time-adjustments/{adjustment}', [ContestOperationsController::class, 'destroyTimeAdjustment'])
+        ->name('backend.contest.time-adjustments.destroy');
     Route::view('/tools', 'features.tools')->name('backend.tools');
     Route::view('/similarity', 'features.similarity')->name('backend.similarity');
     Route::view('/webcast', 'features.webcast')->name('backend.webcast');
