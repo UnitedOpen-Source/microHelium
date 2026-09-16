@@ -16,9 +16,12 @@ class OpenApiSpecTest extends TestCase
 {
     /**
      * Routes that intentionally have no OpenAPI entry: the spec file's own
-     * serving route.
+     * serving route, and the root of the Contest API (#195) -- which the
+     * prefix below does not cover, because that route has no trailing
+     * slash. Listing it here rather than loosening the prefix to '/clics'
+     * keeps the exclusion to exactly the paths that exist.
      */
-    private const EXCLUDED_PATHS = ['/openapi.yaml'];
+    private const EXCLUDED_PATHS = ['/openapi.yaml', '/clics'];
 
     /**
      * Path prefixes that intentionally have no OpenAPI entry: the
@@ -30,8 +33,17 @@ class OpenApiSpecTest extends TestCase
      * file header above). They share the literal "api/" URI prefix only
      * incidentally; their contract is documented per-feature under
      * docs/specs/*.md instead.
+     *
+     * Issue #195 adds /api/clics/* for the same reason, one step stronger:
+     * those routes implement an EXTERNAL, versioned specification -- the
+     * ICPC Contest API at ccs-specs.icpc.io -- whose normative contract
+     * lives there and not here. Re-describing it in this file would produce
+     * a second, local copy of someone else's spec, and the failure mode of
+     * a copy is that it drifts from the original while looking
+     * authoritative. What IS documented here is the mapping from this
+     * system's objects onto that vocabulary: docs/specs/195-contest-api.md.
      */
-    private const EXCLUDED_PREFIXES = ['/frontend/'];
+    private const EXCLUDED_PREFIXES = ['/frontend/', '/clics/'];
 
     public function test_spec_file_is_valid_yaml_with_a_paths_section()
     {
