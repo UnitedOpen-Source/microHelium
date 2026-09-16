@@ -42,6 +42,27 @@ return [
     | it does not sit in `ps` output for every user on the box.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Calibracao
+    |--------------------------------------------------------------------------
+    |
+    | Issue #196 -- a partir de quantas vezes a diferenca entre a maquina
+    | mais lenta e a mais rapida deixa de ser ruido e vira aviso.
+    |
+    | 1.5 porque abaixo disso a variacao se explica por carga momentanea e
+    | por diferencas de compilador, e acima disso o mesmo limite de tempo
+    | comeca a significar coisas diferentes em maquinas diferentes -- que e
+    | quando a equipe passa a receber TLE ou AC por sorteio de fila.
+    |
+    | Isto NAO muda veredito nenhum: e o limiar do aviso, e o #130 decidiu
+    | que divergencia e avisada e nao compensada.
+    |
+    */
+    'calibration' => [
+        'divergence_threshold' => (float) env('JUDGEHOST_DIVERGENCE_THRESHOLD', 1.5),
+    ],
+
     'agent' => [
         'server' => rtrim((string) env('JUDGEHOST_SERVER', ''), '/'),
         'token' => env('JUDGEHOST_TOKEN', ''),

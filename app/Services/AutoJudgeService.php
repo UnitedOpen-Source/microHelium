@@ -5,10 +5,11 @@ namespace App\Services;
 use App\Exceptions\SandboxUnavailableException;
 use App\Models\Answer;
 use App\Models\ContestLog;
+use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Score;
 use App\Models\TestCase;
-use App\Models\Problem;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 
@@ -20,21 +21,53 @@ class AutoJudgeService
      */
     private const RSS_PREFIX = 'MHRSS';
 
+    /**
+     * Issue #196 -- a medicao do ultimo caso de teste executado.
+     *
+     * Propriedade de instancia e nao retorno porque executeProgram() ja
+     * devolve o veredito, e enfiar a medicao nesse array a faria atravessar
+     * quatro camadas que nao tem nada a ver com ela. O AutoJudgeService vive
+     * uma vez por julgamento.
+     *
+     * @var array{peak_rss_kb: ?int, wall_seconds: ?float, cpu_seconds: ?float}
+     */
+    protected array $lastMeasurement = ['peak_rss_kb' => null, 'wall_seconds' => null, 'cpu_seconds' => null];
+
+    /**
+     * O maior tempo entre os casos de teste deste julgamento.
+     *
+     * O MAIOR e nao a soma nem a media: e o caso mais pesado que decide se o
+     * limite serve, e e ele que o MOJ usa para calibrar ("o limite servido e
+     * o maximo entre as maquinas").
+     *
+     * @var array{wall_seconds: ?float, cpu_seconds: ?float}
+     */
+    protected array $slowestCase = ['wall_seconds' => null, 'cpu_seconds' => null];
+
     public string $workDir;
+
     protected int $defaultTimeLimit;
+
     protected int $defaultMemoryLimit;
+
     protected string $bwrapPath;
+
     protected bool $useBwrap;
+
     protected array $sandboxPaths;
+
     protected int $compileMaxFileKb;
 
     protected int $compileMemoryMb;
+
     protected int $runMaxFileKb;
+
     protected int $runMaxProcesses;
 
     protected array $memoryGraceMb;
 
     protected string $rssTimePath;
+
     protected ?bool $sandboxProbeFailed = null;
 
     /**
@@ -96,11 +129,11 @@ class AutoJudgeService
      */
     public function wrapWithBwrap(string $command, string $runDir, array $options = []): string
     {
-        if (!$this->useBwrap) {
+        if (! $this->useBwrap) {
             return $command;
         }
 
-        if (!file_exists($this->bwrapPath) || !is_executable($this->bwrapPath)) {
+        if (! file_exists($this->bwrapPath) || ! is_executable($this->bwrapPath)) {
             throw new SandboxUnavailableException(
                 "Mandatory judge sandbox binary (bwrap) not found or not executable at '{$this->bwrapPath}'. Refusing unconfined host execution."
             );
@@ -137,15 +170,15 @@ class AutoJudgeService
         }
 
         // The only writable path, and the last mount applied.
-        $args[] = '--bind ' . escapeshellarg($runDir) . ' ' . escapeshellarg($runDir);
-        $args[] = '--chdir ' . escapeshellarg($runDir);
+        $args[] = '--bind '.escapeshellarg($runDir).' '.escapeshellarg($runDir);
+        $args[] = '--chdir '.escapeshellarg($runDir);
 
         $envPath = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
         $args[] = '--clearenv';
-        $args[] = '--setenv PATH ' . escapeshellarg($envPath);
-        $args[] = '--setenv LANG ' . escapeshellarg('C.UTF-8');
-        $args[] = '--setenv HOME ' . escapeshellarg($runDir);
-        $args[] = '--setenv TMPDIR ' . escapeshellarg($runDir);
+        $args[] = '--setenv PATH '.escapeshellarg($envPath);
+        $args[] = '--setenv LANG '.escapeshellarg('C.UTF-8');
+        $args[] = '--setenv HOME '.escapeshellarg($runDir);
+        $args[] = '--setenv TMPDIR '.escapeshellarg($runDir);
 
         // .NET's default W^X JIT double-maps executable memory through a
         // memfd it ftruncates to a large size, and RLIMIT_FSIZE applies to
@@ -155,7 +188,7 @@ class AutoJudgeService
         // nothing here; every other language ignores the variable.
         $args[] = '--setenv DOTNET_EnableWriteXorExecute 0';
 
-        $args[] = 'bash -c ' . escapeshellarg($this->rlimitPrologue($options) . $command);
+        $args[] = 'bash -c '.escapeshellarg($this->rlimitPrologue($options).$command);
 
         return implode(' ', $args);
     }
@@ -169,11 +202,11 @@ class AutoJudgeService
      */
     protected function roBindArgs(mixed $path): array
     {
-        if (!is_string($path) || $path === '' || !file_exists($path)) {
+        if (! is_string($path) || $path === '' || ! file_exists($path)) {
             return [];
         }
 
-        return ['--ro-bind ' . escapeshellarg($path) . ' ' . escapeshellarg($path)];
+        return ['--ro-bind '.escapeshellarg($path).' '.escapeshellarg($path)];
     }
 
     /**
@@ -184,7 +217,8 @@ class AutoJudgeService
      * ADDRESS SPACE, and the JVM, Go and V8 reserve large virtual ranges at
      * startup -- without headroom they refuse to boot however little they
      * actually touch. The verdict comes from peak RSS instead
-     * (peakRssKb()), which is how DMOJ produces an MLE with no cgroups and
+     * (measurement()['peak_rss_kb'] -- era peakRssKb() ate o #196 unir as
+     * duas leituras numa so), which is how DMOJ produces an MLE with no cgroups and
      * no privileges; the grace numbers are DMOJ's own shipped table.
      *
      * Issue #86 -- and it is a barrier of last resort. Where a cgroup
@@ -238,30 +272,84 @@ class AutoJudgeService
         return sprintf(
             '%s -f %s bash -c %s 2> %s',
             escapeshellarg($this->rssTimePath),
-            escapeshellarg(self::RSS_PREFIX.' %M'),
+            // Issue #196 -- o mesmo `time -f` passa a trazer o TEMPO junto
+            // com o pico de memoria.
+            //
+            // Ate aqui nenhum tempo era gravado: o TLE vem do codigo de
+            // saida do `ulimit -t`, entao o sistema sabia SE estourou e
+            // nunca QUANTO demorou. Sem isso nao da para responder "as
+            // minhas maquinas sao comparaveis?", que e a pergunta que o #130
+            // deixou em aberto ao decidir que hardware heterogeneo e avisado
+            // e nao compensado.
+            //
+            // `%e` e tempo de parede e `%U`+`%S` sao CPU de usuario e de
+            // sistema. Os dois: o de parede e o que a equipe sente, o de CPU
+            // e o que compara maquinas sem ser enganado por uma que estava
+            // ocupada com outro julgamento.
+            escapeshellarg(self::RSS_PREFIX.' %M %e %U %S'),
             escapeshellarg($command),
             escapeshellarg($rssPath)
         );
     }
 
     /**
-     * Peak RSS in KB for the run just finished, or null when it was not
-     * measured.
+     * @param  array{peak_rss_kb: ?int, wall_seconds: ?float, cpu_seconds: ?float}  $measured
      */
-    protected function peakRssKb(string $rssPath): ?int
+    protected function rememberSlowestCase(array $measured): void
     {
+        foreach (['wall_seconds', 'cpu_seconds'] as $key) {
+            if ($measured[$key] === null) {
+                continue;
+            }
+
+            if ($this->slowestCase[$key] === null || $measured[$key] > $this->slowestCase[$key]) {
+                $this->slowestCase[$key] = $measured[$key];
+            }
+        }
+    }
+
+    /**
+     * @return array{wall_seconds: ?float, cpu_seconds: ?float}
+     */
+    public function slowestCase(): array
+    {
+        return $this->slowestCase;
+    }
+
+    /**
+     * Issue #196 -- o que o `time -f` mediu, ou null quando nao mediu.
+     *
+     * @return array{peak_rss_kb: ?int, wall_seconds: ?float, cpu_seconds: ?float}
+     */
+    protected function measurement(string $rssPath): array
+    {
+        $empty = ['peak_rss_kb' => null, 'wall_seconds' => null, 'cpu_seconds' => null];
+
         if (! is_file($rssPath)) {
-            return null;
+            return $empty;
         }
 
         $contents = (string) @file_get_contents($rssPath);
         @unlink($rssPath);
 
-        if (preg_match('/'.preg_quote(self::RSS_PREFIX, '/').'\s+(\d+)/', $contents, $matches) !== 1) {
-            return null;
+        // Os tres numeros de tempo sao decimais; o de memoria e inteiro.
+        $pattern = '/'.preg_quote(self::RSS_PREFIX, '/').'\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/';
+
+        if (preg_match($pattern, $contents, $matches) !== 1) {
+            // Formato antigo (so o pico), ou saida truncada. A memoria ainda
+            // serve, e o tempo volta nulo -- uma medicao ausente nao pode
+            // parar uma prova, que e a mesma regra ja escrita aqui para o
+            // binario faltando.
+            return preg_match('/'.preg_quote(self::RSS_PREFIX, '/').'\s+(\d+)/', $contents, $only) === 1
+                ? ['peak_rss_kb' => (int) $only[1], 'wall_seconds' => null, 'cpu_seconds' => null]
+                : $empty;
         }
 
-        return (int) $matches[1];
+        return [
+            'peak_rss_kb' => (int) $matches[1],
+            'wall_seconds' => (float) $matches[2],
+            'cpu_seconds' => round((float) $matches[3] + (float) $matches[4], 3),
+        ];
     }
 
     /**
@@ -271,24 +359,24 @@ class AutoJudgeService
     {
         $prologue = '';
 
-        if (!empty($options['cpu_seconds'])) {
-            $prologue .= 'ulimit -t ' . (int) $options['cpu_seconds'] . '; ';
+        if (! empty($options['cpu_seconds'])) {
+            $prologue .= 'ulimit -t '.(int) $options['cpu_seconds'].'; ';
         }
 
         // bash counts -f in 1024-byte increments.
-        if (!empty($options['file_size_kb'])) {
-            $prologue .= 'ulimit -f ' . (int) $options['file_size_kb'] . '; ';
+        if (! empty($options['file_size_kb'])) {
+            $prologue .= 'ulimit -f '.(int) $options['file_size_kb'].'; ';
         }
 
         // Caps fork bombs. Not applied to compilation, where a build tool
         // legitimately fans out across cores.
-        if (!empty($options['max_processes'])) {
-            $prologue .= 'ulimit -u ' . (int) $options['max_processes'] . '; ';
+        if (! empty($options['max_processes'])) {
+            $prologue .= 'ulimit -u '.(int) $options['max_processes'].'; ';
         }
 
         // Issue #86 -- only for the languages memoryRlimitKbFor() allows.
-        if (!empty($options['memory_kb'])) {
-            $prologue .= 'ulimit -v ' . (int) $options['memory_kb'] . '; ';
+        if (! empty($options['memory_kb'])) {
+            $prologue .= 'ulimit -v '.(int) $options['memory_kb'].'; ';
         }
 
         return $prologue;
@@ -316,22 +404,22 @@ class AutoJudgeService
      * infrastructure failure. So a match is only a hypothesis: it is
      * confirmed by actually trying to start an empty sandbox.
      */
-    protected function assertSandboxStarted(\Illuminate\Contracts\Process\ProcessResult $result): void
+    protected function assertSandboxStarted(ProcessResult $result): void
     {
-        if (!$this->useBwrap || $result->exitCode() === 0) {
+        if (! $this->useBwrap || $result->exitCode() === 0) {
             return;
         }
 
-        if (!preg_match('/^bwrap: .*/m', $result->errorOutput(), $matches)) {
+        if (! preg_match('/^bwrap: .*/m', $result->errorOutput(), $matches)) {
             return;
         }
 
-        if (!$this->sandboxProbeFails()) {
+        if (! $this->sandboxProbeFails()) {
             return;
         }
 
         throw new SandboxUnavailableException(
-            'Judge sandbox failed to start: ' . trim($matches[0])
+            'Judge sandbox failed to start: '.trim($matches[0])
         );
     }
 
@@ -427,7 +515,7 @@ class AutoJudgeService
         // Step 1: Compile
         $compileResult = $this->compile($run, $runDir);
         $this->reportProgress('compiled', 0);
-        if (!$compileResult['success']) {
+        if (! $compileResult['success']) {
             return [
                 'verdict' => 'CE',
                 'message' => 'Compilation Error',
@@ -461,7 +549,7 @@ class AutoJudgeService
             // judgehost can go without renewing its lease (#124).
             $this->reportProgress('test_case', (int) $index + 1);
 
-            if (!$testResult['success']) {
+            if (! $testResult['success']) {
                 return $testResult;
             }
         }
@@ -478,7 +566,7 @@ class AutoJudgeService
     {
         $runDir = "{$this->workDir}/run_{$run->id}";
 
-        if (!is_dir($runDir)) {
+        if (! is_dir($runDir)) {
             mkdir($runDir, 0755, true);
         }
 
@@ -537,7 +625,7 @@ class AutoJudgeService
         // Run the program
         $runResult = $this->executeProgram($run, $runDir, $inputFile, $outputFile);
 
-        if (!$runResult['success']) {
+        if (! $runResult['success']) {
             return $runResult;
         }
 
@@ -577,7 +665,7 @@ class AutoJudgeService
             $runCommand = str_replace('{source}', $run->filename, $runCommand);
             $runCommand = str_replace('{memory}', $memoryLimit, $runCommand);
 
-            $command = $runCommand . " < {$inputFile} > {$outputFile} 2>&1";
+            $command = $runCommand." < {$inputFile} > {$outputFile} 2>&1";
         }
 
         // The test case input lives under storage/app/problems, i.e. inside
@@ -626,7 +714,14 @@ class AutoJudgeService
         }
 
         $exitCode = $result->exitCode();
-        $peakRssKb = $this->peakRssKb($rssPath);
+
+        // Issue #196 -- uma leitura so, porque ela CONSOME o arquivo.
+        // Chamar peakRssKb() depois disto devolveria null: o
+        // @unlink() ja aconteceu.
+        $measured = $this->measurement($rssPath);
+        $peakRssKb = $measured['peak_rss_kb'];
+        $this->lastMeasurement = $measured;
+        $this->rememberSlowestCase($measured);
 
         // Issue #86 -- the hard evidence, where a cgroup was available: the
         // kernel either killed the run for its memory or held it at the
@@ -714,7 +809,6 @@ class AutoJudgeService
             'stderr' => $result->errorOutput(),
         ];
     }
-
 
     protected function compareOutput(
         string $expected,
@@ -948,7 +1042,7 @@ class AutoJudgeService
      * writing the columns without them produces a run that looks judged and
      * a scoreboard that disagrees with it.
      *
-     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null}  $result
+     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null, measured_wall_ms?: int|null, measured_cpu_ms?: int|null}  $result
      */
     public function recordVerdict(Run $run, array $result): void
     {
@@ -956,9 +1050,22 @@ class AutoJudgeService
             ->where('short_name', $result['verdict'])
             ->first();
 
+        // Issue #196 -- a medicao acompanha o veredito.
+        //
+        // Do $result quando ela veio de OUTRA maquina (o judgehost do #53
+        // reporta por HTTP e nao tem o estado deste processo), e do estado
+        // local quando o julgamento aconteceu aqui. Ler so o estado local
+        // deixaria todo veredito remoto sem medicao -- e maquina remota e
+        // exatamente o caso que esta issue existe para comparar.
+        $slowest = $this->slowestCase();
+        $wallMs = $result['measured_wall_ms'] ?? ($slowest['wall_seconds'] !== null ? (int) round($slowest['wall_seconds'] * 1000) : null);
+        $cpuMs = $result['measured_cpu_ms'] ?? ($slowest['cpu_seconds'] !== null ? (int) round($slowest['cpu_seconds'] * 1000) : null);
+
         $run->update([
             'status' => 'judged',
             'answer_id' => $answer?->id,
+            'measured_wall_ms' => $wallMs,
+            'measured_cpu_ms' => $cpuMs,
             'auto_judge_end' => now(),
             'auto_judge_result' => $result['message'] ?? null,
             'auto_judge_stdout' => substr($result['stdout'] ?? '', 0, 65535),
@@ -1011,7 +1118,7 @@ class AutoJudgeService
 
     protected function recursiveDelete(string $dir): void
     {
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             return;
         }
 

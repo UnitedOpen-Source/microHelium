@@ -2,19 +2,21 @@
 
 namespace Tests\Unit\Services;
 
+use App\Exceptions\SandboxUnavailableException;
 use App\Models\Answer;
-use Tests\TestCase;
-use App\Services\AutoJudgeService;
 use App\Models\Contest;
-use App\Models\Run;
-use Helium\User;
-use App\Models\Problem;
 use App\Models\Language;
+use App\Models\Problem;
+use App\Models\Run;
 use App\Models\TestCase as ModelsTestCase;
+use App\Services\AutoJudgeService;
+use App\Services\CgroupMemoryLimiter;
+use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Process;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
 
 class AutoJudgeServiceTest extends TestCase
 {
@@ -45,7 +47,7 @@ class AutoJudgeServiceTest extends TestCase
             'stdout' => '',
             'stderr' => '',
         ]);
-        
+
         $this->service->judge($run);
 
         $this->assertDatabaseHas('runs', [
@@ -69,7 +71,7 @@ class AutoJudgeServiceTest extends TestCase
             'stderr' => 'error: expected ‘;’ before ‘}’ token',
         ]);
         $this->service->shouldReceive('prepareRunDirectory')->andReturn('/tmp');
-        
+
         $result = $this->service->executeJudging($run);
 
         $this->assertEquals('CE', $result['verdict']);
@@ -100,9 +102,9 @@ class AutoJudgeServiceTest extends TestCase
         $user = User::factory()->create();
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
         $language = Language::factory()->create(['contest_id' => $contest->id]);
-        
+
         $sourcePath = Storage::putFileAs('sources', new UploadedFile(
-            __DIR__ . '/testdata/main.cpp',
+            __DIR__.'/testdata/main.cpp',
             'main.cpp'
         ), 'main.cpp');
 
@@ -146,7 +148,7 @@ class AutoJudgeServiceTest extends TestCase
         $run->problem()->associate($problem);
         $run->save();
 
-        $service = new AutoJudgeService();
+        $service = new AutoJudgeService;
         $nextRun = $service->getNextPendingRun();
         $this->assertEquals($run->id, $nextRun->id);
     }
@@ -189,7 +191,7 @@ class AutoJudgeServiceTest extends TestCase
             'autojudge.cgroup_root' => '/sys/fs/cgroup/nao-delegado',
         ]);
 
-        return new AutoJudgeService();
+        return new AutoJudgeService;
     }
 
     public function test_wrap_with_bwrap_generates_correct_args()
@@ -284,7 +286,7 @@ class AutoJudgeServiceTest extends TestCase
         // reserve a large virtual range at startup -- so their cap has to
         // come from the runtime itself, through the {memory} placeholder the
         // run command already supports.
-        $defaults = collect(\App\Models\Language::getDefaultLanguages())->keyBy('extension');
+        $defaults = collect(Language::getDefaultLanguages())->keyBy('extension');
 
         $this->assertStringContainsString('--max-old-space-size={memory}', $defaults['js_node24']['run_command']);
         $this->assertStringContainsString('--max-old-space-size={memory}', $defaults['ts']['run_command']);
@@ -361,7 +363,7 @@ class AutoJudgeServiceTest extends TestCase
             'autojudge.cgroup_root' => sys_get_temp_dir(),
         ]);
 
-        $service = new AutoJudgeService();
+        $service = new AutoJudgeService;
         $method = new \ReflectionMethod($service, 'addressSpaceLimitKbFor');
 
         foreach (['c_gcc13', 'py3', 'go', 'js_node24', 'java21', 'kt'] as $extension) {
@@ -399,7 +401,7 @@ class AutoJudgeServiceTest extends TestCase
             '*' => Process::result(output: '', errorOutput: 'bwrap: Creating new namespace failed: Operation not permitted', exitCode: 1),
         ]);
 
-        $limiter = new class extends \App\Services\CgroupMemoryLimiter
+        $limiter = new class extends CgroupMemoryLimiter
         {
             public array $confined = [];
 
@@ -439,7 +441,7 @@ class AutoJudgeServiceTest extends TestCase
         try {
             $this->callProtected($service, 'executeProgram', [$run, $runDir, '/dev/null', $runDir.'/out.txt']);
             $this->fail('executeProgram was expected to throw when the sandbox cannot start.');
-        } catch (\App\Exceptions\SandboxUnavailableException) {
+        } catch (SandboxUnavailableException) {
             // The point of the test is what happened on the way out.
         } finally {
             @unlink($runDir.'/out.txt');
@@ -465,12 +467,18 @@ class AutoJudgeServiceTest extends TestCase
         config(['autojudge.rss_time_path' => '/bin/sh']);
         $service = $this->sandboxingService();
 
-        $wrapped = $method->invoke($service, "prog < in > out 2>&1", '/tmp/run_1/.mhrss');
+        $wrapped = $method->invoke($service, 'prog < in > out 2>&1', '/tmp/run_1/.mhrss');
 
         // `time -f` writes to its own stderr, and the submission's stderr is
         // already merged into the output file -- so the measured command is
         // re-nested and time's stream is redirected somewhere else entirely.
-        $this->assertStringContainsString("-f 'MHRSS %M'", $wrapped);
+        //
+        // Issue #196 acrescentou tempo ao formato: `%e` de parede, `%U`+`%S`
+        // de CPU. O assunto deste teste continua sendo PARA ONDE a medicao
+        // vai, e nao quais campos sao pedidos -- que campos sao pedidos e o
+        // que JudgeMeasurementFormatTest fixa, derivando a entrada do parser
+        // a partir do proprio formato para que os dois nao possam divergir.
+        $this->assertStringContainsString("-f 'MHRSS %M %e %U %S'", $wrapped);
         $this->assertStringContainsString("2> '/tmp/run_1/.mhrss'", $wrapped);
         $this->assertStringContainsString("bash -c 'prog < in > out 2>&1'", $wrapped);
     }
@@ -508,7 +516,7 @@ class AutoJudgeServiceTest extends TestCase
     {
         config(['autojudge.use_bwrap' => false]);
 
-        $this->assertSame('echo hello', (new AutoJudgeService())->wrapWithBwrap('echo hello', '/tmp/run_1'));
+        $this->assertSame('echo hello', (new AutoJudgeService)->wrapWithBwrap('echo hello', '/tmp/run_1'));
     }
 
     public function test_missing_bwrap_binary_throws_runtime_exception()
@@ -517,10 +525,10 @@ class AutoJudgeServiceTest extends TestCase
             'autojudge.use_bwrap' => true,
             'autojudge.bwrap_path' => '/non/existent/bwrap',
         ]);
-        $service = new AutoJudgeService();
+        $service = new AutoJudgeService;
 
-        $this->expectException(\App\Exceptions\SandboxUnavailableException::class);
-        $this->expectExceptionMessage("Mandatory judge sandbox binary (bwrap) not found");
+        $this->expectException(SandboxUnavailableException::class);
+        $this->expectExceptionMessage('Mandatory judge sandbox binary (bwrap) not found');
 
         $service->wrapWithBwrap('echo hello', '/tmp/run_1');
     }
@@ -528,7 +536,7 @@ class AutoJudgeServiceTest extends TestCase
     public function test_build_compile_command()
     {
         $language = (object) [
-            'compile_command' => 'g++ {source} -o {output}'
+            'compile_command' => 'g++ {source} -o {output}',
         ];
         $command = $this->service->buildCompileCommand($language, '/tmp', 'main.cpp');
         $this->assertEquals('g++ main.cpp -o main', $command);
@@ -634,15 +642,15 @@ class AutoJudgeServiceTest extends TestCase
         $this->createTestData();
         $run = Run::first();
         $runDir = storage_path("app/workdir/runs/{$run->id}");
-        if (!is_dir($runDir)) {
+        if (! is_dir($runDir)) {
             mkdir($runDir, 0755, true);
         }
-        
+
         $this->service->cleanup($run);
 
         $this->assertFalse(Storage::disk('local')->exists("app/workdir/runs/{$run->id}"));
     }
-    
+
     /**
      * A run with just enough attached to it for executeProgram() to build a
      * command: a problem for the limits and a language for the command.
@@ -682,9 +690,9 @@ class AutoJudgeServiceTest extends TestCase
             'run_command' => './a.out',
         ]);
         Answer::factory()->create(['short_name' => 'AC', 'contest_id' => $contest->id]);
-        
+
         $sourcePath = Storage::putFileAs('sources', new UploadedFile(
-            __DIR__ . '/testdata/main.cpp',
+            __DIR__.'/testdata/main.cpp',
             'main.cpp'
         ), 'main.cpp');
 
@@ -697,14 +705,14 @@ class AutoJudgeServiceTest extends TestCase
         ]);
 
         $inputPath = Storage::putFileAs("problems/{$problem->id}", new UploadedFile(
-            __DIR__ . '/testdata/1.in',
+            __DIR__.'/testdata/1.in',
             '1.in'
         ), '1.in');
         $outputPath = Storage::putFileAs("problems/{$problem->id}", new UploadedFile(
-            __DIR__ . '/testdata/1.out',
+            __DIR__.'/testdata/1.out',
             '1.out'
         ), '1.out');
-        
+
         ModelsTestCase::factory()->create([
             'problem_id' => $problem->id,
             'number' => 1,
