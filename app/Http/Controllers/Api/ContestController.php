@@ -8,6 +8,7 @@ use App\Models\Contest;
 use App\Models\ContestLog;
 use App\Models\Language;
 use App\Models\Site;
+use App\Services\Clics\ContestEventRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -164,6 +165,12 @@ class ContestController extends Controller
         }
 
         $contest->update(['unfrozen_at' => now()]);
+
+        // Issue #219 -- o descongelamento muda `state`, E LIBERA os
+        // julgamentos que ficaram segurados no feed. O evento de estado e o
+        // que diz ao cliente publico que vem coisa nova: sem ele, um cliente
+        // ja conectado nao teria motivo para voltar a perguntar.
+        app(ContestEventRecorder::class)->stateChanged($contest->fresh());
 
         ContestLog::info($contest->id, 'Placar final revelado', [
             'user_id' => auth()->id(),

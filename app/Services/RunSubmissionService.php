@@ -8,6 +8,7 @@ use App\Models\ContestLog;
 use App\Models\Language;
 use App\Models\Problem;
 use App\Models\Run;
+use App\Services\Clics\ContestEventRecorder;
 use Helium\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -103,6 +104,14 @@ class RunSubmissionService
 
             throw $e;
         }
+
+        // Issue #219 -- o event feed.
+        //
+        // Fora da transacao, de proposito: o evento conta que o envio
+        // EXISTE, e um evento gravado dentro de uma transacao que depois
+        // desfaz contaria sobre um envio que nao chegou a existir. Aqui a
+        // transacao ja fechou.
+        app(ContestEventRecorder::class)->submissionCreated($run);
 
         ContestLog::info($contest->id, "Run #{$run->run_number} submitted", [
             'user_id' => $user->user_id,
