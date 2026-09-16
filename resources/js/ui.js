@@ -1,5 +1,6 @@
 import { initializeActions } from './ui/actions.js';
 import { initializeDialogs } from './ui/dialogs.js';
+import { initializeDraftForms } from './ui/draft-form.js';
 import { initializeForms } from './ui/forms.js';
 import { initializeWizard } from './ui/wizard.js';
 import { initializeStatusFilters } from './ui/status-filters.js';
@@ -53,6 +54,7 @@ export function initializeUI() {
         if (!menu?.contains(event.target) && !menuToggle?.contains(event.target)) closeMenu();
     });
 
+    initializeDraftForms();
     initializeStatusFilters();
     initializeWizard();
     const dialogs = initializeDialogs();
