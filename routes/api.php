@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ClarificationController;
 use App\Http\Controllers\Api\ContestController;
+use App\Http\Controllers\Api\ContestFinalizationController;
 use App\Http\Controllers\Api\ProblemController;
 use App\Http\Controllers\Api\RejudgingController;
 use App\Http\Controllers\Api\RunController;
@@ -144,6 +145,16 @@ Route::middleware('auth:sanctum')->group(function () {
         // disclosure /export was moved here for, only in digest form. The
         // competitor response keeps `test_cases_count` and nothing else.
         Route::get('/problems/{problem}/test-cases', [ProblemController::class, 'testCases']);
+
+        // Issue #202 -- finalizar a prova e derivar a premiacao.
+        //
+        // Junto do resto do que a banca opera. A premiacao e legivel antes
+        // de finalizar de proposito: a organizacao precisa conferir quem
+        // receberia o que ANTES de assinar embaixo, e como a rota e de staff
+        // conferir nao vaza nada.
+        Route::get('/contests/{contest}/finalize/preflight', [ContestFinalizationController::class, 'preflight']);
+        Route::post('/contests/{contest}/finalize', [ContestFinalizationController::class, 'finalize']);
+        Route::get('/contests/{contest}/awards', [ContestFinalizationController::class, 'awards']);
 
         Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
 

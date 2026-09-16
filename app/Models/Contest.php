@@ -27,11 +27,19 @@ class Contest extends Model
         'is_practice',
         'verification_required',
         'unlock_key',
+        'finalized_at',
+        'finalized_by',
+        'rank_median_cut',
+        'medal_gold',
+        'medal_silver',
+        'medal_bronze',
     ];
 
     protected $casts = [
         'start_time' => 'datetime',
         'unfrozen_at' => 'datetime',
+        'finalized_at' => 'datetime',
+        'rank_median_cut' => 'boolean',
         'is_active' => 'boolean',
         'is_public' => 'boolean',
         'is_practice' => 'boolean',
@@ -283,6 +291,19 @@ class Contest extends Model
     public function isUnfrozen(): bool
     {
         return $this->unfrozen_at !== null;
+    }
+
+    /**
+     * Issue #202 -- a prova foi declarada final?
+     *
+     * Distinto de "acabou": acabar e o relogio, finalizar e a organizacao
+     * afirmando que nao sobrou nada pendente que pudesse mudar a
+     * classificacao. Ver App\Services\ContestFinalizer para a lista do que
+     * impede chegar aqui.
+     */
+    public function isFinalized(): bool
+    {
+        return $this->finalized_at !== null;
     }
 
     public function getContestTime(): int

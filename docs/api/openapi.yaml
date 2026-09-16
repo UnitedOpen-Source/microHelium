@@ -1698,6 +1698,135 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorMessage" }
 
+  /contests/{contest}/finalize/preflight:
+    get:
+      tags: [Contests]
+      summary: O que impede finalizar esta prova, um a um
+      description: |
+        Issue #202. Existe como leitura propria porque a tela precisa DIZER
+        o que esta impedindo -- sem isso o botao de finalizar e um botao que
+        nao funciona e ninguem sabe por que.
+
+        Os codigos: `contest_running`, `unjudged_submissions`,
+        `judging_errors`, `unanswered_clarifications` (os quatro que os
+        requisitos de CCS listam), `still_frozen` e `already_finalized`.
+
+        `still_frozen` nao e do padrao, e nosso: publicar "medalha de ouro:
+        equipe X" com o placar congelado revela, pela lista de medalhas, que
+        X esta entre os primeiros -- exatamente o que o congelamento
+        esconde.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A checagem
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  can_finalize: { type: boolean }
+                  blockers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string }
+                        message: { type: string }
+                        count: { type: integer }
+                  finalized: { type: boolean }
+                  finalized_at: { type: string, format: date-time, nullable: true }
+        '403':
+          description: Um token de equipe nao chega aqui
+  /contests/{contest}/finalize:
+    post:
+      tags: [Contests]
+      summary: Declara o resultado final
+      description: |
+        Issue #202. Finalizar e uma CHECAGEM DE INTEGRIDADE da prova
+        inteira, e nao um botao de publicar: e o momento em que a
+        organizacao afirma que nao sobrou nada pendente que pudesse mudar a
+        classificacao.
+
+        Recusa com 422 e a lista de impedimentos quando algum se aplica --
+        os mesmos do preflight.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Finalizada, com a premiacao junto
+        '403':
+          description: Um token de equipe nao chega aqui
+        '422':
+          description: Ha impedimentos; vem listados em `blockers`
+  /contests/{contest}/awards:
+    get:
+      tags: [Contests]
+      summary: A premiacao derivada da classificacao final
+      description: |
+        Issue #202, no vocabulario que a Contest API usa em /awards:
+        `winner`, `gold-medal`, `silver-medal`, `bronze-medal`, `rank-<n>`,
+        `honorable-mention`, `first-to-solve-<problema>`.
+
+        A colocacao aplica o corte da mediana da ICPC: "Teams that solved
+        fewer problems than the median team are not ranked at all" -- e
+        "fewer than", nao "at most", entao quem empata com a mediana
+        continua classificado. Quem fica abaixo recebe mencao honrosa.
+
+        O corte e configuravel por contest (`rank_median_cut`, padrao
+        ligado): uma prova de treino ou seletiva interna quer classificar
+        todo mundo. As medalhas tambem sao configuraveis, e vem ZERADAS por
+        padrao -- declarar medalhista e uma afirmacao para fora, e premiar
+        ouro numa prova de treino porque ninguem mexeu na configuracao seria
+        pior do que exigir dizer quantas.
+
+        Equipes empatadas compartilham `rank-<n>`, entao um premio de
+        posicao pode citar mais de uma.
+
+        Legivel antes de finalizar, de proposito: a organizacao confere quem
+        receberia o que antes de assinar embaixo. `finalized` diz se ja e
+        final.
+      security:
+        - sanctum: []
+      parameters:
+        - name: contest
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: A premiacao
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  finalized: { type: boolean }
+                  finalized_at: { type: string, format: date-time, nullable: true }
+                  median_solved: { type: number }
+                  median_cut_applied: { type: boolean }
+                  awards:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        citation: { type: string }
+                        team_ids:
+                          type: array
+                          items: { type: integer }
+        '403':
+          description: Um token de equipe nao chega aqui
   /contests/{contest}/rejudgings:
     get:
       tags: [Rejudgings]
