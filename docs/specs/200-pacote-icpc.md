@@ -66,6 +66,38 @@ Um teste passava por causa de arquivo deixado por outro. `RefreshDatabase` zera 
 
 A limpeza do diretório de problemas no `tearDown` é o conserto, e não zelo.
 
+## A tela (issue #233)
+
+O leitor e o importador acima existiam desde o #200 e **só eram alcançáveis por chamada manual**. A #233 pede a tela, e nomeia o erro a não cometer: *"não apontar o formulário BOCA de importação do banco para um endpoint que importa problemas de competição com outro contrato"*.
+
+São dois destinos diferentes, e é por isso que são dois formulários:
+
+| | `backend.import-boca` | `backend.import-package` |
+|---|---|---|
+| serviço | `BocaImporterService::importFromZip` | `IcpcPackageReader` + `IcpcPackageImporter` |
+| entrada | ZIP de **competição inteira** do BOCA | pacote de **um problema** ICPC/Kattis |
+| destino | banco de problemas | uma competição escolhida |
+| campos | `boca_zip` | `contest_id` + `package` |
+
+Reapontar um para o outro não daria erro: daria, em silêncio, a coisa errada. Um teste guarda isso — ele lê o HTML do formulário do BOCA e verifica que a ação dele continua sendo a do BOCA.
+
+### Conferir antes de gravar
+
+A issue pede "diagnóstico de pacote". Um diagnóstico que só existe **depois** de importar chega tarde: o problema errado já está na prova. Por isso a caixa *"Apenas conferir o pacote, sem importar"* — ela lê o pacote, mostra versão do formato, limites, quantos casos de amostra e secretos, se há validador de saída, se há enunciado e quantas soluções de referência vieram, e **não escreve nada**, nem no banco nem em disco.
+
+Dois números do diagnóstico têm consequência na prova e aparecem como frase, não como "sim/não" numa lista:
+
+- **validador de saída presente** muda *como* o problema é julgado — o programa do pacote passa a decidir, em vez da comparação padrão;
+- **enunciado ausente** significa que as equipes verão o problema sem texto até que alguém escreva um.
+
+### A prova de treino não aparece
+
+Os problemas da prova de treino são instantâneos versionados publicados pelo `PracticePublisher` (#43). Um problema posto ali à mão diverge da biblioteca e não volta sozinho. A prova de treino fica fora do seletor **e** o POST montado à mão é recusado com 404 — as duas portas concordam.
+
+### O diretório de extração não sobrevive à requisição
+
+Nem quando a leitura falha: a limpeza está num `finally`. Um pacote recusado que deixasse o ZIP extraído em `storage/` encheria o disco da máquina que serve a prova, e o sintoma apareceria longe da causa.
+
 ## Fora de escopo
 
 Grupos com pontuação parcial (modelo de IOI), problemas interativos, multi-pass, e a versão 2025-09.

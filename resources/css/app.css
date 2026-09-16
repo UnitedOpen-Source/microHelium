@@ -301,6 +301,12 @@ input[type=file]::file-selector-button { background: var(--color-accent); color:
 .feature-form small { color: var(--color-muted-foreground); font-weight: 400; font-size: .8rem; }
 .feature-form > button { justify-self: start; }
 .feature-wide { grid-column: 1 / -1; }
+/* Issue #233 -- caixa de marcar dentro de .feature-form. Sem isto ela herda
+   `width:100%` e o padding dos campos de texto, virando um retangulo enorme,
+   e o label ao lado (display:grid) cai para a linha de baixo. */
+.feature-check { display: flex; align-items: center; gap: .6rem; }
+.feature-check input[type=checkbox] { width: 1.15rem; height: 1.15rem; min-height: 0; padding: 0; flex: none; }
+.feature-check label { display: inline; }
 .feature-search { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
 .feature-search label { flex: 1 1 200px; }
 .feature-record { padding: 1.5rem 0; border-top: 1px solid var(--color-border); overflow-wrap: anywhere; }
