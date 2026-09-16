@@ -36,4 +36,7 @@ Route::prefix('api/clics')->group(function () {
     Route::get('/contests/{contest}/judgements', [ContestApiController::class, 'judgements']);
     Route::get('/contests/{contest}/scoreboard', [ContestApiController::class, 'scoreboard']);
     Route::get('/contests/{contest}/awards', [ContestApiController::class, 'awards']);
+
+    // Issue #219 -- o event feed, que e o que o resolver le.
+    Route::get('/contests/{contest}/event-feed', [ContestApiController::class, 'eventFeed']);
 });

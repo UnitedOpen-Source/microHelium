@@ -9,6 +9,7 @@ use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Score;
 use App\Models\TestCase;
+use App\Services\Clics\ContestEventRecorder;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
@@ -1091,6 +1092,15 @@ class AutoJudgeService
 
         // Update score
         Score::updateScore($run);
+
+        // Issue #219 -- o event feed.
+        //
+        // Aqui e nao em cada chamador porque este metodo ja e "the one point
+        // every judging path converges on" (#87): o julgamento local, o que
+        // chega por HTTP de um judgehost (#53), o rejulgamento em lote
+        // (#192) e o veredito manual passam todos por aqui. Registrar no
+        // chamador seria registrar em alguns e esquecer o resto.
+        app(ContestEventRecorder::class)->judgementRecorded($run->fresh());
 
         // Cleanup
         $this->cleanup($run);

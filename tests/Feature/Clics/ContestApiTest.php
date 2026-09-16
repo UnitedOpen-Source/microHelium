@@ -112,19 +112,21 @@ class ContestApiTest extends TestCase
     }
 
     /**
-     * Um consumidor que espere o resolver precisa descobrir que o event feed
-     * nao existe AQUI -- e nao com um 404 no meio de uma cerimonia.
+     * O que o endpoint `api` promete tem que ser verdade.
+     *
+     * Na fase 1 (#195) esta nota dizia que o event feed NAO existia, e havia
+     * um teste exigindo 404 naquela rota -- o registro honesto de uma
+     * fronteira. O #219 moveu a fronteira: o feed existe. O teste virou o
+     * seu inverso em vez de ser apagado, porque a propriedade que importa e
+     * a mesma nos dois casos: a nota e a realidade concordam.
      */
-    public function test_the_api_endpoint_says_out_loud_that_there_is_no_event_feed(): void
+    public function test_the_api_endpoint_describes_the_feed_it_actually_has(): void
     {
         $api = $this->getJson('/api/clics')->assertStatus(200)->json();
 
         $this->assertStringContainsString('event-feed', $api['provider']['notes']);
-    }
 
-    public function test_there_is_no_event_feed_route(): void
-    {
-        $this->getJson("/api/clics/contests/{$this->contest->id}/event-feed")->assertStatus(404);
+        $this->get("/api/clics/contests/{$this->contest->id}/event-feed")->assertStatus(200);
     }
 
     // -- visibilidade de contest (#134) -------------------------------------

@@ -6,6 +6,7 @@ use App\Models\Clarification;
 use App\Models\Contest;
 use App\Models\ContestLog;
 use App\Models\Run;
+use App\Services\Clics\ContestEventRecorder;
 use Helium\User;
 
 /**
@@ -115,6 +116,10 @@ class ContestFinalizer
             'finalized_at' => now(),
             'finalized_by' => $actor?->user_id,
         ]);
+
+        // Issue #219 -- `state` muda, e o feed precisa contar. E este o
+        // momento em que `end_of_updates` passa a ser verdade.
+        app(ContestEventRecorder::class)->stateChanged($contest->fresh());
 
         ContestLog::warning($contest->id, 'Prova finalizada', [
             'event' => 'contest_finalized',

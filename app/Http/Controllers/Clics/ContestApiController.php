@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\Run;
 use App\Services\Clics\ClicsPresenter;
+use App\Services\Clics\EventFeedBuilder;
 use App\Services\Clics\OrganizationMembershipLookup;
 use App\Services\FrozenScoreboard;
 use App\Services\ScoreboardTeams;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Issue #195 -- a Contest API da ICPC, fase 1 (so leitura, sem event feed).
@@ -59,7 +61,7 @@ class ContestApiController extends Controller
             // depois de um GET que responde 404 no meio de uma cerimonia.
             'provider' => [
                 'name' => 'microHelium',
-                'notes' => 'Fase 1: somente leitura. Sem /event-feed -- o resolver do ICPC Tools nao funciona contra esta instalacao.',
+                'notes' => 'Somente leitura, com /event-feed em NDJSON (issue #219). Sem escrita pela Contest API.',
             ],
         ]);
     }
@@ -217,6 +219,77 @@ class ContestApiController extends Controller
         }
 
         return response()->json($this->presenter->awards($contest));
+    }
+
+    /**
+     * Issue #219 -- o event feed, em NDJSON.
+     *
+     * E o que o resolver le: "the only part of the Contest API that is
+     * strictly required is the event feed and any file references that the
+     * feed refers to". A fase 1 (#195) entregou o REST e dizia, no proprio
+     * endpoint `api`, que o feed nao existia -- agora existe.
+     *
+     * Uma linha JSON por evento, sem virgulas e sem colchetes: o consumidor
+     * le linha a linha enquanto a prova acontece, e um array JSON so estaria
+     * completo no fim.
+     *
+     * `since_token` retoma. Um cliente que caiu volta dizendo ate onde leu e
+     * recebe exatamente o que veio depois -- e por isso a fotografia inicial
+     * NAO e repetida: ele ja tem os objetos estaticos.
+     */
+    public function eventFeed(Request $request, Contest $contest, EventFeedBuilder $feed): StreamedResponse
+    {
+        $this->authorizeContestVisibility($contest);
+
+        $unrestricted = $this->isStaff($request);
+        $sinceToken = $request->query('since_token');
+        $sinceToken = is_numeric($sinceToken) ? (int) $sinceToken : null;
+
+        return response()->stream(function () use ($contest, $feed, $sinceToken, $unrestricted) {
+            // A fotografia so quando o cliente esta comecando do zero.
+            if ($sinceToken === null) {
+                foreach ($feed->snapshot($contest) as $line) {
+                    $this->emit($line);
+                }
+            }
+
+            foreach ($feed->since($contest, $sinceToken, $unrestricted) as $line) {
+                $this->emit($line);
+            }
+
+            if (($end = $feed->endOfUpdates($contest)) !== null) {
+                $this->emit($end);
+            }
+        }, 200, [
+            // A spec pede NDJSON; `application/x-ndjson` e o tipo que os
+            // consumidores esperam. `no-cache` porque um feed cacheado e um
+            // feed que conta o passado como se fosse o presente.
+            'Content-Type' => 'application/x-ndjson',
+            'Cache-Control' => 'no-cache',
+            'Access-Control-Allow-Origin' => '*',
+            // Sem isto o nginx entre o consumidor e nos guarda a resposta
+            // ate o fim, e "streaming" vira "tudo de uma vez no final" -- a
+            // falha aparece so em producao, com proxy no meio.
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     */
+    private function emit(array $line): void
+    {
+        echo json_encode($line, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE)."\n";
+
+        // Empurra a linha para o cliente em vez de deixa-la no buffer do
+        // PHP. Sem isto o feed entrega tudo junto quando a resposta fecha, o
+        // que passa em teste (o teste le o corpo inteiro) e falha em uso (o
+        // resolver espera a primeira linha).
+        if (ob_get_level() > 0) {
+            @ob_flush();
+        }
+
+        @flush();
     }
 
     /**
