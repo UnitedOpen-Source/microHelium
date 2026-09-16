@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ClarificationController;
 use App\Http\Controllers\Api\ContestController;
 use App\Http\Controllers\Api\ProblemController;
+use App\Http\Controllers\Api\RejudgingController;
 use App\Http\Controllers\Api\RunController;
 use App\Http\Controllers\Api\ScoreboardController;
 use App\Http\Controllers\Api\TokenController;
@@ -145,6 +146,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/problems/{problem}/test-cases', [ProblemController::class, 'testCases']);
 
         Route::post('/runs/{run}/rejudge', [RunController::class, 'rejudge']);
+
+        // Issue #192 -- rejulgamento EM LOTE, com previa.
+        //
+        // Aqui e nao no grupo de admin, junto do rejulgamento de um run so:
+        // quem pode rejulgar um envio pode rejulgar o problema inteiro, e a
+        // diferenca entre as duas coisas e de escala e nao de autoridade. O
+        // que protege contra o acidente nao e o perfil -- e a previa, o
+        // motivo obrigatorio e a exclusao dos aceitos por padrao.
+        Route::get('/contests/{contest}/rejudgings', [RejudgingController::class, 'index']);
+        Route::post('/contests/{contest}/rejudgings/dry-run', [RejudgingController::class, 'dryRun']);
+        Route::post('/contests/{contest}/rejudgings', [RejudgingController::class, 'store']);
+        Route::get('/rejudgings/{rejudging}', [RejudgingController::class, 'show']);
+        Route::post('/rejudgings/{rejudging}/apply', [RejudgingController::class, 'apply']);
+        Route::post('/rejudgings/{rejudging}/cancel', [RejudgingController::class, 'cancel']);
         Route::put('/runs/{run}/judge', [RunController::class, 'judge']);
 
         // Issue #138 -- the verification gate. Staff-only for the obvious

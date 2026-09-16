@@ -6,6 +6,7 @@ use App\Models\Clarification;
 use App\Models\Contest;
 use App\Models\Language;
 use App\Models\Problem;
+use App\Models\Rejudging;
 use App\Models\Run;
 use App\Models\Site;
 use Helium\User;
@@ -136,6 +137,15 @@ class ApiRouteAuthorizationTest extends TestCase
         'POST api/contests/{contest}/unfreeze',
         'GET api/contests/{contest}/scoreboard/export',
         'GET api/contests/{contest}/statistics',
+        // Issue #192 -- rejulgamento em lote. Muda o veredito de envios de
+        // terceiros e, pela previa, mostra o veredito que CADA equipe teria
+        // -- a classificacao inteira antes de ela existir.
+        'GET api/contests/{contest}/rejudgings',
+        'POST api/contests/{contest}/rejudgings',
+        'POST api/contests/{contest}/rejudgings/dry-run',
+        'GET api/rejudgings/{rejudging}',
+        'POST api/rejudgings/{rejudging}/apply',
+        'POST api/rejudgings/{rejudging}/cancel',
         'GET api/clarifications/pending',
         'DELETE api/clarifications/{clarification}',
         'PUT api/clarifications/{clarification}/answer',
@@ -482,9 +492,21 @@ class ApiRouteAuthorizationTest extends TestCase
             'user_id' => $ownerId,
         ]);
 
+        // Issue #192, e pela mesma razao escrita acima para {token}: sem uma
+        // linha de verdade o URI sai com "{rejudging}" literal, a rota nao
+        // casa, e a resposta e 404. "404 nao e 403", entao a caminhada
+        // passaria sem nunca ter chegado na rota -- que e o modo de falha
+        // que este teste inteiro existe para impedir.
+        $rejudging = Rejudging::create([
+            'contest_id' => $contest->id,
+            'reason' => 'walk',
+            'filters' => [],
+            'status' => Rejudging::STATUS_READY,
+        ]);
+
         return '/'.str_replace(
-            ['{contest}', '{problem}', '{run}', '{clarification}', '{token}'],
-            [$contest->id, $problem->id, $run->id, $clarification->id, $tokenId],
+            ['{contest}', '{problem}', '{run}', '{clarification}', '{token}', '{rejudging}'],
+            [$contest->id, $problem->id, $run->id, $clarification->id, $tokenId, $rejudging->id],
             $uri
         );
     }
