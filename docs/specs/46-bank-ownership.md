@@ -53,13 +53,15 @@ Ainda não implementado / decisão em aberto:
   confirmação do mantenedor (ver "Perguntas para decisão" abaixo) — a
   proposta foi implementada porque a spec já a adotava como padrão,
   não porque a pergunta foi respondida.
-- **Criação/gestão de organizações**: não há endpoint para criar, editar,
-  arquivar ou adicionar/remover membro de organização nesta entrega —
-  confirmado como fase própria pela spec original. `organizations` e
-  `organization_memberships` só podem ser povoadas fora da UI (seed/tinker)
-  até essa fase existir. `organizations.archived_at` já existe na
-  migration para suportar "preferir arquivar organização com histórico"
-  quando essa fase for implementada, mas nada a lê ou escreve ainda.
+  **Confirmado na #188**, com evidência que não existia quando isto foi
+  escrito: a #195 publicou `/organizations` na Contest API da ICPC, onde
+  organização é um objeto de primeira classe que as equipes referenciam.
+  Trocar por `owner_user_id` deixaria aquele endpoint sem nada para
+  reportar. Ver `docs/specs/188-organizacoes.md`.
+- ~~**Criação/gestão de organizações**~~ — **entregue na #188.**
+  `/api/frontend/organizations` cria, renomeia, arquiva e desarquiva, e
+  gerencia membros. Ver `docs/specs/188-organizacoes.md` para as regras de
+  arquivamento, que a #188 exigiu que ficassem escritas e não inferidas.
 - **`practice_status`/`can_publish`**: sempre `"unpublished"`/`false`.
   Isso depende inteiramente da #43 (Treino Livre), que não está
   implementada neste backend — não existe hoje nenhuma publicação real

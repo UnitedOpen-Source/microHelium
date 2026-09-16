@@ -85,10 +85,20 @@ class BankGovernanceController extends Controller
 
         return response()->json([
             'data' => [
-                'organizations' => $organizations->map(fn (Organization $org) => [
-                    'id' => $org->id,
-                    'name' => $org->name,
-                ])->values(),
+                // Issue #188 -- o SELETOR exclui arquivadas, e apenas o
+                // seletor. A lista de permissao ($organizationIds, logo
+                // acima) continua com elas: quem e editor de uma
+                // organizacao arquivada continua podendo editar os
+                // problemas dela. Tirar isso deixaria problemas que ninguem
+                // alcanca, que e o orfanato que arquivar existe para
+                // evitar. Arquivar e "nao receba mais", nao "fique
+                // intocavel".
+                'organizations' => $organizations
+                    ->filter(fn (Organization $org) => $org->archived_at === null)
+                    ->map(fn (Organization $org) => [
+                        'id' => $org->id,
+                        'name' => $org->name,
+                    ])->values(),
                 'items' => (function () use ($paginated, $user, $organizationIds) {
                     $items = collect($paginated->items());
                     // Resolved once for the page, then passed down: a memo on
@@ -146,6 +156,21 @@ class BankGovernanceController extends Controller
 
             if ($requestedOwner !== null && ! Organization::whereKey($requestedOwner)->exists()) {
                 $this->fail('owning_org_id', 'Organização inexistente.');
+            }
+
+            // Issue #188 -- so na ESCRITA, e so quando o dono muda.
+            //
+            // Sumir do seletor nao basta: o seletor e uma dica de
+            // apresentacao, e este endpoint aceita o id que o cliente
+            // mandar. Sem esta recusa, "arquivada" seria uma sugestao.
+            //
+            // `$ownerChanged` importa: um problema que JA pertence a uma
+            // organizacao arquivada continua salvavel -- editar as etiquetas
+            // dele nao pode exigir transferi-lo primeiro, ou arquivar
+            // congelaria o acervo inteiro daquela instituicao.
+            if ($ownerChanged && $requestedOwner !== null
+                && Organization::whereKey($requestedOwner)->whereNotNull('archived_at')->exists()) {
+                $this->fail('owning_org_id', 'Esta organização está arquivada e não pode receber problemas novos.');
             }
 
             $tags = $this->normalizeTags($request->input('tags'));
@@ -227,7 +252,7 @@ class BankGovernanceController extends Controller
      * One query for the whole page instead of one per row.
      *
      * @param  SupportCollection<int, ProblemBank>  $banks
-     * @return SupportCollection<int, PracticePublication>  keyed by bank id
+     * @return SupportCollection<int, PracticePublication> keyed by bank id
      */
     private function activePublications(SupportCollection $banks): SupportCollection
     {

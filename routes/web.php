@@ -590,6 +590,10 @@ require __DIR__.'/frontend.php';
 require __DIR__.'/frontend_api_webcast.php';
 require __DIR__.'/frontend_api_similarity.php';
 require __DIR__.'/frontend_api_bank_governance.php';
+// Issue #188 -- a gestao de organizacoes, que e a fase que o #46 deixou
+// para depois. Sem ela o seletor de proprietario do #46 abre vazio em
+// qualquer instalacao real.
+require __DIR__.'/frontend_api_organizations.php';
 require __DIR__.'/frontend_api_managed_accounts.php';
 require __DIR__.'/frontend_api_practice.php';
 require __DIR__.'/frontend_api_icpc.php';
