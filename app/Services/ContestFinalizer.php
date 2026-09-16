@@ -49,15 +49,21 @@ class ContestFinalizer
         // Finalizar e a organizacao AFIRMANDO que nao sobrou nada pendente
         // que pudesse mudar a classificacao. De uma prova que nao comecou
         // sobra tudo.
+        //
+        // DOIS codigos e nao um: a auditoria de frontend chegou a este mesmo
+        // impedimento por outro caminho e o escreveu com um codigo so. A
+        // interface precisa distinguir -- "nao tem horario marcado" pede
+        // agendar, "ainda nao comecou" pede esperar, e sao telas diferentes.
+        // O TEXTO veio da auditoria, que estava melhor: diz o que fazer.
         if (! $contest->start_time) {
             $blockers[] = [
                 'code' => 'contest_not_scheduled',
-                'message' => 'Esta prova nao tem horario de inicio.',
+                'message' => 'A competição não tem horário de início. Defina a agenda antes de finalizar.',
             ];
         } elseif (now()->lt($contest->start_time)) {
             $blockers[] = [
                 'code' => 'contest_not_started',
-                'message' => 'Esta prova ainda nao comecou.',
+                'message' => 'A competição ainda não começou. Confira a agenda antes de finalizar.',
             ];
         }
 

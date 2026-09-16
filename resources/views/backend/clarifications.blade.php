@@ -66,11 +66,11 @@
                                         </svg>
                                         Responder
                                     </button>
-                                    <button type="button" onclick="this.form.answer.value='Sem comentários.'; this.form.answer.focus()"
+                                    <button type="button" data-canned-answer="Sem comentários."
                                         class="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors">
                                         Sem comentários
                                     </button>
-                                    <button type="button" onclick="this.form.answer.value='Leia o enunciado com atenção.'; this.form.answer.focus()"
+                                    <button type="button" data-canned-answer="Leia o enunciado com atenção."
                                         class="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-accent transition-colors">
                                         Leia o enunciado
                                     </button>

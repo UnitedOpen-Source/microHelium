@@ -228,3 +228,29 @@ test('judge history names the judge, the team and the wait, and keeps the machin
     assert.match(document.body.textContent, /Automáticos/);
     assert.equal(document.querySelector('a[href="/submission/101"]').textContent, '#17');
 });
+
+test('failed refresh keeps the last view and forbids mutations until recovery', async () => {
+    const listing = { items: [], meta, capabilities: { can_submit: true }, problem: { name: 'Soma', statement: 'Some dois números', max_source_bytes: 1000, languages: [{ id: 1, name: 'C' }] } };
+    await mount('Practice', listing, { mode: 'problem', problemId: '1' });
+    field('source', 'int main() {}'); field('language_id', '1');
+    fetch = async () => { throw new Error('offline'); };
+    window.dispatchEvent(new window.PopStateEvent('popstate')); await tick();
+    assert.equal(document.querySelector('[name=source]').value, 'int main() {}');
+    assert.match(document.body.textContent, /última consulta concluída/);
+    assert.equal(document.querySelector('button[type=submit], form button').disabled, true);
+    const leaving = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(leaving);
+    assert.equal(leaving.defaultPrevented, true);
+    fetch = async () => envelope(listing);
+    [...document.querySelectorAll('button')].find(button => /Tentar novamente/.test(button.textContent)).click(); await tick();
+    assert.equal(document.querySelector('[name=source]').value, 'int main() {}');
+});
+
+test('explicit searches add history entries and popstate restores the submitted search', async () => {
+    await mount('Practice', { items: [], meta });
+    const originalLength = history.length;
+    field('q', 'grafos'); submit(); await tick();
+    assert.equal(history.length, originalLength + 1);
+    history.replaceState(null, '', '/practice?q=aritmetica');
+    window.dispatchEvent(new window.PopStateEvent('popstate')); await tick();
+    assert.equal(document.querySelector('[name=q]').value, 'aritmetica');
+});

@@ -269,6 +269,8 @@ Route::get('/contest/current', function () {
         'name' => $contest->name,
         'start_time' => $contest->start_time?->toIso8601String(),
         'duration' => $contest->duration,
+        'end_time' => $contest->end_time?->toIso8601String(),
+        'server_time' => now()->toIso8601String(),
         'freeze_time' => $contest->getRawOriginal('freeze_time') ?? 60,
         'is_running' => $contest->isRunning(),
         'is_frozen' => $contest->isFrozen(),
