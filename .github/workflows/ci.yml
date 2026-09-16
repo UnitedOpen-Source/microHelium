@@ -236,6 +236,26 @@ jobs:
             microhelium-judge:ci \
             ./vendor/bin/phpunit --no-coverage --fail-on-skipped
 
+      # Issue #194 -- o autoteste que a organizacao roda NA MAQUINA antes da
+      # prova, rodado aqui dentro da imagem do juiz.
+      #
+      # A suite acima ja o exercita (JudgehostSelfTestCommandTest, e
+      # --fail-on-skipped garante que ele nao se pule), mas como passo
+      # proprio ele imprime o relatorio caso a caso no log. A diferenca
+      # aparece no dia em que um kernel novo deixar de confinar alguma
+      # coisa: em vez de uma asserção vermelha entre mil, o log diz qual
+      # caso caiu e o que se esperava dele.
+      - name: Autoteste do sandbox (issue #194)
+        run: |
+          docker run --rm --privileged \
+            --security-opt apparmor=unconfined \
+            --security-opt seccomp=unconfined \
+            -v "$PWD":/var/www/html \
+            -w /var/www/html \
+            -e AUTOJUDGE_USE_BWRAP=true \
+            microhelium-judge:ci \
+            php artisan judgehost:selftest
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
