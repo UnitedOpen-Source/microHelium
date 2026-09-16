@@ -8,6 +8,8 @@ use App\Models\Problem;
 use App\Services\Icpc\IcpcPackageException;
 use App\Services\Icpc\IcpcPackageImporter;
 use App\Services\ProblemPackageService;
+use App\Services\SafeZipExtractor;
+use App\Services\ZipPathException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -93,9 +95,16 @@ class ProblemController extends Controller
                 abort(422, 'Nao foi possivel abrir o arquivo ZIP.');
             }
 
-            @mkdir($extractDir, 0o755, true);
-            $zip->extractTo($extractDir);
-            $zip->close();
+            try {
+                // Issue #242 -- um caminho com `..` seria reescrito em
+                // silencio e passaria por cima de outro arquivo do proprio
+                // pacote. 422 e nao 500: e erro de quem enviou.
+                app(SafeZipExtractor::class)->extractTo($zip, $extractDir);
+            } catch (ZipPathException $e) {
+                abort(422, $e->getMessage());
+            } finally {
+                $zip->close();
+            }
 
             if (! $this->looksLikeIcpcPackage($extractDir)) {
                 // Formato do BOCA: o caminho que ja existia, intacto.
