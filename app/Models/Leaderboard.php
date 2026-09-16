@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\FrozenScoreboard;
+use Helium\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\DB;
 
 class Leaderboard extends Model
 {
@@ -27,10 +28,10 @@ class Leaderboard extends Model
         return $this->belongsTo(Contest::class);
     }
 
-    /** @return BelongsTo<\Helium\User, $this> */
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(\Helium\User::class, 'user_id', 'user_id');
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 
     public static function updateForUser(int $contestId, int $userId): void
@@ -76,9 +77,29 @@ class Leaderboard extends Model
         }
     }
 
+    /**
+     * Issue #211 -- `$frozen` agora e lido.
+     *
+     * Este parametro existia desde antes e era descartado: o corpo do metodo
+     * nao o mencionava depois da assinatura. Api\ScoreboardController
+     * calculava o congelamento com cuidado, inclusive isentando admin, e
+     * passava adiante para ser jogado fora -- a resposta dizia
+     * `is_frozen: true` e entregava, na mesma carga, o solve feito depois do
+     * congelamento. Nao era uma regressao: o congelamento nunca escondeu
+     * nada em lugar nenhum. A unica ocorrencia de "congelado" nas views e um
+     * FAQ explicando ao publico o que um congelamento significaria.
+     *
+     * As celulas congeladas nao podem vir de `scores`: aquelas linhas sao
+     * reescritas a cada veredito. Vem dos runs, com corte por contest_time.
+     * Ver App\Services\FrozenScoreboard.
+     */
     public static function getScoreboard(int $contestId, bool $frozen = false): array
     {
         $contest = Contest::findOrFail($contestId);
+
+        if ($frozen) {
+            return FrozenScoreboard::rows($contest);
+        }
 
         $query = self::where('contest_id', $contestId)
             ->with(['user'])
@@ -99,7 +120,7 @@ class Leaderboard extends Model
                 'user' => $entry->user,
                 'problems_solved' => $entry->problems_solved,
                 'total_time' => $entry->total_time,
-                'problems' => $scores->map(fn($s) => [
+                'problems' => $scores->map(fn ($s) => [
                     'problem_id' => $s->problem_id,
                     'short_name' => $s->problem->short_name,
                     'attempts' => $s->attempts,
@@ -107,6 +128,11 @@ class Leaderboard extends Model
                     'is_first_solver' => $s->is_first_solver,
                     'solved_time' => $s->solved_time,
                     'penalty_time' => $s->penalty_time,
+                    // Sempre presente, mesmo valendo zero: o placar
+                    // congelado traz aqui quantas tentativas estao em
+                    // aberto, e um template que so encontrasse a chave as
+                    // vezes teria que adivinhar qual placar esta lendo.
+                    'pending' => 0,
                 ])->values(),
             ];
         }

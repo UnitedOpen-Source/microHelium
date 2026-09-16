@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Contest;
 use App\Models\Leaderboard;
+use App\Models\Run;
+use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ScoreboardController extends Controller
@@ -15,7 +17,7 @@ class ScoreboardController extends Controller
      * instead of the legacy `teams` table, which had no relation to actual
      * judged runs.
      *
-     * @return \Illuminate\View\View
+     * @return View
      */
     public function index()
     {
@@ -27,31 +29,32 @@ class ScoreboardController extends Controller
             'contest' => $contest,
             'problems' => $problems,
             'entries' => $entries,
+            // Issue #211: a pagina precisa DIZER que esta congelada. Um
+            // placar que esconde sem avisar e um placar errado.
+            'frozen' => $this->isFrozenFor($contest),
         ]);
     }
 
     /**
      * Export the scoreboard as a CSV file.
-     *
-     * @return \Symfony\Component\HttpFoundation\StreamedResponse
      */
     public function export(): StreamedResponse
     {
         $contest = $this->resolveContest();
         $entries = $this->buildScoreboard($contest);
 
-        $filename = 'placar_' . date('Y-m-d_H-i-s') . '.csv';
+        $filename = 'placar_'.date('Y-m-d_H-i-s').'.csv';
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ];
 
         $callback = function () use ($entries) {
             $file = fopen('php://output', 'w');
-            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             fputcsv($file, ['Posicao', 'Time', 'Problemas Resolvidos', 'Penalidade']);
             foreach ($entries as $entry) {
-                $name = $entry['user']->fullname ?? ('Usuario #' . $entry['user_id']);
+                $name = $entry['user']->fullname ?? ('Usuario #'.$entry['user_id']);
 
                 fputcsv($file, [
                     $entry['rank'],
@@ -76,19 +79,41 @@ class ScoreboardController extends Controller
     private function csvSafe(string $value): string
     {
         if (preg_match('/^[=+\-@]/', $value)) {
-            return "'" . $value;
+            return "'".$value;
         }
 
         return $value;
     }
 
+    /**
+     * Issue #211 -- esta pagina nao congelava de forma alguma.
+     *
+     * Ela nem chegava a perguntar: chamava getScoreboard() sem o parametro.
+     * E /scoreboard e a pagina do projetor, sem autenticacao nenhuma (ver
+     * applySiteVisibility() abaixo) -- na ultima hora de prova era o placar
+     * ao vivo, aberto, para a sala inteira.
+     *
+     * A isencao e a mesma regra ja nomeada em Run::viewerSeesWithheldVerdicts():
+     * quem pode ver veredito retido de equipe pode ver o placar
+     * descongelado. Inventar uma segunda lista aqui seria criar duas
+     * definicoes de "quem e da organizacao" para manter em sincronia.
+     *
+     * Um visitante anonimo nao e isento, e um membro de equipe que saia da
+     * sessao continua vendo o placar congelado -- ao contrario da limitacao
+     * de `own_site` documentada abaixo, aqui deslogar nao afrouxa nada.
+     */
+    private function isFrozenFor(?Contest $contest): bool
+    {
+        return (bool) $contest?->isFrozen() && ! Run::viewerSeesWithheldVerdicts(auth()->user());
+    }
+
     private function buildScoreboard(?Contest $contest): array
     {
-        if (!$contest) {
+        if (! $contest) {
             return [];
         }
 
-        $entries = Leaderboard::getScoreboard($contest->id);
+        $entries = Leaderboard::getScoreboard($contest->id, $this->isFrozenFor($contest));
 
         foreach ($entries as &$entry) {
             $entry['user_id'] = $entry['user']->user_id ?? null;
@@ -121,12 +146,12 @@ class ScoreboardController extends Controller
     {
         $viewer = auth()->user();
 
-        if (!$viewer || $viewer->isAdmin() || $viewer->isJudge() || $viewer->isStaff() || $viewer->isSpectator()) {
+        if (! $viewer || $viewer->isAdmin() || $viewer->isJudge() || $viewer->isStaff() || $viewer->isSpectator()) {
             return $entries;
         }
 
         $site = $viewer->site;
-        if (!$site || $site->score_visibility !== 'own_site') {
+        if (! $site || $site->score_visibility !== 'own_site') {
             return $entries;
         }
 
