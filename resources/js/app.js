@@ -3,10 +3,6 @@ import { createApp } from 'vue';
 import { initializeUI } from './ui';
 
 // Import components
-import Scoreboard from './components/Scoreboard.vue';
-import RunList from './components/RunList.vue';
-import SubmitForm from './components/SubmitForm.vue';
-import ClarificationList from './components/ClarificationList.vue';
 import ContestTimer from './components/ContestTimer.vue';
 import ThemeToggle from './components/ThemeToggle.vue';
 
@@ -43,11 +39,26 @@ import ThemeToggle from './components/ThemeToggle.vue';
  * under the real CSP and fails on any console error -- which is the only
  * layer that would have caught the original defect.
  */
+/*
+ * Issue #246 -- quatro destas ilhas eram codigo morto, e nao uma.
+ *
+ * `scoreboard`, `run-list`, `submit-form` e `clarification-list` nao
+ * apareciam em view nenhuma, e nao dava para simplesmente comecar a usa-las:
+ * cada uma declara `contestId` (e `problems`, e `languages`) como prop
+ * obrigatoria, e o laco abaixo monta SEM PROPS. Escrever
+ * <scoreboard></scoreboard> numa view estouraria dentro do componente, o
+ * `try/catch` engoliria o erro e removeria o host -- pagina sem o painel e
+ * sem dizer nada.
+ *
+ * O caminho real de cada uma e Blade: scoreboard.blade.php,
+ * submissions.blade.php, clarifications.blade.php e exercises/submit.blade.php.
+ * As telas novas usam `[data-feature-page]` e `features/mount.js`, que passa
+ * props de verdade a partir de data-attributes.
+ *
+ * As duas que sobram sao usadas: <contest-timer> em 4 views, <theme-toggle>
+ * em 3. Ambas sem props obrigatorias, que e por que funcionam.
+ */
 const islands = {
-    scoreboard: Scoreboard,
-    'run-list': RunList,
-    'submit-form': SubmitForm,
-    'clarification-list': ClarificationList,
     'contest-timer': ContestTimer,
     'theme-toggle': ThemeToggle,
 };
