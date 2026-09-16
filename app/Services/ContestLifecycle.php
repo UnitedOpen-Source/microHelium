@@ -91,7 +91,22 @@ class ContestLifecycle
         $extension = $this->clock->extensionSeconds($contest, null);
         $elapsed = max(0, (int) $contest->start_time->diffInSeconds(now()) - $extension);
 
-        $contest->update(['duration' => max(1, (int) ceil($elapsed / 60))]);
+        // Issue #240 -- `floor`, e nao `ceil`. `duration` e em MINUTOS, e
+        // arredondar para cima punha o fim ate 59 segundos no FUTURO: quem
+        // mandou encerrar via a prova continuar aceitando envios por quase
+        // um minuto. O fim tem que ser o ultimo minuto inteiro que ja
+        // passou, que e o instante representavel mais proximo de "agora"
+        // sem passar dele.
+        //
+        // Zero e um valor legitimo aqui (prova abortada no primeiro minuto):
+        // a coluna e `integer` sem restricao, nenhuma conta divide por
+        // `duration`, e as somas ja estao embrulhadas em `max(0, ...)`.
+        //
+        // Custo: ate 59 segundos de tempo ja decorrido saem da `duration`.
+        // Os envios feitos nesse intervalo continuam valendo -- nada na
+        // pontuacao filtra `runs` por `end_time`, e o `contest_time` gravado
+        // em cada envio e o que o placar usa.
+        $contest->update(['duration' => (int) floor($elapsed / 60)]);
 
         ContestLog::warning($contest->id, 'Competicao encerrada antes do horario previsto', [
             'event' => 'contest_ended_early',
