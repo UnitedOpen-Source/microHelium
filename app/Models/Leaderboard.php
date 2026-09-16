@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Services\FrozenScoreboard;
+use App\Services\ScoreboardRanking;
+use App\Services\ScoreboardTeams;
 use Helium\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -60,20 +62,26 @@ class Leaderboard extends Model
             ->orderBy('total_time')
             ->get();
 
-        $rank = 1;
-        $prevSolved = null;
-        $prevTime = null;
+        // Issue #212 -- a mesma funcao que o placar usa para ordenar.
+        //
+        // A regra estava escrita aqui e, depois do #211, tambem no placar
+        // congelado; com o placar ao vivo passando a calcular posicao,
+        // seriam tres copias. Tres formulacoes que por acaso concordam sao
+        // como a proxima pessoa muda uma e esquece as outras.
+        $ranked = ScoreboardRanking::apply(
+            $entries->map(fn (self $entry) => [
+                'id' => $entry->id,
+                'problems_solved' => (int) $entry->problems_solved,
+                'total_time' => (int) $entry->total_time,
+            ])->all()
+        );
 
-        foreach ($entries as $index => $entry) {
-            if ($entry->problems_solved !== $prevSolved || $entry->total_time !== $prevTime) {
-                $rank = $index + 1;
-            }
+        $byId = $entries->keyBy('id');
 
-            $entry->rank = $rank;
+        foreach ($ranked as $row) {
+            $entry = $byId->get($row['id']);
+            $entry->rank = $row['rank'];
             $entry->save();
-
-            $prevSolved = $entry->problems_solved;
-            $prevTime = $entry->total_time;
         }
     }
 
@@ -101,25 +109,39 @@ class Leaderboard extends Model
             return FrozenScoreboard::rows($contest);
         }
 
-        $query = self::where('contest_id', $contestId)
-            ->with(['user'])
-            ->orderBy('rank');
+        // Issue #212 -- as equipes vem do contest, e nao das linhas de
+        // `leaderboard`.
+        //
+        // Uma linha de `leaderboard` so nasce em Score::recomputeFor(), que
+        // so roda para run JULGADO, entao iterar essas linhas queria dizer
+        // "quem ainda nao teve nada julgado nao existe para a tabela".
+        // Nos primeiros minutos a tela ficava praticamente vazia, e uma
+        // equipe que submeteu e esperava julgamento nao se encontrava nela.
+        //
+        // A posicao passa a ser calculada aqui em vez de lida de
+        // `leaderboard.rank`, pelo mesmo motivo: a guardada so cobre quem
+        // tem linha. A regra e a mesma, compartilhada com o placar
+        // congelado e com recalculateRanks() -- ver ScoreboardRanking.
+        $entries = self::where('contest_id', $contestId)->get()->keyBy('user_id');
 
-        $leaderboard = $query->get();
+        // Uma consulta de `scores` para o contest inteiro, e nao uma por
+        // linha. Era uma por linha, e ate aqui "linha" queria dizer "quem ja
+        // pontuou"; agora quer dizer "toda equipe inscrita", entao a mesma
+        // consulta dentro do laco passaria de dezenas para milhares numa
+        // prova grande. O conserto de uma coisa nao pode pagar com a outra.
+        $allScores = Score::where('contest_id', $contestId)->with('problem')->get()->groupBy('user_id');
 
         $result = [];
-        foreach ($leaderboard as $entry) {
-            $scores = Score::where('contest_id', $contestId)
-                ->where('user_id', $entry->user_id)
-                ->with('problem')
-                ->get()
-                ->keyBy('problem_id');
+
+        foreach (ScoreboardTeams::forContest($contest) as $userId => $user) {
+            $entry = $entries->get($userId);
+            $scores = $allScores->get($userId, collect())->keyBy('problem_id');
 
             $result[] = [
-                'rank' => $entry->rank,
-                'user' => $entry->user,
-                'problems_solved' => $entry->problems_solved,
-                'total_time' => $entry->total_time,
+                'rank' => 0,
+                'user' => $user,
+                'problems_solved' => (int) ($entry->problems_solved ?? 0),
+                'total_time' => (int) ($entry->total_time ?? 0),
                 'problems' => $scores->map(fn ($s) => [
                     'problem_id' => $s->problem_id,
                     'short_name' => $s->problem->short_name,
@@ -137,6 +159,6 @@ class Leaderboard extends Model
             ];
         }
 
-        return $result;
+        return ScoreboardRanking::apply($result);
     }
 }
