@@ -20,4 +20,12 @@ Route::prefix('api/frontend')->middleware(['auth', 'admin'])->group(function () 
     Route::get('/judgehosts', [JudgehostController::class, 'index']);
     Route::post('/judgehosts', [JudgehostController::class, 'store']);
     Route::patch('/judgehosts/{id}', [JudgehostController::class, 'update'])->whereNumber('id');
+
+    // Issue #196 -- a divergencia medida entre as maquinas.
+    //
+    // Na mesma tela porque e a mesma pergunta: o #53 fase 4 responde "quais
+    // maquinas existem e estao vivas", e isto responde "elas sao
+    // comparaveis?". Nenhum veredito muda -- o #130 decidiu que divergencia
+    // e avisada e nao compensada, e ate aqui nao havia nem o aviso.
+    Route::get('/judgehosts/calibration', [JudgehostController::class, 'calibration']);
 });

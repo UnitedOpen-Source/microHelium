@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\FrontendApi;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contest;
 use App\Models\Judgehost;
 use App\Models\Run;
+use App\Services\JudgehostCalibration;
 use App\Services\JudgeWorkQueue;
 use App\Support\IdempotencyStore;
 use Illuminate\Http\JsonResponse;
@@ -246,5 +248,24 @@ class JudgehostController extends Controller
     private function staleAfter(): int
     {
         return max(60, (int) round(3 * (float) config('judgehost.agent.poll_max_seconds', 30)));
+    }
+
+    /**
+     * GET /api/frontend/judgehosts/calibration -- issue #196.
+     *
+     * Quanto as maquinas divergem entre si, medido nos envios ACEITOS que a
+     * prova ja produziu. Nao muda veredito nenhum: existe porque o #130
+     * decidiu que divergencia de hardware e avisada e nao compensada, e ate
+     * aqui nao havia nem o aviso.
+     */
+    public function calibration(Request $request, JudgehostCalibration $calibration): JsonResponse
+    {
+        $contest = Contest::query()->competition()->where('is_active', true)->first();
+
+        if (! $contest) {
+            return response()->json(['data' => ['threshold' => (float) config('judgehost.calibration.divergence_threshold', 1.5), 'items' => [], 'machines' => []]]);
+        }
+
+        return response()->json(['data' => $calibration->forContest($contest)]);
     }
 }

@@ -43,6 +43,11 @@ class Run extends Model
         'auto_judge_start',
         'auto_judge_end',
         'auto_judge_result',
+        // Issue #196 -- quanto o julgamento realmente levou, na maquina que
+        // o fez. Nao muda veredito nenhum: existe para responder se as
+        // maquinas sao comparaveis.
+        'measured_wall_ms',
+        'measured_cpu_ms',
         'auto_judge_stdout',
         'auto_judge_stderr',
     ];
