@@ -230,11 +230,37 @@ Route::get('/openapi.yaml', function () {
     ]);
 });
 
-// Current active contest for timer
+// Current active contest for timer.
+//
+// Issue #223 -- o relogio da interface calculava "acabou" e "congelado" com
+// o relogio LOCAL, e escondia o aviso de congelamento depois do fim,
+// enquanto o servidor mantinha o placar congelado. Os dois discordavam na
+// hora exata em que a discordancia custa caro: a cerimonia.
+//
+// O que faltava aqui para a interface poder parar de adivinhar:
+//
+//  - `competition()`: sem o scope, o contest de TREINO do #43 podia ser
+//    escolhido como "o evento", e o relogio da prova mostraria o de treino.
+//    Mesmo defeito que o #225 acabou de consertar nos atalhos legados.
+//  - `is_ended`: acabar e congelar sao coisas diferentes desde o #189 -- a
+//    prova termina e o placar continua congelado ate alguem revelar.
+//  - `is_unfrozen`: `is_frozen: false` sozinho nao distingue "nunca
+//    congelou" de "foi revelado", e a cerimonia e exatamente a segunda.
+//  - `is_finalized`: o estado do #202 nao aparecia em lugar nenhum da
+//    superficie que a interface le.
 Route::get('/contest/current', function () {
-    $contest = Contest::where('is_active', true)->first();
+    $contest = Contest::query()->competition()->where('is_active', true)->first();
 
     if (! $contest) {
+        // Atencao, quem consome: isto sai como `{}` e nao como `null` --
+        // response()->json(null) serializa assim. E `{}` e TRUTHY, entao um
+        // `if (data)` renderiza um relogio para um contest que nao existe. O
+        // componente atual testa `data?.start_time`, que e o jeito certo.
+        //
+        // Mantido como esta de proposito: o consumidor de hoje lida certo
+        // com este formato, e trocar a forma do fio por elegancia quebraria
+        // quem o le. A armadilha esta fixada em
+        // CurrentContestStateTest::test_with_no_active_competition_the_body_is_an_empty_object.
         return response()->json(null);
     }
 
@@ -246,5 +272,18 @@ Route::get('/contest/current', function () {
         'freeze_time' => $contest->getRawOriginal('freeze_time') ?? 60,
         'is_running' => $contest->isRunning(),
         'is_frozen' => $contest->isFrozen(),
+        'is_ended' => $contest->end_time !== null && now()->gt($contest->end_time),
+        'is_unfrozen' => $contest->isUnfrozen(),
+        'unfrozen_at' => $contest->unfrozen_at?->toIso8601String(),
+        'is_finalized' => $contest->isFinalized(),
+        'finalized_at' => $contest->finalized_at?->toIso8601String(),
+        // O instante do fim vem do servidor porque o cliente nao tem como
+        // calcula-lo: desde o #198 ele inclui os intervalos removidos da
+        // prova, e desde o #225 pode ter sido encurtado por um encerramento
+        // antecipado. start_time + duration nao basta mais.
+        'end_time' => $contest->end_time?->toIso8601String(),
+        // E o relogio do servidor, para a interface medir a propria
+        // defasagem em vez de confiar no relogio da maquina de quem olha.
+        'server_time' => now()->toIso8601String(),
     ]);
 });
