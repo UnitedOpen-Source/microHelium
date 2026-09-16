@@ -146,6 +146,13 @@ class ApiRouteAuthorizationTest extends TestCase
         'GET api/rejudgings/{rejudging}',
         'POST api/rejudgings/{rejudging}/apply',
         'POST api/rejudgings/{rejudging}/cancel',
+        // Issue #202 -- finalizar e a premiacao. `awards` e legivel antes
+        // de finalizar para a organizacao conferir, e por isso PRECISA ser
+        // de staff: a lista de medalhas e a classificacao final dita de
+        // outro jeito.
+        'GET api/contests/{contest}/finalize/preflight',
+        'POST api/contests/{contest}/finalize',
+        'GET api/contests/{contest}/awards',
         'GET api/clarifications/pending',
         'DELETE api/clarifications/{clarification}',
         'PUT api/clarifications/{clarification}/answer',
