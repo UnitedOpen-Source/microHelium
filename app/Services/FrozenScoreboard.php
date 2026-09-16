@@ -3,9 +3,9 @@
 namespace App\Services;
 
 use App\Models\Contest;
-use App\Models\Leaderboard;
 use App\Models\Run;
 use App\Models\Score;
+use Helium\User;
 use Illuminate\Support\Collection;
 
 /**
@@ -58,18 +58,17 @@ class FrozenScoreboard
             ->get()
             ->groupBy('user_id');
 
-        // As equipes vem do leaderboard e nao dos runs, para que o conjunto
-        // de linhas seja o mesmo do placar ao vivo: uma equipe que ainda nao
-        // submeteu nada aparece com zero, como aparece hoje.
-        $entries = Leaderboard::where('contest_id', $contest->id)->with('user')->get();
-
+        // Issue #212 -- o mesmo conjunto de equipes do placar ao vivo, e
+        // pela mesma fonte. Era o leaderboard, que so tem linha para quem ja
+        // teve run julgado: os dois placares mostrariam times diferentes, e
+        // durante o congelamento essa diferenca seria lida como informacao.
         $rows = [];
 
-        foreach ($entries as $entry) {
-            $rows[] = self::row($entry, $runs->get($entry->user_id, collect()), $cutoff, $gated, $penalty);
+        foreach (ScoreboardTeams::forContest($contest) as $userId => $user) {
+            $rows[] = self::row($user, $runs->get($userId, collect()), $cutoff, $gated, $penalty);
         }
 
-        return self::rank(self::markFirstSolvers($rows));
+        return ScoreboardRanking::apply(self::markFirstSolvers($rows));
     }
 
     /**
@@ -90,7 +89,7 @@ class FrozenScoreboard
      * @param  Collection<int, Run>  $teamRuns
      * @return array<string, mixed>
      */
-    private static function row(Leaderboard $entry, Collection $teamRuns, int $cutoff, bool $gated, int $penalty): array
+    private static function row(User $user, Collection $teamRuns, int $cutoff, bool $gated, int $penalty): array
     {
         $problems = [];
         $solved = 0;
@@ -113,7 +112,7 @@ class FrozenScoreboard
 
         return [
             'rank' => 0,
-            'user' => $entry->user,
+            'user' => $user,
             'problems_solved' => $solved,
             'total_time' => $totalTime,
             'problems' => collect($problems),
@@ -192,38 +191,6 @@ class FrozenScoreboard
 
                 return $cell;
             });
-        }
-
-        return $rows;
-    }
-
-    /**
-     * A mesma regra de Leaderboard::recalculateRanks(): empate compartilha a
-     * posicao, e a seguinte pula. As posicoes TEM que ser recalculadas --
-     * as guardadas refletem o placar ao vivo, e servi-las junto de celulas
-     * congeladas seria dizer, pela ordem, o que as celulas esconderam.
-     *
-     * @param  list<array<string, mixed>>  $rows
-     * @return list<array<string, mixed>>
-     */
-    private static function rank(array $rows): array
-    {
-        usort($rows, function (array $a, array $b) {
-            return [$b['problems_solved'], $a['total_time']] <=> [$a['problems_solved'], $b['total_time']];
-        });
-
-        $rank = 1;
-        $previous = null;
-
-        foreach ($rows as $index => $row) {
-            $current = [$row['problems_solved'], $row['total_time']];
-
-            if ($current !== $previous) {
-                $rank = $index + 1;
-            }
-
-            $rows[$index]['rank'] = $rank;
-            $previous = $current;
         }
 
         return $rows;
