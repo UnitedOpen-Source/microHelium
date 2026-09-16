@@ -5,7 +5,12 @@
 @section('description', 'Revise os envios pendentes e consulte os julgamentos recentes.')
 
 @section('content')
-<a href="/judge/health" class="button-secondary mb-5">Saúde do julgamento</a>
+<div class="feature-actions mb-5">
+    <a href="/judge/health" class="button-secondary">Saúde do julgamento</a>
+    {{-- Issue #245: o texto "se discordar, use o rejulgamento", logo abaixo,
+         apontava para uma coisa que nao tinha onde ser feita. --}}
+    <a href="{{ route('judge.rejudgings') }}" class="button-secondary">Rejulgamento em lote</a>
+</div>
 <div class="space-y-6">
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
@@ -113,7 +118,7 @@
             <p class="text-sm text-muted-foreground">
                 Este concurso exige verificação antes da publicação. Enquanto uma run estiver nesta lista,
                 a equipe não vê o veredito e ele não conta no placar. Quem verifica não altera o veredito &mdash;
-                se discordar, use o rejulgamento.
+                se discordar, use o <a class="feature-link" href="{{ route('judge.rejudgings') }}">rejulgamento em lote</a>.
             </p>
         </div>
         <div class="overflow-x-auto">

@@ -60,6 +60,32 @@ Os dois lados estão fixados por teste — um exigindo que a célula anterior ao
 
 O que a organização vê é um aviso no log de contest, em nível `warning`, na criação e na aplicação.
 
+## A tela (issue #245)
+
+O serviço acima existia desde o #192 e **só era alcançável por chamada manual**. O cenário é de meio de prova: corrigir um caso de teste errado significava montar a chamada à API à mão, com o relógio andando.
+
+`/judge/rejudgings`, mesmo portão da API (`role:judge,admin`), e a mesma sequência que a spec descreve:
+
+1. **Conferir** — conta quantos envios o critério pega, sem montar conjunto nenhum e sem enfileirar nada. É o passo em que se descobre que o critério pegou mais gente do que se queria, e é o primeiro botão porque montar o conjunto dispara julgamento de verdade.
+2. **Montar** — só aparece depois da conferência, e exige o motivo.
+3. **Decidir** — aplicar ou cancelar, na página do conjunto.
+
+A conferência diz **quantos aceitos ficaram de fora**. É o número que permite decidir se é isso mesmo que se queria: incluir os aceitos é uma caixa separada, com o aviso de que tirar um AC de uma equipe é a mudança mais cara que um rejulgamento faz.
+
+### Minutos na tela, segundos no banco
+
+`runs.contest_time` é em **segundos**; quem opera a prova fala em **minutos** ("os envios da primeira hora"). A tela recebe minutos em campos com outro **nome** — `contest_minute_from` / `contest_minute_to` — e converte.
+
+O nome diferente é de propósito: `contest_time_from` significando minutos na tela e segundos na API seria a mesma chave com duas unidades, que é exatamente como se digita 90 querendo o minuto 90 e se seleciona quase nada, em silêncio. A conversão volta escrita na conferência ("do minuto 90 (5400 s de prova)") porque uma conta que acontece escondida é uma conta que ninguém confere.
+
+### O que a recontagem resolve
+
+`RejudgeMemberJob` grava o veredito no membro e **não mexe no estado do conjunto**. Sem `refreshReadiness()` ao abrir a página, o conjunto ficaria em "preparando" para sempre e o botão de aplicar nunca apareceria — o serviço inteiro inalcançável de novo, agora atrás de uma barra de progresso que não anda. Tem teste próprio, e o `shadowVerdict` da suíte de tela escreve só o que o job escreve, justamente para não esconder essa parte.
+
+### Os seletores são da competição escolhida
+
+Um seletor com os problemas de todas as competições deixaria montar um critério que nunca pega nada, e o erro apareceria como "0 envios" sem dizer que a causa foi escolher o problema errado. Por isso a tela também diz, em voz alta, quando o critério não pega nada: um "0" sem explicação é indistinguível de uma tela quebrada, e a pessoa está no meio de uma prova.
+
 ## Quem pode
 
 Juiz e admin, junto do rejulgamento de um envio só: quem pode rejulgar um envio pode rejulgar o problema inteiro, e a diferença entre as duas coisas é de escala e não de autoridade. O que protege contra o acidente não é o perfil — é a prévia, o motivo obrigatório e a exclusão dos aceitos por padrão.

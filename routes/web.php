@@ -14,6 +14,7 @@ use App\Http\Controllers\JudgeController;
 use App\Http\Controllers\PrintRequestController;
 use App\Http\Controllers\ProblemController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RejudgingScreenController;
 use App\Http\Controllers\ScoreboardController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\SosController;
@@ -235,6 +236,18 @@ Route::post('/judge/runs/{run}/unverify', [JudgeController::class, 'unverify'])-
 // JudgeController exige ['auth', 'role:judge,admin'].
 Route::post('/judge/problems/{problem}/pause', [JudgeController::class, 'pauseJudging'])->name('judge.problems.pause');
 Route::post('/judge/problems/{problem}/resume', [JudgeController::class, 'resumeJudging'])->name('judge.problems.resume');
+
+// Issue #192/#245 -- rejulgamento EM LOTE pela tela. O #192 entregou o
+// servico inteiro e nenhuma porta: ate aqui, corrigir um caso de teste
+// errado no meio da prova era montar a chamada a API a mao. Mesmo portao das
+// rotas acima -- o construtor do RejudgingScreenController exige
+// ['auth', 'role:judge,admin'], como a API faz pela mesma razao.
+Route::get('/judge/rejudgings', [RejudgingScreenController::class, 'index'])->name('judge.rejudgings');
+Route::post('/judge/rejudgings/{contest}/preview', [RejudgingScreenController::class, 'preview'])->name('judge.rejudgings.preview');
+Route::post('/judge/rejudgings/{contest}', [RejudgingScreenController::class, 'store'])->name('judge.rejudgings.store');
+Route::get('/judge/rejudgings/set/{rejudging}', [RejudgingScreenController::class, 'show'])->name('judge.rejudgings.show');
+Route::post('/judge/rejudgings/set/{rejudging}/apply', [RejudgingScreenController::class, 'apply'])->name('judge.rejudgings.apply');
+Route::post('/judge/rejudgings/set/{rejudging}/cancel', [RejudgingScreenController::class, 'cancel'])->name('judge.rejudgings.cancel');
 
 /*
 |--------------------------------------------------------------------------
