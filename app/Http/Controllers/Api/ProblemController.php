@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\Problem;
+use App\Services\Icpc\IcpcPackageException;
+use App\Services\Icpc\IcpcPackageImporter;
 use App\Services\ProblemPackageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,13 +63,84 @@ class ProblemController extends Controller
             'memory_limit' => $validated['memory_limit'] ?? null,
         ]);
 
-        $problem = $this->packageService->importFromZip(
-            $contest,
-            $request->file('package'),
-            $overrides
-        );
+        // Issue #200 -- um endpoint, dois formatos.
+        //
+        // A deteccao e pelo CONTEUDO (existe problem.yaml?) e nao por um
+        // campo que quem envia teria que preencher: quem exportou do Polygon
+        // nao sabe -- nem deveria precisar saber -- qual dos dois formatos
+        // esta plataforma chama de nativo.
+        $problem = $this->importPackage($contest, $request->file('package'), $overrides);
 
         return response()->json($problem->load('testCases'), 201);
+    }
+
+    /**
+     * Issue #200 -- importa o pacote no formato que ele estiver.
+     *
+     * O formato da ICPC/Kattis e o que o resto do mundo produz: o ICPC
+     * Problem Archive publica nele, o Polygon exporta para ele, e os
+     * requisitos de CCS o exigem como piso. Ate aqui, um problema preparado
+     * no Polygon precisava ser convertido a mao para a estrutura do BOCA.
+     */
+    private function importPackage(Contest $contest, $file, array $overrides): Problem
+    {
+        $extractDir = storage_path('app/temp/icpc_'.uniqid());
+
+        try {
+            $zip = new \ZipArchive;
+
+            if ($zip->open($file->getRealPath()) !== true) {
+                abort(422, 'Nao foi possivel abrir o arquivo ZIP.');
+            }
+
+            @mkdir($extractDir, 0o755, true);
+            $zip->extractTo($extractDir);
+            $zip->close();
+
+            if (! $this->looksLikeIcpcPackage($extractDir)) {
+                // Formato do BOCA: o caminho que ja existia, intacto.
+                return $this->packageService->importFromZip($contest, $file, $overrides);
+            }
+
+            try {
+                return app(IcpcPackageImporter::class)->import($contest, $extractDir, $overrides);
+            } catch (IcpcPackageException $e) {
+                // 422 e nao 500: um pacote invalido e erro de quem enviou, e
+                // a mensagem diz o que esta errado. E para isso que a
+                // excecao e propria.
+                abort(422, $e->getMessage());
+            }
+        } finally {
+            $this->removeTree($extractDir);
+        }
+    }
+
+    private function looksLikeIcpcPackage(string $dir): bool
+    {
+        if (is_file($dir.'/problem.yaml')) {
+            return true;
+        }
+
+        foreach (glob($dir.'/*', GLOB_ONLYDIR) ?: [] as $candidate) {
+            if (is_file($candidate.'/problem.yaml')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function removeTree(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+
+        foreach (glob($dir.'/*') ?: [] as $path) {
+            is_dir($path) ? $this->removeTree($path) : @unlink($path);
+        }
+
+        @rmdir($dir);
     }
 
     /**

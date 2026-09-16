@@ -5,10 +5,11 @@ namespace App\Services;
 use App\Exceptions\SandboxUnavailableException;
 use App\Models\Answer;
 use App\Models\ContestLog;
+use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Score;
 use App\Models\TestCase;
-use App\Models\Problem;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 
@@ -21,20 +22,29 @@ class AutoJudgeService
     private const RSS_PREFIX = 'MHRSS';
 
     public string $workDir;
+
     protected int $defaultTimeLimit;
+
     protected int $defaultMemoryLimit;
+
     protected string $bwrapPath;
+
     protected bool $useBwrap;
+
     protected array $sandboxPaths;
+
     protected int $compileMaxFileKb;
 
     protected int $compileMemoryMb;
+
     protected int $runMaxFileKb;
+
     protected int $runMaxProcesses;
 
     protected array $memoryGraceMb;
 
     protected string $rssTimePath;
+
     protected ?bool $sandboxProbeFailed = null;
 
     /**
@@ -96,11 +106,11 @@ class AutoJudgeService
      */
     public function wrapWithBwrap(string $command, string $runDir, array $options = []): string
     {
-        if (!$this->useBwrap) {
+        if (! $this->useBwrap) {
             return $command;
         }
 
-        if (!file_exists($this->bwrapPath) || !is_executable($this->bwrapPath)) {
+        if (! file_exists($this->bwrapPath) || ! is_executable($this->bwrapPath)) {
             throw new SandboxUnavailableException(
                 "Mandatory judge sandbox binary (bwrap) not found or not executable at '{$this->bwrapPath}'. Refusing unconfined host execution."
             );
@@ -137,15 +147,15 @@ class AutoJudgeService
         }
 
         // The only writable path, and the last mount applied.
-        $args[] = '--bind ' . escapeshellarg($runDir) . ' ' . escapeshellarg($runDir);
-        $args[] = '--chdir ' . escapeshellarg($runDir);
+        $args[] = '--bind '.escapeshellarg($runDir).' '.escapeshellarg($runDir);
+        $args[] = '--chdir '.escapeshellarg($runDir);
 
         $envPath = getenv('PATH') ?: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
         $args[] = '--clearenv';
-        $args[] = '--setenv PATH ' . escapeshellarg($envPath);
-        $args[] = '--setenv LANG ' . escapeshellarg('C.UTF-8');
-        $args[] = '--setenv HOME ' . escapeshellarg($runDir);
-        $args[] = '--setenv TMPDIR ' . escapeshellarg($runDir);
+        $args[] = '--setenv PATH '.escapeshellarg($envPath);
+        $args[] = '--setenv LANG '.escapeshellarg('C.UTF-8');
+        $args[] = '--setenv HOME '.escapeshellarg($runDir);
+        $args[] = '--setenv TMPDIR '.escapeshellarg($runDir);
 
         // .NET's default W^X JIT double-maps executable memory through a
         // memfd it ftruncates to a large size, and RLIMIT_FSIZE applies to
@@ -155,7 +165,7 @@ class AutoJudgeService
         // nothing here; every other language ignores the variable.
         $args[] = '--setenv DOTNET_EnableWriteXorExecute 0';
 
-        $args[] = 'bash -c ' . escapeshellarg($this->rlimitPrologue($options) . $command);
+        $args[] = 'bash -c '.escapeshellarg($this->rlimitPrologue($options).$command);
 
         return implode(' ', $args);
     }
@@ -169,11 +179,11 @@ class AutoJudgeService
      */
     protected function roBindArgs(mixed $path): array
     {
-        if (!is_string($path) || $path === '' || !file_exists($path)) {
+        if (! is_string($path) || $path === '' || ! file_exists($path)) {
             return [];
         }
 
-        return ['--ro-bind ' . escapeshellarg($path) . ' ' . escapeshellarg($path)];
+        return ['--ro-bind '.escapeshellarg($path).' '.escapeshellarg($path)];
     }
 
     /**
@@ -271,24 +281,24 @@ class AutoJudgeService
     {
         $prologue = '';
 
-        if (!empty($options['cpu_seconds'])) {
-            $prologue .= 'ulimit -t ' . (int) $options['cpu_seconds'] . '; ';
+        if (! empty($options['cpu_seconds'])) {
+            $prologue .= 'ulimit -t '.(int) $options['cpu_seconds'].'; ';
         }
 
         // bash counts -f in 1024-byte increments.
-        if (!empty($options['file_size_kb'])) {
-            $prologue .= 'ulimit -f ' . (int) $options['file_size_kb'] . '; ';
+        if (! empty($options['file_size_kb'])) {
+            $prologue .= 'ulimit -f '.(int) $options['file_size_kb'].'; ';
         }
 
         // Caps fork bombs. Not applied to compilation, where a build tool
         // legitimately fans out across cores.
-        if (!empty($options['max_processes'])) {
-            $prologue .= 'ulimit -u ' . (int) $options['max_processes'] . '; ';
+        if (! empty($options['max_processes'])) {
+            $prologue .= 'ulimit -u '.(int) $options['max_processes'].'; ';
         }
 
         // Issue #86 -- only for the languages memoryRlimitKbFor() allows.
-        if (!empty($options['memory_kb'])) {
-            $prologue .= 'ulimit -v ' . (int) $options['memory_kb'] . '; ';
+        if (! empty($options['memory_kb'])) {
+            $prologue .= 'ulimit -v '.(int) $options['memory_kb'].'; ';
         }
 
         return $prologue;
@@ -316,22 +326,22 @@ class AutoJudgeService
      * infrastructure failure. So a match is only a hypothesis: it is
      * confirmed by actually trying to start an empty sandbox.
      */
-    protected function assertSandboxStarted(\Illuminate\Contracts\Process\ProcessResult $result): void
+    protected function assertSandboxStarted(ProcessResult $result): void
     {
-        if (!$this->useBwrap || $result->exitCode() === 0) {
+        if (! $this->useBwrap || $result->exitCode() === 0) {
             return;
         }
 
-        if (!preg_match('/^bwrap: .*/m', $result->errorOutput(), $matches)) {
+        if (! preg_match('/^bwrap: .*/m', $result->errorOutput(), $matches)) {
             return;
         }
 
-        if (!$this->sandboxProbeFails()) {
+        if (! $this->sandboxProbeFails()) {
             return;
         }
 
         throw new SandboxUnavailableException(
-            'Judge sandbox failed to start: ' . trim($matches[0])
+            'Judge sandbox failed to start: '.trim($matches[0])
         );
     }
 
@@ -427,7 +437,7 @@ class AutoJudgeService
         // Step 1: Compile
         $compileResult = $this->compile($run, $runDir);
         $this->reportProgress('compiled', 0);
-        if (!$compileResult['success']) {
+        if (! $compileResult['success']) {
             return [
                 'verdict' => 'CE',
                 'message' => 'Compilation Error',
@@ -461,7 +471,7 @@ class AutoJudgeService
             // judgehost can go without renewing its lease (#124).
             $this->reportProgress('test_case', (int) $index + 1);
 
-            if (!$testResult['success']) {
+            if (! $testResult['success']) {
                 return $testResult;
             }
         }
@@ -478,7 +488,7 @@ class AutoJudgeService
     {
         $runDir = "{$this->workDir}/run_{$run->id}";
 
-        if (!is_dir($runDir)) {
+        if (! is_dir($runDir)) {
             mkdir($runDir, 0755, true);
         }
 
@@ -537,7 +547,7 @@ class AutoJudgeService
         // Run the program
         $runResult = $this->executeProgram($run, $runDir, $inputFile, $outputFile);
 
-        if (!$runResult['success']) {
+        if (! $runResult['success']) {
             return $runResult;
         }
 
@@ -577,7 +587,7 @@ class AutoJudgeService
             $runCommand = str_replace('{source}', $run->filename, $runCommand);
             $runCommand = str_replace('{memory}', $memoryLimit, $runCommand);
 
-            $command = $runCommand . " < {$inputFile} > {$outputFile} 2>&1";
+            $command = $runCommand." < {$inputFile} > {$outputFile} 2>&1";
         }
 
         // The test case input lives under storage/app/problems, i.e. inside
@@ -715,7 +725,6 @@ class AutoJudgeService
         ];
     }
 
-
     protected function compareOutput(
         string $expected,
         string $actual,
@@ -730,7 +739,23 @@ class AutoJudgeService
         // tolerance, order-independent results, etc. that a plain diff can't
         // handle. Convention: `<script> <input> <expected_output> <actual_output>`,
         // exit code 0 = correct, anything else = incorrect.
+        // Issue #200 -- a convencao do BOCA e por LINGUAGEM (compare/<ext>),
+        // e faz sentido la: o pacote traz um script por linguagem aceita. O
+        // formato da ICPC/Kattis tem `output_validators/`, que pertence ao
+        // PROBLEMA -- um validador de saida nao muda porque a equipe
+        // escreveu em Python.
+        //
+        // Por isso o importador do #200 escreve um `compare/default`, e a
+        // escolha e feita AQUI e nao em Problem::getCompareScriptPath():
+        // aquele metodo e um construtor de caminho puro, testavel sem disco,
+        // e escolher entre dois caminhos e decisao de quem ja esta olhando o
+        // disco de qualquer forma.
         $compareScript = $problem->getCompareScriptPath($language->extension);
+
+        if (! file_exists($compareScript)) {
+            $compareScript = $problem->getCompareScriptPath('default');
+        }
+
         if ($inputFile && $expectedOutputFile && $actualOutputFile && file_exists($compareScript)) {
             return $this->runCompareScript($compareScript, $inputFile, $expectedOutputFile, $actualOutputFile);
         }
@@ -1011,7 +1036,7 @@ class AutoJudgeService
 
     protected function recursiveDelete(string $dir): void
     {
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             return;
         }
 
