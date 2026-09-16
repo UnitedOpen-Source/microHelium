@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Language;
 use App\Models\Problem;
+use App\Services\ContestClock;
 use App\Services\DuplicateSubmissionException;
 use App\Services\RunSubmissionService;
 use Illuminate\Http\RedirectResponse;
@@ -44,7 +45,11 @@ class SubmitController extends Controller
         // Matches the same check Api\RunController::store() already does --
         // without it, this web path could accept submissions before the
         // contest starts, after it ends, or while manually deactivated.
-        if (!$problem->contest->isRunning()) {
+        // Issue #198 -- e a mesma pergunta por sede que Api\RunController
+        // faz. As duas portas tem que concordar: uma sede com tempo
+        // devolvido que pudesse submeter pela API e nao pela web teria o
+        // tempo de volta so para quem soubesse usar a API.
+        if (! app(ContestClock::class)->isRunningFor($problem->contest, auth()->user()?->site_id)) {
             return back()->withErrors(['source_file' => 'Este contest nao esta em andamento no momento.']);
         }
 
@@ -52,14 +57,14 @@ class SubmitController extends Controller
 
         $validated = $request->validate([
             'language_id' => 'required|exists:languages,id',
-            'source_file' => 'nullable|file|max:' . $maxFileSizeKb,
+            'source_file' => 'nullable|file|max:'.$maxFileSizeKb,
             // Same size cap as the file upload path (in KB), applied to
             // characters -- previously unbounded, letting the pasted-code
             // path bypass the upload size limit entirely.
-            'code_text' => 'nullable|string|max:' . ($maxFileSizeKb * 1024),
+            'code_text' => 'nullable|string|max:'.($maxFileSizeKb * 1024),
         ]);
 
-        if (!$request->hasFile('source_file') && trim((string) $request->input('code_text')) === '') {
+        if (! $request->hasFile('source_file') && trim((string) $request->input('code_text')) === '') {
             return back()->withErrors(['source_file' => 'Envie um arquivo ou cole o codigo fonte.']);
         }
 
@@ -67,7 +72,7 @@ class SubmitController extends Controller
         $contest = $problem->contest;
         $language = Language::findOrFail($validated['language_id']);
 
-        if ($language->contest_id !== $problem->contest_id || !$language->is_active) {
+        if ($language->contest_id !== $problem->contest_id || ! $language->is_active) {
             return back()->withErrors(['language_id' => 'Linguagem indisponivel para este problema.']);
         }
 
@@ -87,16 +92,16 @@ class SubmitController extends Controller
             // compile. The basename is preserved since some languages (Java)
             // require it to match the program's class/entry-point name.
             $basename = pathinfo($this->sanitizeFilename($file->getClientOriginalName()), PATHINFO_FILENAME);
-            $originalName = ($basename !== '' ? $basename : 'main') . '.' . $this->sanitizeFilename($language->getFileExtension());
+            $originalName = ($basename !== '' ? $basename : 'main').'.'.$this->sanitizeFilename($language->getFileExtension());
             $sourceContent = file_get_contents($file->path());
         } else {
-            $originalName = 'main.' . $this->sanitizeFilename($language->getFileExtension());
+            $originalName = 'main.'.$this->sanitizeFilename($language->getFileExtension());
             $sourceContent = $request->input('code_text');
         }
 
         $siteId = $user->site_id ?? $contest->sites()->value('id');
 
-        if (!$siteId) {
+        if (! $siteId) {
             return back()->withErrors(['source_file' => 'Este contest ainda nao tem nenhum site configurado; nao e possivel submeter.']);
         }
 

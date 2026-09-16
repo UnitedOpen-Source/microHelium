@@ -58,6 +58,9 @@ class FrozenScoreboard
             ->get()
             ->groupBy('user_id');
 
+        $clock = app(ContestClock::class);
+        $secondsOf = fn (Run $run) => $clock->adjusted($contest, $run->site_id !== null ? (int) $run->site_id : null, (int) $run->contest_time);
+
         // Issue #212 -- o mesmo conjunto de equipes do placar ao vivo, e
         // pela mesma fonte. Era o leaderboard, que so tem linha para quem ja
         // teve run julgado: os dois placares mostrariam times diferentes, e
@@ -65,7 +68,7 @@ class FrozenScoreboard
         $rows = [];
 
         foreach (ScoreboardTeams::forContest($contest) as $userId => $user) {
-            $rows[] = self::row($user, $runs->get($userId, collect()), $cutoff, $gated, $penalty);
+            $rows[] = self::row($user, $runs->get($userId, collect()), $cutoff, $gated, $penalty, $secondsOf);
         }
 
         return ScoreboardRanking::apply(self::markFirstSolvers($rows));
@@ -89,14 +92,14 @@ class FrozenScoreboard
      * @param  Collection<int, Run>  $teamRuns
      * @return array<string, mixed>
      */
-    private static function row(User $user, Collection $teamRuns, int $cutoff, bool $gated, int $penalty): array
+    private static function row(User $user, Collection $teamRuns, int $cutoff, bool $gated, int $penalty, callable $secondsOf): array
     {
         $problems = [];
         $solved = 0;
         $totalTime = 0;
 
         foreach ($teamRuns->groupBy('problem_id') as $problemId => $attempts) {
-            $cell = self::cell($attempts, $cutoff, $gated, $penalty);
+            $cell = self::cell($attempts, $cutoff, $gated, $penalty, $secondsOf);
 
             if ($cell['attempts'] === 0 && $cell['pending'] === 0) {
                 continue;
@@ -123,9 +126,18 @@ class FrozenScoreboard
      * @param  Collection<int, Run>  $attempts
      * @return array{short_name: ?string, attempts: int, is_solved: bool, is_first_solver: bool, solved_time: int, penalty_time: int, pending: int}
      */
-    private static function cell(Collection $attempts, int $cutoff, bool $gated, int $penalty): array
+    private static function cell(Collection $attempts, int $cutoff, bool $gated, int $penalty, callable $secondsOf): array
     {
-        $visible = $attempts->filter(fn (Run $run) => (int) $run->contest_time < $cutoff);
+        // Issue #198 -- o corte e comparado em tempo AJUSTADO.
+        //
+        // Com um intervalo removido da prova inteira, o congelamento comeca
+        // quando as equipes tiverem vivido `duration - freeze` de tempo QUE
+        // CONTA, e nao de relogio de parede. Comparar cru deixaria o
+        // congelamento comecar cedo demais por exatamente o tanto que foi
+        // removido.
+        $visible = $attempts->filter(
+            fn (Run $run) => $secondsOf($run) < $cutoff
+        );
 
         $countable = $visible->filter(
             fn (Run $run) => $run->status === 'judged'
@@ -133,7 +145,7 @@ class FrozenScoreboard
                 && (! $gated || $run->verified_at !== null)
         );
 
-        $cell = Score::reduceCell($countable, $penalty);
+        $cell = Score::reduceCell($countable, $penalty, $secondsOf);
 
         // Resolvida antes do corte: a celula e identica a do placar ao vivo,
         // e nada depois dela conta -- nem como pendente. Mostrar "resolvido
