@@ -1,6 +1,6 @@
 # Revisão de UI/UX e prontidão do microHelium
 
-Data: 15/09/2026. Base: `c2d422b` de `master`. Trabalho isolado em `feat/frontend-release-audit`; implementação de organizações e Contest API preservadas.
+Revisão: 15–16/09/2026. Base final: `327d540` de `master` (atualizada após as entregas do backend). Trabalho isolado em `feat/frontend-release-audit`; implementação de organizações e Contest API preservadas.
 
 ## Resultado e limite
 
@@ -37,13 +37,15 @@ O detalhamento está em [spec de integração](specs/frontend-release-readiness.
 
 | Dependência | Situação observada / decisão |
 | --- | --- |
-| #188 Organizações | Implementação do outro agente preservada; homologar criação → propriedade → membros → arquivamento |
-| #195 / PR #220 Contest API | PR aberto na leitura inicial; fase REST não equivale a suporte ao resolver |
-| #219 Event feed | Necessário para resolver; validar reconexão, sigilo durante freeze e fim das atualizações |
-| #196 Calibração | Não criar controles de medição fictícios; mostrar amostras, unidade, versão e validade quando o backend existir |
-| #198 Compensação por sede | Não reconstruir regra de tempo no navegador; depende de contrato de término efetivo, escopo e reversão |
-| #200 ICPC/Kattis | Manter BOCA como formato disponível; diagnóstico e prévia antes da futura importação |
+| #188 / PR #226 Organizações | Backend integrado durante a revisão; ainda falta ligar a gestão de organizações a uma tela administrativa; contrato em `188-organizacoes.md` |
+| #195 / PR #220 Contest API | Fase REST integrada durante a revisão; o feed também chegou em #232. Homologar o resolver com a ferramenta externa real |
+| #219 / PR #232 Event feed | Integrado durante a revisão; ainda requer ensaio do resolver, reconexão e cerimônia com a ferramenta externa |
+| #196 / PR #230 Calibração | Medição e comparação de envios aceitos integradas; falta apresentar `/api/frontend/judgehosts/calibration` na tela de máquinas. Não altera vereditos; fase 2 de soluções de referência continua futura |
+| #198 / PR #227 Ajustes de tempo | Intervalos removidos integrados. O relógio desta revisão consome o término global do servidor; gestão dos intervalos e apresentação por sede precisam de interface própria e homologação do ciclo de revelação |
+| #200 / PR #231 ICPC/Kattis | Importador API integrado durante a revisão; o formulário de importação do banco continua sendo especificamente BOCA. A nova importação por problema precisa de sua interface |
 | #225 Ciclo legado | Atalhos retirados da UI; verificação de evento não iniciado corrigida no serviço compartilhado. Encerramento antecipado/congelamento legado ainda precisam ser alinhados |
+
+As interfaces adicionais dessas novas APIs estão reunidas na [issue #233](https://github.com/UnitedOpen-Source/microHelium/issues/233), com os contratos já entregues e critérios de aceitação.
 
 ## Validação reproduzível
 
@@ -69,7 +71,9 @@ BROWSER_RELEASE_AUDIT=1 npm run test:browser
 
 O seeder recusa outro banco/ambiente. A conta `ui-audit@example.test` / `audit-local-only` é exclusivamente uma fixture descartável. Os testes administrativos são opt-in para nunca tentar autenticar essa conta em uma instalação real. A suíte exige que `public/hot` não exista.
 
-Resultados finais e limitações estão no PR. A inspeção manual com leitor de tela e a revisão visual por pessoas continuam necessárias; testes automatizados não são certificação WCAG. O navegador conectado para inspeção visual não estava disponível nesta sessão.
+Resultado da validação: 39 testes de frontend aprovados; 10 testes Chromium aprovados (incluindo 375/768/1440 px); PHPStan sem erros. A suíte PHP completa é repetida sobre a base atualizada e seu resultado final fica no PR. Casos dependentes do ambiente Linux/judgehost podem ser pulados neste macOS; não representam homologação do julgamento em produção.
+
+A análise automatizada em telas pequenas encontrou e corrigiu a fuga do texto `sr-only` da tabela (containing block) e o seletor de competição sem quebra de linha. O estado HTTP 429 agora usa a apresentação de erro em português. A inspeção manual com leitor de tela e a revisão visual por pessoas continuam necessárias; testes automatizados não são certificação WCAG. O navegador conectado para inspeção visual não estava disponível nesta sessão.
 
 ## Portas para a versão final
 

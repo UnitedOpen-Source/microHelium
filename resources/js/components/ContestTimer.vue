@@ -17,20 +17,21 @@ export default {
         duration: { type: Number, default: 0 },
         freezeTime: { type: Number, default: 60 },
     },
-    data() { return { now: Date.now(), timer: null, refresh: null, contestData: null, loading: true, failed: false, request: null }; },
+    data() { return { now: Date.now(), clockOffset: 0, timer: null, refresh: null, contestData: null, loading: true, failed: false, request: null }; },
     computed: {
         contestStartTime() { return this.contestData?.start_time ?? this.startTime; },
         contestDuration() { return Number(this.contestData?.duration ?? this.duration); },
         start() { return new Date(this.contestStartTime).getTime(); },
         hasContest() { return Boolean(this.contestStartTime) && Number.isFinite(this.start) && this.contestDuration > 0; },
+        end() { return this.contestData?.end_time ? new Date(this.contestData.end_time).getTime() : this.start + this.contestDuration * 60000; },
         elapsed() { return Math.floor((this.now - this.start) / 1000); },
         upcoming() { return this.elapsed < 0; },
-        ended() { return this.contestData?.is_finalized === true || (!this.upcoming && this.contestData?.is_running === false) || this.elapsed >= this.contestDuration * 60; },
+        ended() { return this.contestData?.is_finalized === true || (this.contestData?.is_running === false && Date.parse(this.contestData?.server_time) >= this.start) || this.now >= this.end; },
         frozen() {
             if (typeof this.contestData?.is_frozen === 'boolean') return this.contestData.is_frozen;
             return this.freezeTime > 0 && this.elapsed >= (this.contestDuration - this.freezeTime) * 60;
         },
-        remainingSeconds() { return this.ended ? 0 : this.upcoming ? -this.elapsed : Math.max(0, this.contestDuration * 60 - this.elapsed); },
+        remainingSeconds() { return this.ended ? 0 : this.upcoming ? -this.elapsed : Math.max(0, Math.ceil((this.end - this.now) / 1000)); },
         statusLabel() { return this.contestData?.is_finalized ? 'Competição finalizada' : this.upcoming ? 'Começa em' : this.ended ? 'Competição encerrada' : 'Tempo restante'; },
         timerClass() { return this.ended || this.upcoming ? 'text-muted-foreground' : this.remainingSeconds <= 300 ? 'text-destructive' : this.remainingSeconds <= 900 ? 'text-warning' : 'text-primary'; },
         formattedTime() {
@@ -40,7 +41,7 @@ export default {
     },
     mounted() {
         this.fetchContestData();
-        this.timer = setInterval(() => { this.now = Date.now(); }, 1000);
+        this.timer = setInterval(() => { this.now = Date.now() + this.clockOffset; }, 1000);
         this.refresh = setInterval(this.fetchContestData, 60000);
     },
     beforeUnmount() { clearInterval(this.timer); clearInterval(this.refresh); this.request?.abort(); },
@@ -56,9 +57,11 @@ export default {
                 const data = await response.json();
                 if (request !== this.request) return;
                 this.contestData = data?.start_time ? data : null;
+                const serverTime = Date.parse(data?.server_time);
+                this.clockOffset = Number.isFinite(serverTime) ? serverTime - Date.now() : 0;
                 this.failed = false;
             } catch (_) { if (request === this.request) { this.failed = true; this.contestData = null; } }
-            finally { clearTimeout(timeout); if (request === this.request) { this.loading = false; this.now = Date.now(); } }
+            finally { clearTimeout(timeout); if (request === this.request) { this.loading = false; this.now = Date.now() + this.clockOffset; } }
         },
     },
 };
