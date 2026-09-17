@@ -161,6 +161,25 @@ class JudgehostAgent
             $this->materialiser->cleanup($runId);
         }
 
+        // Issue #273 -- a medicao vai junto com o veredito.
+        //
+        // `recordVerdict()` no servidor ja sabia recebe-la por aqui, e o
+        // comentario dele diz por que: "Ler so o estado local deixaria todo
+        // veredito remoto sem medicao -- e maquina remota e exatamente o
+        // caso que esta issue existe para comparar". O que faltava era o
+        // fio: o agente media, e a medicao morria nesta maquina.
+        //
+        // `slowestCase()` e o caso de teste mais lento do julgamento que
+        // acabou de acontecer, em segundos; a coluna e em milissegundos.
+        $medido = $this->judge->slowestCase();
+
+        $verdict['measured_wall_ms'] = $medido['wall_seconds'] !== null
+            ? (int) round($medido['wall_seconds'] * 1000)
+            : null;
+        $verdict['measured_cpu_ms'] = $medido['cpu_seconds'] !== null
+            ? (int) round($medido['cpu_seconds'] * 1000)
+            : null;
+
         $accepted = $this->client->reportResult($runId, $verdict);
 
         if (! $accepted) {

@@ -566,4 +566,53 @@ SH);
 
         $this->assertSame('judged', $run->fresh()->status);
     }
+
+    /**
+     * Issue #273 -- o agente leva ao servidor o que mediu.
+     *
+     * A medicao real sai de `/usr/bin/time -f`, que e GNU e nao existe em
+     * toda maquina de desenvolvimento -- este mesmo repositorio ja pula um
+     * teste por isso (`JudgeMeasurementFormatTest`). Entao o que se fixa
+     * aqui NAO e a medicao: e o FIO. O duble devolve segundos conhecidos, e
+     * a assercao e que eles chegam na coluna, em milissegundos, tendo
+     * passado pelo agente, pelo cliente HTTP, pela validacao do controller e
+     * pelo `recordVerdict()` do servidor.
+     *
+     * Sem este fio, `JudgehostCalibration` -- que filtra por
+     * `whereNotNull('measured_cpu_ms')` -- fica sem dado justamente para as
+     * maquinas remotas que ela existe para comparar.
+     */
+    public function test_the_agent_forwards_the_measurement_it_took(): void
+    {
+        // O duble vai SO no agente, e nao no container.
+        //
+        // Registra-lo no container faria o servidor resolver o mesmo objeto,
+        // e o fallback local de `recordVerdict()` entregaria os valores sem
+        // o fio existir -- foi o que aconteceu na primeira versao deste
+        // teste, e a mutacao pegou: remover o envio do agente nao derrubava
+        // nada. Com o duble so de um lado, a unica forma de os numeros
+        // chegarem a coluna e atravessando o HTTP.
+        $medidor = new class extends AutoJudgeService
+        {
+            public function slowestCase(): array
+            {
+                return ['wall_seconds' => 1.5, 'cpu_seconds' => 0.25];
+            }
+        };
+
+        [, $token] = Judgehost::issue('judge-medidor');
+        $run = $this->pendingRun("read a b\necho \$((a + b))\n", "3 4\n", "7\n");
+        $this->fakeServerAsThisApp();
+
+        $client = new JudgehostClient('https://contest.example', $token, 30);
+        $agente = new JudgehostAgent($client, new WorkMaterialiser($client), $medidor);
+
+        $this->assertTrue($agente->tick());
+
+        $run->refresh();
+
+        $this->assertSame('judged', $run->status);
+        $this->assertSame(1500, (int) $run->measured_wall_ms, 'o tempo de parede nao chegou ao servidor');
+        $this->assertSame(250, (int) $run->measured_cpu_ms, 'o tempo de CPU nao chegou ao servidor');
+    }
 }

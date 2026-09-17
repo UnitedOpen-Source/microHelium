@@ -134,6 +134,11 @@ class JudgehostClient
             'message' => $verdict['message'] ?? null,
             'stdout' => $this->clamp($verdict['stdout'] ?? null),
             'stderr' => $this->clamp($verdict['stderr'] ?? null),
+            // Issue #273. Ausentes num agente antigo, e o servidor trata
+            // ausencia como "sem medicao" em vez de recusar o resultado --
+            // um veredito vale mais que a metrica dele.
+            'measured_wall_ms' => $verdict['measured_wall_ms'] ?? null,
+            'measured_cpu_ms' => $verdict['measured_cpu_ms'] ?? null,
         ]);
 
         if (in_array($response->status(), [403, 409], true)) {
