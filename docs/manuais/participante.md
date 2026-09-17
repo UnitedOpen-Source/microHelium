@@ -170,9 +170,12 @@ deu WA, ou reclamar de veredito.
 que é do mundo real: computador travou, teclado quebrou, energia caiu, falta
 papel, precisa de ajuda na sede.
 
-O staff **reconhece** a chamada (viu, está indo) e depois **resolve**. Há
-limite de chamadas por minuto — uma chamada bem descrita vale mais que cinco
-repetidas.
+O staff **reconhece** a chamada (viu, está indo) e depois **resolve**.
+
+**Enquanto o seu chamado não for resolvido, você não consegue abrir outro.**
+Por isso descreva bem o que está acontecendo já no primeiro: uma chamada
+completa vale mais que cinco repetidas — e, aqui, é literalmente a única que
+você tem no momento.
 
 ### Imprimir
 

@@ -486,7 +486,7 @@ network lock the web login enforces.
 |------|------------|--------|
 | **Admin** | Full system access, contest management, user management | [Organizador](docs/manuais/organizador.md) |
 | **Judge** | Evaluate submissions, answer clarifications, view all runs | [Juiz](docs/manuais/juiz.md) |
-| **Staff** | Task management, printing, S.O.S. queue | [Staff](docs/manuais/staff.md) |
+| **Staff** | Task management, balloon delivery, printing, S.O.S. queue | [Staff](docs/manuais/staff.md) |
 | **Site** | Coordination of a single site: its teams, tasks and clarifications | [Staff](docs/manuais/staff.md) |
 | **Team** | Submit solutions, view scoreboard, ask clarifications | [Participante](docs/manuais/participante.md) |
 | **Score** | View-only scoreboard access | — |
