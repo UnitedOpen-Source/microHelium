@@ -140,6 +140,38 @@ Route::post('/login', function () {
     if (auth()->attempt($credentials, $remember)) {
         $user = auth()->user();
 
+        // Issue #277: uma conta desabilitada nao entra.
+        //
+        // `auth()->attempt()` NAO olha `is_enabled` -- o provider padrao do
+        // Eloquent so compara credenciais --, e o buraco ja estava
+        // documentado em Api\TokenController: "the web login has the same
+        // hole". A emissao de token fechava o lado dela; este e o outro
+        // lado.
+        //
+        // Importa para o #47: conta gerenciada de menor de idade nasce
+        // DESABILITADA de proposito, para so ser usavel depois da ativacao.
+        // Sem esta checagem, ela entra assim que alguem souber a senha.
+        //
+        // A checagem vem DEPOIS do attempt(), e nao antes, de proposito:
+        // antes, qualquer um poderia descobrir quais contas estao
+        // desabilitadas sem ter credencial nenhuma. Depois, e preciso ja ter
+        // acertado a senha para receber esta resposta.
+        if (! $user->is_enabled) {
+            auth()->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            ContestLog::warning(
+                $user->contest_id ?? $user->site?->contest_id,
+                'Login bloqueado: conta desabilitada',
+                ['user_id' => $user->user_id]
+            );
+
+            return back()->withErrors([
+                'email' => 'Esta conta esta desabilitada. Procure a organizacao do evento.',
+            ])->withInput(request()->only('email'));
+        }
+
         // Issue #50: Site::ip_address was collected via the admin UI but
         // never enforced. A user whose account belongs to a site with a
         // configured ip_address must be connecting from an allowed
