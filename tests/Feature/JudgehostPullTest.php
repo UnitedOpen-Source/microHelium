@@ -793,4 +793,84 @@ class JudgehostPullTest extends TestCase
 
         $this->artisan('judgehost:create', ['name' => 'judge-01'])->assertFailed();
     }
+
+    // --- a medicao do judgehost remoto (#273) -----------------------------
+
+    /**
+     * Issue #273 -- o judgehost remoto nunca enviava os tempos medidos.
+     *
+     * `recordVerdict()` ja sabia recebe-los pelo payload, e o comentario
+     * dele dizia por que: "Ler so o estado local deixaria todo veredito
+     * remoto sem medicao -- e maquina remota e exatamente o caso que esta
+     * issue existe para comparar". O que faltava era o fio.
+     *
+     * Sem isto, `JudgehostCalibration` -- que filtra por
+     * `whereNotNull('measured_cpu_ms')` -- fica sem dado justamente para as
+     * maquinas que ela existe para comparar.
+     */
+    public function test_a_remote_verdict_carries_the_measured_times(): void
+    {
+        [, $token] = $this->host('judge-medidor');
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            [
+                'verdict' => $this->answer->short_name,
+                'measured_wall_ms' => 1234,
+                'measured_cpu_ms' => 987,
+            ],
+            $headers,
+        )->assertOk();
+
+        $fresh = $run->fresh();
+
+        $this->assertSame(1234, (int) $fresh->measured_wall_ms);
+        $this->assertSame(987, (int) $fresh->measured_cpu_ms);
+    }
+
+    /**
+     * Compatibilidade: um agente antigo nao envia os campos, e o veredito
+     * continua valendo.
+     *
+     * Perder a metrica e ruim; recusar o julgamento por causa dela seria
+     * pior.
+     */
+    public function test_an_agent_that_sends_no_measurement_still_has_its_verdict_accepted(): void
+    {
+        [, $token] = $this->host('judge-antigo');
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $headers,
+        )->assertOk();
+
+        $fresh = $run->fresh();
+
+        $this->assertSame('judged', $fresh->status);
+        $this->assertNull($fresh->measured_wall_ms);
+        $this->assertNull($fresh->measured_cpu_ms);
+    }
+
+    /**
+     * Tempo negativo nao e medicao.
+     */
+    public function test_a_negative_measurement_is_refused(): void
+    {
+        [, $token] = $this->host('judge-negativo');
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            [
+                'verdict' => $this->answer->short_name,
+                'measured_cpu_ms' => -5,
+            ],
+            $headers,
+        )->assertStatus(422);
+
+        $this->assertSame('judging', $run->fresh()->status);
+    }
 }

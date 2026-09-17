@@ -73,6 +73,13 @@ class ResultController extends Controller
             'message' => ['nullable', 'string', 'max:65535'],
             'stdout' => ['nullable', 'string', 'max:65535'],
             'stderr' => ['nullable', 'string', 'max:65535'],
+            // Issue #273 -- a medicao do judgehost remoto.
+            //
+            // Nullable porque um agente que nao a envia continua tendo o
+            // veredito aceito: perder a metrica e ruim, recusar o
+            // julgamento por causa dela seria pior.
+            'measured_wall_ms' => ['nullable', 'integer', 'min:0'],
+            'measured_cpu_ms' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $verdict = DB::transaction(function () use ($run, $judgehost, $data) {
@@ -108,6 +115,8 @@ class ResultController extends Controller
                 'message' => $data['message'] ?? null,
                 'stdout' => $data['stdout'] ?? null,
                 'stderr' => $data['stderr'] ?? null,
+                'measured_wall_ms' => $data['measured_wall_ms'] ?? null,
+                'measured_cpu_ms' => $data['measured_cpu_ms'] ?? null,
             ]);
 
             return $fresh->fresh();
