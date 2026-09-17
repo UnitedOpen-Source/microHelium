@@ -25,15 +25,32 @@ class ContestFactoryDeterminismTest extends TestCase
 {
     public function test_the_default_contest_is_running_and_not_frozen(): void
     {
-        // Muitos, e nao um: um sorteio que acerta uma vez nao prova nada, e
-        // o defeito original passava metade das vezes.
-        for ($i = 0; $i < 25; $i++) {
-            $contest = Contest::factory()->create();
+        // O relogio fica parado durante o laco -- issue #250.
+        //
+        // `start_time` do factory e `now()`, e `getContestTime()` devolve
+        // SEGUNDOS decorridos desde ele. Sem congelar, `assertSame(0, ...)`
+        // so vale enquanto o `create()` e a assercao couberem no mesmo
+        // segundo de relogio de parede: um INSERT lento, um GC ou um runner
+        // disputado fazem `diffInSeconds` devolver 1.0x, o cast truncar para
+        // 1, e o teste cair. Foi o que derrubou o CI do master em a8df411,
+        // com a mensagem exata "Failed asserting that 1 is identical to 0".
+        //
+        // Congelar nao afrouxa a guarda -- afrouxar seria trocar o `0` por
+        // um `assertLessThan`, que reabriria a janela de sorteio que a #213
+        // fechou. Com o tempo parado, "o relogio comecou no zero" volta a
+        // ser uma afirmacao sobre o FACTORY em vez de uma corrida contra o
+        // relogio de parede: um `start_time` sorteado continua caindo aqui.
+        $this->freezeTime(function () {
+            // Muitos, e nao um: um sorteio que acerta uma vez nao prova nada,
+            // e o defeito original passava metade das vezes.
+            for ($i = 0; $i < 25; $i++) {
+                $contest = Contest::factory()->create();
 
-            $this->assertTrue($contest->isRunning(), 'o contest padrao deveria estar rodando');
-            $this->assertFalse($contest->isFrozen(), 'o contest padrao caiu na janela de congelamento');
-            $this->assertSame(0, $contest->getContestTime(), 'o relogio do contest padrao nao comecou no zero');
-        }
+                $this->assertTrue($contest->isRunning(), 'o contest padrao deveria estar rodando');
+                $this->assertFalse($contest->isFrozen(), 'o contest padrao caiu na janela de congelamento');
+                $this->assertSame(0, $contest->getContestTime(), 'o relogio do contest padrao nao comecou no zero');
+            }
+        });
     }
 
     public function test_the_named_states_say_what_they_are(): void
