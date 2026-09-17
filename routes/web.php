@@ -161,11 +161,20 @@ Route::post('/login', function () {
             request()->session()->invalidate();
             request()->session()->regenerateToken();
 
-            ContestLog::warning(
-                $user->contest_id ?? $user->site?->contest_id,
-                'Login bloqueado: conta desabilitada',
-                ['user_id' => $user->user_id]
-            );
+            // `contest_logs.contest_id` e obrigatorio. Uma conta de admin
+            // nao tem prova nem sede, e passar null aqui e TypeError: o
+            // administrador desabilitado recebia 500 no lugar da recusa. A
+            // conta sem prova nao gera registro, porque a tela que le esses
+            // registros filtra por prova de qualquer forma.
+            $logContestId = $user->contest_id ?? $user->site?->contest_id;
+
+            if ($logContestId !== null) {
+                ContestLog::warning(
+                    (int) $logContestId,
+                    'Login bloqueado: conta desabilitada',
+                    ['user_id' => $user->user_id]
+                );
+            }
 
             return back()->withErrors([
                 'email' => 'Esta conta esta desabilitada. Procure a organizacao do evento.',

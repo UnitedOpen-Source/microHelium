@@ -4,6 +4,7 @@ use App\Http\Middleware\AuthenticateJudgehost;
 use App\Http\Middleware\AuthenticateWebcastCredential;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\ClicsHeaders;
+use App\Http\Middleware\EnsureAccountIsEnabled;
 use App\Http\Middleware\SecurityHeaders;
 use Helium\Http\Middleware\IsAdminMiddleware;
 use Illuminate\Foundation\Application;
@@ -60,10 +61,18 @@ return Application::configure(basePath: dirname(__DIR__))
             // CORS liberado porque a spec pede
             // `Access-Control-Allow-Origin: *`: as ferramentas que
             // consomem isto sao paginas servidas de outro lugar.
+            //
+            // Issue #277 -- `is_enabled` revalidado tambem aqui. Quem
+            // apresenta token e `isStaff()` para este controller, e staff ve
+            // veredito retido: o vazamento que a #274 fechou para o anonimo
+            // valeria igual para um juiz desabilitado. O middleware nao faz
+            // nada quando nao ha usuario, entao a leitura anonima -- que e o
+            // desenho desta API -- segue intacta.
             Route::middleware([
                 'throttle:300,1',
                 SubstituteBindings::class,
                 ClicsHeaders::class,
+                EnsureAccountIsEnabled::class.':sanctum',
             ])
                 ->group(__DIR__.'/../routes/clics.php');
         },
@@ -73,6 +82,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // deployment's nginx config. Appended so it wraps every route,
         // including the webcast consumer group registered above.
         $middleware->append(SecurityHeaders::class);
+
+        // Issue #277, partes 2 e 3 -- desabilitar uma conta derruba a sessao
+        // aberta e o token ja emitido, e nao so impede o proximo login.
+        //
+        // Por grupo, e nao global: o guard e diferente em cada um, e os
+        // grupos do judgehost e do webcast nao autenticam User nenhum.
+        $middleware->web(append: [EnsureAccountIsEnabled::class.':web']);
+        $middleware->api(append: [EnsureAccountIsEnabled::class.':sanctum']);
 
         $middleware->alias([
             'admin' => IsAdminMiddleware::class,
