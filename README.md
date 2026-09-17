@@ -583,7 +583,12 @@ the thing measured is the thing that deploys.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU Affero General Public License v3.0 or
+later** — see the [LICENSE](LICENSE) file for the full text.
+
+The AGPL's network clause matters for this project: if you run a modified
+microHelium and let people use it over a network, you must offer them the
+source of your modified version.
 
 ## Acknowledgments
 
