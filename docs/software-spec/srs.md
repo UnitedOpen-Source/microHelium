@@ -1141,7 +1141,39 @@ A interface web deve oferecer superfícies distintas por papel e estado, mantend
 | INT-UI-011 | Similaridade | Criação de check, estado e pares restritos |
 | INT-UI-012 | Webcast | Credenciais, capacidades, exportações e revogação |
 
-### 3.3.2 Interfaces de Hardware
+### 3.3.2 Interface de Linha de Comando
+
+Parte da operação não acontece pelo navegador. Instalar um judgehost, provar que
+uma máquina emprestada confina, gerar o arquivo de resultados depois que a sala
+esvaziou e criar um ponto de restauração são tarefas de terminal, e a interface
+de comando é normativa como qualquer outra.
+
+| ID | Comando | Papel na operação |
+| --- | --- | --- |
+| INT-CLI-001 | `autojudge:start` | laço de julgamento local; é o `CMD` da imagem do juiz |
+| INT-CLI-002 | `judgehost:work` | agente de julgamento distribuído, que reivindica trabalho do servidor |
+| INT-CLI-003 | `judgehost:create` | registra uma máquina de julgamento |
+| INT-CLI-004 | `judgehost:selftest` | prova, **na máquina que vai julgar**, que o sandbox confina (RF-19) |
+| INT-CLI-005 | `judgehost:prune` | remove judgehosts que não dão mais sinal |
+| INT-CLI-006 | `judging:alerts` | avisa quando o julgamento para de andar |
+| INT-CLI-007 | `contest:icpc-report` | arquivo de classificação da ICPC, o que se envia ao fim da prova |
+| INT-CLI-008 | `backup:create` | ponto de restauração (RF-23) |
+| INT-CLI-009 | `teams:import` | importa equipes do arquivo da ICPC |
+| INT-CLI-010 | `event:import` | provisiona uma prova inteira a partir de arquivo declarativo |
+| INT-CLI-011 | `runs:reconcile-stuck` | devolve à fila runs abandonadas por judgehost que caiu |
+
+Requisitos que valem para toda esta superfície:
+
+- **DEVE** usar código de saída 0 para sucesso e diferente de zero para falha,
+  porque estes comandos são encadeados em scripts de implantação e em
+  verificação pré-prova.
+- **DEVE** escrever diagnóstico em `stderr` e resultado em `stdout`, para que a
+  saída possa ser redirecionada a arquivo sem contaminação.
+- **NÃO DEVE** exigir interação quando destinado a execução automatizada.
+- Quando oferecer formato legível por máquina, este **DEVE** conter apenas o
+  documento — sem cabeçalho, saudação ou rodapé que quebre o consumidor.
+
+### 3.3.3 Interfaces de Hardware
 
 O Helium não exige hardware proprietário, mas depende das seguintes capacidades operacionais:
 
@@ -1154,7 +1186,7 @@ O Helium não exige hardware proprietário, mas depende das seguintes capacidade
 - impressora opcional para fila de impressão;
 - estação de projeção opcional para scoreboard/webcast.
 
-### 3.3.3 Interfaces de Software
+### 3.3.4 Interfaces de Software
 
 | ID | Componente | Interface |
 | --- | --- | --- |
@@ -1168,7 +1200,7 @@ O Helium não exige hardware proprietário, mas depende das seguintes capacidade
 | INT-SW-008 | CLICS | Interoperabilidade com consumidores da ICPC Contest API |
 | INT-SW-009 | BOCA/problem packages | Importação/exportação nos formatos suportados |
 
-### 3.3.4 Interfaces de Comunicação
+### 3.3.5 Interfaces de Comunicação
 
 - HTTP/HTTPS para navegação e APIs;
 - sessão + cookies + CSRF para interface web mutável;

@@ -194,7 +194,48 @@ calibração está registrada em
 
 ---
 
-## 5. Integrações
+## 5. Relatórios e exportações
+
+### O arquivo que você envia depois da prova
+
+O **relatório de classificação da ICPC** — `icpc_id`, colocação, problemas
+resolvidos, tempo total e tempo do primeiro AC, uma linha por equipe, na ordem
+final. É o mesmo formato que o BOCA produz, e é o arquivo que quem organiza
+envia quando a prova acaba.
+
+Duas formas de obter, e a segunda existe por um motivo prático:
+
+```sh
+php artisan contest:icpc-report <id-do-contest> --output=classificacao.csv
+```
+
+ou baixando por `GET /api/frontend/contests/{contest}/icpc-report`.
+
+> **Confira os `icpc_id` ANTES da prova, não depois.** Equipe sem
+> identificador sai do relatório sem servir para nada — e descobrir isso com a
+> sala já vazia significa caçar gente para preencher cadastro. O download
+> responde quantas equipes estão sem identificador no cabeçalho
+> `X-Icpc-Teams-Missing-Id`; ele fica fora do CSV de propósito, porque o CSV
+> tem colunas fixas que a ferramenta de quem recebe espera.
+>
+> O campo fica no cadastro do usuário, em `/backend/users/{user}/edit`.
+
+Prova de treino não tem classificação e não produz este relatório.
+
+### As outras saídas
+
+| O quê | Onde |
+|---|---|
+| Placar em CSV | `/scoreboard/export` |
+| Relatório por sede | `/api/frontend/reports/site` |
+| Histórico de julgamento | `/api/frontend/reports/judge-history` |
+| Transmissão do placar (formato BOCA) | `/api/frontend/webcast/export` |
+| Pacote de um problema | `/api/problems/{problem}/export` |
+| Ponto de restauração | `php artisan backup:create` |
+
+---
+
+## 6. Integrações
 
 - **Contest API (ICPC/CLICS)** — `/api/clics/*`, incluindo o **event feed**
   (`/api/clics/contests/{id}/event-feed`), que é o que um *resolver* lê para
@@ -202,7 +243,6 @@ calibração está registrada em
 - **API autenticada** — tokens Sanctum, emitidos e revogáveis pelo titular.
   `/api/health` para monitoramento, `docs/api/openapi.yaml` para a
   especificação.
-- **Exportações** — placar e relatórios.
 
 > **Antes de usar o resolver numa prova real**, rode a homologação descrita em
 > [`docs/runbooks/252-event-feed-streaming.md`](../runbooks/252-event-feed-streaming.md).
@@ -211,7 +251,7 @@ calibração está registrada em
 
 ---
 
-## 6. Backup
+## 7. Backup
 
 `php artisan backup:create` gera um ponto de restauração.
 
@@ -220,7 +260,7 @@ restaurado não é um backup — teste a restauração antes do evento, não dur
 
 ---
 
-## 7. Checklist do evento
+## 8. Checklist do evento
 
 ### Semanas antes
 - [ ] Contest criado, com início, duração, congelamento e penalidade
@@ -233,6 +273,8 @@ restaurado não é um backup — teste a restauração antes do evento, não dur
 
 ### Dias antes
 - [ ] Contas criadas e distribuídas; equipes conseguem entrar
+- [ ] **`icpc_id` preenchido em todas as equipes** — conferir agora, não
+      depois da prova (seção 5)
 - [ ] Ambiente de treino (`/practice`) aberto e testado
 - [ ] Prova de carga de envios feita
 - [ ] Backup criado **e restaurado** num ambiente de teste
@@ -255,12 +297,14 @@ restaurado não é um backup — teste a restauração antes do evento, não dur
 - [ ] Conferir se há rejulgamento pendente antes de revelar
 - [ ] Revelar (cerimônia)
 - [ ] Finalizar e conferir a premiação
-- [ ] Exportar placar e relatórios
+- [ ] Gerar o **relatório de classificação da ICPC** e conferir que nenhuma
+      equipe ficou sem `icpc_id` (seção 5)
+- [ ] Exportar placar e demais relatórios
 - [ ] Backup final
 
 ---
 
-## 8. O que pode dar errado, e o que fazer
+## 9. O que pode dar errado, e o que fazer
 
 **A fila de julgamento parou de andar.**
 Veja `/judge/health`. Provavelmente um judgehost caiu. Há um *watchdog* que
