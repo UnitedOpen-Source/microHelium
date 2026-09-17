@@ -53,6 +53,17 @@ class SiteController extends Controller
             'chief_judge_name' => 'nullable|string|max:50',
             'score_visibility' => 'required|in:all,own_site',
             'max_judge_wait_time' => 'required|integer|min:60',
+            // Issue #276 -- override de duracao e congelamento, em minutos.
+            //
+            // Nulo (campo vazio) quer dizer "segue o contest", e e o padrao:
+            // as colunas sao `nullable` e o fallback vive em
+            // `Site::getEffectiveDuration()` / `getEffectiveFreezeTime()`.
+            //
+            // Ate este PR nenhum caminho gravava estas colunas -- nem UI, nem
+            // API, nem importador --, entao o override era morto nas duas
+            // pontas. Atende RF-F04-001 do SRS.
+            'duration' => 'nullable|integer|min:1',
+            'freeze_time' => 'nullable|integer|min:0',
             'judging_routes' => 'array',
             // Scoped to the same contest (a route across contests would
             // corrupt the routing model) and to non-deleted sites --
@@ -72,6 +83,8 @@ class SiteController extends Controller
                 'chief_judge_name' => $validated['chief_judge_name'] ?? null,
                 'score_visibility' => $validated['score_visibility'],
                 'max_judge_wait_time' => $validated['max_judge_wait_time'],
+                'duration' => $this->override($validated, 'duration'),
+                'freeze_time' => $this->override($validated, 'freeze_time'),
                 'is_active' => true,
                 'permit_logins' => true,
             ]);
@@ -94,6 +107,17 @@ class SiteController extends Controller
             'score_visibility' => 'required|in:all,own_site',
             'max_judge_wait_time' => 'required|integer|min:60',
             'is_active' => 'nullable|boolean',
+            // Issue #276 -- override de duracao e congelamento, em minutos.
+            //
+            // Nulo (campo vazio) quer dizer "segue o contest", e e o padrao:
+            // as colunas sao `nullable` e o fallback vive em
+            // `Site::getEffectiveDuration()` / `getEffectiveFreezeTime()`.
+            //
+            // Ate este PR nenhum caminho gravava estas colunas -- nem UI, nem
+            // API, nem importador --, entao o override era morto nas duas
+            // pontas. Atende RF-F04-001 do SRS.
+            'duration' => 'nullable|integer|min:1',
+            'freeze_time' => 'nullable|integer|min:0',
             'judging_routes' => 'array',
             'judging_routes.*' => [
                 'integer',
@@ -108,6 +132,8 @@ class SiteController extends Controller
                 'chief_judge_name' => $validated['chief_judge_name'] ?? null,
                 'score_visibility' => $validated['score_visibility'],
                 'max_judge_wait_time' => $validated['max_judge_wait_time'],
+                'duration' => $this->override($validated, 'duration'),
+                'freeze_time' => $this->override($validated, 'freeze_time'),
                 'is_active' => (bool) ($validated['is_active'] ?? false),
             ]);
 
@@ -116,6 +142,30 @@ class SiteController extends Controller
 
         return redirect()->route('backend.sites', ['contest_id' => $site->contest_id])
             ->with('success', "Site \"{$site->name}\" atualizado com sucesso!");
+    }
+
+    /**
+     * Issue #276 -- "vazio" quer dizer "segue o contest", e nao zero.
+     *
+     * Tres coisas diferentes chegam aqui e todas precisam virar `null`: a
+     * chave ausente (o formulario nao mandou o campo), a string vazia (o
+     * campo existe e esta em branco) e o nulo explicito. Um `(int)` cru
+     * transformaria as duas primeiras em ZERO, e zero nao e ausencia: zero em
+     * `duration` e uma prova de duracao nula, e zero em `freeze_time` quer
+     * dizer "sem congelamento nesta sede", que e uma escolha legitima e
+     * diferente de "usa o do contest".
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function override(array $validated, string $key): ?int
+    {
+        $value = $validated[$key] ?? null;
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     public function destroy(Site $site): RedirectResponse

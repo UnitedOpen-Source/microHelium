@@ -52,6 +52,7 @@
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Placar</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Espera max. julgamento</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Tempo próprio</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Também julga</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
                     </tr>
@@ -69,6 +70,17 @@
                         </td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $site->score_visibility === 'own_site' ? 'Apenas este site' : 'Todos os sites' }}</td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $site->max_judge_wait_time }} s</td>
+                        {{-- Issue #276 -- quem opera precisa ver de longe QUAIS
+                             sedes divergem do contest, porque e nelas que o
+                             placar congela em outro horario. --}}
+                        <td class="px-4 py-3 text-sm text-muted-foreground">
+                            @if($site->duration === null && $site->freeze_time === null)
+                                Segue o contest
+                            @else
+                                <span class="block">{{ $site->duration !== null ? $site->duration . ' min de prova' : 'duração do contest' }}</span>
+                                <span class="block text-xs">{{ $site->freeze_time !== null ? ($site->freeze_time > 0 ? 'congela nos últimos ' . $site->freeze_time . ' min' : 'sem congelamento') : 'congelamento do contest' }}</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-3 text-sm text-muted-foreground">
                             @php $routedNames = $sites->whereIn('id', $site->judgingRoutes->pluck('source_site_id'))->pluck('name'); @endphp
                             {{ $routedNames->isEmpty() ? 'Apenas o próprio site' : $routedNames->join(', ') }}

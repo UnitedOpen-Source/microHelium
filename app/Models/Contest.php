@@ -290,19 +290,27 @@ class Contest extends Model
         // Estar ativo e "este e o evento corrente", e nao "a classificacao
         // ja foi liberada". A unica coisa que termina um congelamento e
         // alguem revelar, e isso e `unfrozen_at`.
-        if (! $this->start_time || now()->lt($this->start_time)) {
-            return false;
-        }
-
-        if ((int) ($this->attributes['freeze_time'] ?? 0) <= 0) {
-            return false;
-        }
-
-        if ($this->unfrozen_at !== null) {
-            return false;
-        }
-
-        return now()->gte($this->freeze_time);
+        // Issue #276 -- "alguma sede desta prova ainda esta congelada?".
+        //
+        // A pergunta mudou porque `sites.freeze_time` passou a ser honrada, e
+        // sedes com duracao propria entram na janela de congelamento em
+        // instantes diferentes. Os chamadores deste metodo -- finalizacao,
+        // tela de operacoes, rejulgamento, a listagem do admin -- nao tem um
+        // espectador em maos, e para eles a resposta conservadora e a certa:
+        // se UMA sede ainda esconde, revelar o quadro inteiro entrega o que
+        // ela esconde.
+        //
+        // Para uma prova cujas sedes nao tem override -- toda prova existente
+        // -- a resposta e IDENTICA a de antes, porque todas compartilham a
+        // janela do contest. O #189 (o congelamento sobrevive ao fim), o #225
+        // (`is_active` fora da condicao) e o "zero quer dizer sem
+        // congelamento" continuam valendo, agora dentro de
+        // ContestClock::isFrozenFor().
+        //
+        // Quem TEM um espectador em maos -- as tres telas de placar --
+        // pergunta `ContestClock::isFrozenFor($contest, $siteId)`, que e a
+        // resposta daquela sede.
+        return app(ContestClock::class)->isFrozenForAnyone($this);
     }
 
     /**

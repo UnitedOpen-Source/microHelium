@@ -7,6 +7,7 @@ use App\Models\Contest;
 use App\Models\Leaderboard;
 use App\Models\Problem;
 use App\Models\Run;
+use App\Services\ContestClock;
 use App\Models\Score;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,7 +31,18 @@ class ScoreboardController extends Controller
         // Um juiz que nao pudesse ver o placar descongelado nao conseguiria
         // fazer o trabalho dele durante a ultima hora, e a lista de "quem e
         // da organizacao" nao pode existir em duas versoes.
-        $frozen = $contest->isFrozen() && ! Run::viewerSeesWithheldVerdicts(auth()->user());
+        // Issue #276 -- a janela da SEDE de quem pergunta, como na tela web.
+        // Sem sede (anonimo, ou conta sem sede), a resposta conservadora:
+        // congelado enquanto qualquer sede ainda esconder.
+        $viewer = auth()->user();
+        $siteId = $viewer?->site_id !== null ? (int) $viewer->site_id : null;
+        $clock = app(ContestClock::class);
+
+        $frozen = ! Run::viewerSeesWithheldVerdicts($viewer) && (
+            $siteId !== null
+                ? $clock->isFrozenFor($contest, $siteId)
+                : $clock->isFrozenForAnyone($contest)
+        );
 
         $scoreboard = Leaderboard::getScoreboard($contest->id, $frozen);
 

@@ -686,8 +686,8 @@ Os requisitos funcionais estão organizados por capacidade de negócio. Cada req
 
 | ID | Prioridade | Requisito | Critério de aceite |
 | --- | --- | --- | --- |
-| RF-F04-001 | P0 | Permitir associar sede a contest e configurar nome, estado, login, auto-judge, duração/freeze opcionais e limites operacionais. | Configuração da sede é persistida e aplicada somente ao seu escopo. |
-| RF-F04-002 | P0 | Usar valores do contest como fallback quando sede não possui override. | Duração/freeze efetivos correspondem ao contest na ausência de valor local. |
+| RF-F04-001 | P0 | Permitir associar sede a contest e configurar nome, estado, login, auto-judge, duração/freeze opcionais e limites operacionais. | Configuração da sede é persistida e aplicada somente ao seu escopo. Duração/freeze são gravados em `Backend\SiteController`; campo vazio persiste `null` (segue o contest) e zero em freeze persiste zero (sem congelamento naquela sede). |
+| RF-F04-002 | P0 | Usar valores do contest como fallback quando sede não possui override. | Duração/freeze efetivos correspondem ao contest na ausência de valor local; `ContestClock::durationMinutesFor()` e `freezeMinutesFor()` delegam a `Site::getEffectiveDuration()`/`getEffectiveFreezeTime()`, e o portão de submissão e as três telas de placar leem esses valores. |
 | RF-F04-003 | P0 | Permitir restrição de login por lista de IPs/CIDRs da sede. | IP fora das regras configuradas é bloqueado antes de obter sessão válida. |
 | RF-F04-004 | P0 | Permitir roteamento explícito de julgamento entre sedes. | Judge de sede vê sua sede e fontes roteadas, sem abrir todas as sedes por padrão. |
 | RF-F04-005 | P0 | Manter uma única fonte canônica de dados para o contest multi-site. | Operações de sedes convergem no mesmo banco/estado central. |

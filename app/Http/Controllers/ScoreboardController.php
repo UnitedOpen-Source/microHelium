@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Contest;
 use App\Models\Leaderboard;
 use App\Models\Run;
+use App\Services\ContestClock;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -104,7 +105,30 @@ class ScoreboardController extends Controller
      */
     private function isFrozenFor(?Contest $contest): bool
     {
-        return (bool) $contest?->isFrozen() && ! Run::viewerSeesWithheldVerdicts(auth()->user());
+        if (! $contest) {
+            return false;
+        }
+
+        $viewer = auth()->user();
+
+        if (Run::viewerSeesWithheldVerdicts($viewer)) {
+            return false;
+        }
+
+        // Issue #276 -- a janela da SEDE de quem olha.
+        //
+        // Uma sede com duracao propria entra no congelamento em outro
+        // instante, e o placar dela tem de acompanhar. Espectador sem sede
+        // -- anonimo, ou conta sem sede -- recebe `null`, e
+        // `isFrozenForAnyone()` responde por ele: congelado enquanto QUALQUER
+        // sede ainda esconder, porque nao ha como saber de qual sede a
+        // classificacao que ele veria viria.
+        $siteId = $viewer?->site_id !== null ? (int) $viewer->site_id : null;
+        $clock = app(ContestClock::class);
+
+        return $siteId !== null
+            ? $clock->isFrozenFor($contest, $siteId)
+            : $clock->isFrozenForAnyone($contest);
     }
 
     private function buildScoreboard(?Contest $contest): array

@@ -156,9 +156,31 @@ O segundo é o caso real da Maratona: o regulamento manda somar uma fração do
 tempo de parada **daquela sede**, e sem isso a sede faz a conta no papel e a
 classificação não bate com o placar.
 
-> **Limite conhecido:** o **congelamento**, esse sim, é do contest inteiro —
-> não há congelamento por sede. Não confunda com o ajuste de tempo, que tem
-> escopo.
+### Duração e congelamento próprios de uma sede
+
+Além do ajuste de tempo, cada sede pode ter **duração** e **congelamento**
+próprios, em **Sedes → editar**. Campo em branco quer dizer "segue o contest",
+que é o padrão e o que você quer na maioria dos casos.
+
+| Campo | O que faz | Em branco |
+|---|---|---|
+| Duração própria | a sede corre esse tanto de minutos | segue a duração do contest |
+| Congelamento próprio | contado do fim **dessa sede** | segue o congelamento do contest |
+
+Zero no congelamento é diferente de branco: zero quer dizer **sem
+congelamento nessa sede**, branco quer dizer "usa o do contest".
+
+> **Cuidado, e é o motivo de este campo vir vazio:** uma sede com duração ou
+> congelamento próprios vê o placar congelar em **horário diferente** das
+> outras. Quem olha de uma sede pode ver congelado enquanto quem olha de outra
+> já vê o quadro aberto. Para quem não tem sede — visitante anônimo, telão
+> público, a Contest API — o sistema responde de forma **conservadora**:
+> congelado enquanto **qualquer** sede ainda estiver escondendo, porque
+> revelar antes entregaria o que aquela sede esconde.
+>
+> Para **devolver tempo perdido** num incidente, prefira o **ajuste de tempo**
+> acima: é registrado, auditável e reversível. A duração própria serve para o
+> caso diferente de uma sede que roda um formato mais curto de propósito.
 
 ### Premiação
 

@@ -30,6 +30,25 @@
         <input type="number" min="1" step="1" required class="w-full px-3 py-2 bg-background border border-border rounded-lg" id="{{ $idPrefix }}_max_judge_wait_time" name="max_judge_wait_time" value="{{ $value('max_judge_wait_time', $site->max_judge_wait_time ?? 900) }}">
         <p class="text-sm text-muted-foreground mt-1">900 segundos equivalem a 15 minutos. Envios pendentes por mais tempo que isso aparecem marcados como atrasados na tela de julgamento.</p>
     </div>
+    {{-- Issue #276 -- override de tempo por sede (RF-F04-001). As colunas
+         existiam desde a migracao inicial e nenhuma tela as gravava: o
+         override era morto nas duas pontas. Campo em branco quer dizer
+         "segue o contest", que e o padrao. --}}
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+            <label for="{{ $idPrefix }}_duration" class="block text-sm font-medium text-foreground mb-1">Duracao propria (minutos)</label>
+            <input type="number" min="1" step="1" class="w-full px-3 py-2 bg-background border border-border rounded-lg" id="{{ $idPrefix }}_duration" name="duration" value="{{ $value('duration', $site->duration ?? null) }}" placeholder="segue o contest">
+            <p class="text-sm text-muted-foreground mt-1">Em branco: esta sede corre a duracao do contest.</p>
+        </div>
+        <div>
+            <label for="{{ $idPrefix }}_freeze_time" class="block text-sm font-medium text-foreground mb-1">Congelamento proprio (minutos)</label>
+            <input type="number" min="0" step="1" class="w-full px-3 py-2 bg-background border border-border rounded-lg" id="{{ $idPrefix }}_freeze_time" name="freeze_time" value="{{ $value('freeze_time', $site->freeze_time ?? null) }}" placeholder="segue o contest">
+            <p class="text-sm text-muted-foreground mt-1">Contado do fim <strong>desta sede</strong>. Zero: sem congelamento aqui. Em branco: segue o contest.</p>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-muted/30 p-3">
+        <p class="text-sm text-muted-foreground">Uma sede com duracao ou congelamento proprios ve o placar congelar em outro horario das demais. Para devolver tempo perdido em um incidente, prefira <strong>ajuste de tempo</strong> nas operacoes do contest: fica registrado, e reversivel.</p>
+    </div>
     @if($isEdit)
     <div>
         <label class="flex items-center gap-2">
