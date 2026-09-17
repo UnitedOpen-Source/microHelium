@@ -89,9 +89,7 @@ class IcpcPackageReader
             'name' => $this->name($meta),
             'uuid' => $meta['uuid'] ?? null,
             'license' => $meta['license'] ?? 'unknown',
-            // `limits.time_limit` vem em SEGUNDOS e ja e o limite final --
-            // nao o tempo da solucao de referencia. O #196 e quem vai medir.
-            'time_limit' => (int) ceil((float) ($meta['limits']['time_limit'] ?? 1)),
+            'time_limit' => $this->timeLimit($base, $meta),
             // `limits.memory` vem em MiB.
             'memory_limit' => (int) ($meta['limits']['memory'] ?? 256),
             'output_limit' => (int) ($meta['limits']['output'] ?? 8),
@@ -248,6 +246,107 @@ class IcpcPackageReader
         $any = glob($base.'/problem_statement/*.pdf') ?: [];
 
         return $any === [] ? null : $any[0];
+    }
+
+    /**
+     * De onde sai o limite de tempo de um pacote LEGACY -- issue #251.
+     *
+     * Aqui estava o mesmo erro que o docblock desta classe se preocupa em
+     * evitar, so que na direcao contraria. A 2025-09 e recusada porque ler um
+     * pacote de uma versao com as regras de outra "nao da erro, da um problema
+     * sem enunciado e sem validador, em silencio" -- e este leitor lia
+     * `limits.time_limit`, que e chave DA 2025-09, com `?? 1` quando ausente.
+     *
+     * No formato legacy essa chave nao existe: a especificacao tem
+     * `time_multiplier` (padrao 5) e `time_safety_margin` (padrao 2), e o
+     * limite e DERIVADO das solucoes de referencia. Entao todo pacote legacy
+     * de verdade caia no `?? 1`: um segundo, em silencio, para qualquer
+     * problema. Um segundo reprova por tempo quase toda solucao correta, e o
+     * defeito nao aparece na importacao -- aparece na prova.
+     *
+     * Onde o limite mora de verdade, em ordem:
+     *
+     *  1. `domjudge-problem.ini`, chave `timelimit`. A documentacao do
+     *     DOMjudge descreve: "timelimit - time limit in seconds per test
+     *     case". Vem primeiro porque o DOMjudge le o `.timelimit` "if it
+     *     exists and is not overwritten in domjudge-problem.ini".
+     *  2. o arquivo `.timelimit` na raiz -- convencao do problemtools, nao
+     *     oficial, mas produzida por boa parte das ferramentas.
+     *  3. `limits.time_limit`, tolerado. Nao e do legacy, mas exportadores
+     *     emitem mesmo assim, e recusar um pacote que DIZ o limite seria
+     *     trocar um silencio por uma teimosia.
+     *
+     * Sem nenhum dos tres o limite teria que ser derivado, e derivar e a fase
+     * 2 do #196, que nao existe -- ver
+     * docs/specs/251-limite-de-tempo-derivado.md. Entao a importacao e
+     * recusada em voz alta, como ja acontece com problema interativo e com
+     * versao de formato nao suportada. Escolher um numero aqui e escolher
+     * vereditos.
+     *
+     * @param  array<string, mixed>  $meta
+     *
+     * @throws IcpcPackageException
+     */
+    private function timeLimit(string $base, array $meta): int
+    {
+        $candidatos = [
+            $this->iniTimeLimit($base),
+            $this->dotTimeLimit($base),
+            $meta['limits']['time_limit'] ?? null,
+        ];
+
+        foreach ($candidatos as $bruto) {
+            if ($bruto === null || ! is_numeric($bruto) || (float) $bruto <= 0) {
+                continue;
+            }
+
+            // Para CIMA, sempre. A coluna e inteira, e arredondar para baixo
+            // aperta o limite: reprovaria por tempo uma solucao que o proprio
+            // pacote considera correta.
+            return (int) ceil((float) $bruto);
+        }
+
+        throw new IcpcPackageException(
+            'Este pacote nao diz o limite de tempo. O formato legacy o deriva das solucoes de '.
+            'referencia, e derivar ainda nao existe aqui (issue #251). Ponha `timelimit` em '.
+            'domjudge-problem.ini, ou o valor em segundos num arquivo .timelimit na raiz, ou '.
+            '`limits.time_limit` no problem.yaml.'
+        );
+    }
+
+    /**
+     * `chave = valor` por linha, sem secoes -- nao e INI de verdade, entao
+     * `parse_ini_file` nao serve: ele engasga com valor sem aspas que tenha
+     * caractere reservado, e o arquivo vem de ferramenta de terceiro.
+     */
+    private function iniTimeLimit(string $base): ?string
+    {
+        $caminho = $base.'/domjudge-problem.ini';
+
+        if (! is_file($caminho)) {
+            return null;
+        }
+
+        if (preg_match('/^[ \t]*timelimit[ \t]*=[ \t]*([^\r\n]+)/mi', (string) file_get_contents($caminho), $m) !== 1) {
+            return null;
+        }
+
+        $valor = trim($m[1], " \t\"'");
+
+        return $valor === '' ? null : $valor;
+    }
+
+    private function dotTimeLimit(string $base): ?string
+    {
+        $caminho = $base.'/.timelimit';
+
+        if (! is_file($caminho)) {
+            return null;
+        }
+
+        $conteudo = trim((string) file_get_contents($caminho));
+
+        return $conteudo === '' ? null : $conteudo;
     }
 
     /**
