@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Exceptions\SandboxUnavailableException;
 use App\Services\AutoJudgeService;
 use App\Services\CgroupMemoryLimiter;
 use Illuminate\Console\Command;
@@ -96,6 +97,32 @@ class JudgehostSelfTestCommand extends Command
             )]);
         }
 
+        // E logo depois: o binario esta la?
+        //
+        // O caso de cima cobre "alguem desligou o sandbox". Este cobre
+        // "ninguem desligou nada, a maquina so nao tem bubblewrap" -- que e
+        // o caso COMUM quando uma instituicao parceira empresta o que tem
+        // (#53), e e a maquina para a qual este comando foi escrito.
+        //
+        // Sem ele a primeira chamada a wrapWithBwrap() lanca
+        // SandboxUnavailableException e o comando morre com um stack trace.
+        // Em --json isso e pior que feio: a saida deixa de ser JSON, e vale
+        // aqui a mesma frase escrita no caso de cima -- um consumidor nao
+        // consegue distinguir "esta maquina nao confina" de "o comando
+        // quebrou". Medido num laptop sem bwrap: os dois caminhos saiam com
+        // exit 1 e so o de cima era parseavel.
+        $bwrap = (string) config('autojudge.bwrap_path', '/usr/bin/bwrap');
+
+        if (! file_exists($bwrap) || ! is_executable($bwrap)) {
+            return $this->report([$this->result(
+                'sandbox_binary',
+                'O binario do sandbox existe',
+                $bwrap.' executavel',
+                false,
+                'bwrap ausente ou nao executavel. Instale o bubblewrap. Nao use em prova.'
+            )]);
+        }
+
         $this->workspace = sys_get_temp_dir().'/mh-selftest-'.getmypid();
 
         if (! @mkdir($this->workspace, 0o700, true) && ! is_dir($this->workspace)) {
@@ -110,6 +137,18 @@ class JudgehostSelfTestCommand extends Command
 
         try {
             $results = $this->runCases($judge, $cgroup);
+        } catch (SandboxUnavailableException $e) {
+            // A checagem acima pega o caso conhecido. Este pega o resto: o
+            // servico recusa executar sem confinamento em mais de um ponto,
+            // e qualquer recusa que escape daqui vira stack trace de novo --
+            // o defeito, nao o sintoma, e o comando falar duas linguas.
+            $results = [$this->result(
+                'sandbox_binary',
+                'O binario do sandbox existe',
+                'sandbox utilizavel',
+                false,
+                $this->firstLine($e->getMessage())
+            )];
         } finally {
             $this->removeWorkspace();
         }
