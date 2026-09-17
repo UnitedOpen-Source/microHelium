@@ -263,7 +263,21 @@ class JudgehostController extends Controller
         $contest = Contest::query()->competition()->where('is_active', true)->first();
 
         if (! $contest) {
-            return response()->json(['data' => ['threshold' => (float) config('judgehost.calibration.divergence_threshold', 1.5), 'items' => [], 'machines' => []]]);
+            // Issue #273: a mesma forma do caminho normal, `coverage`
+            // incluso. Um consumidor que precisasse checar se a chave existe
+            // antes de ler teria duas formas para a mesma resposta.
+            return response()->json(['data' => [
+                'threshold' => (float) config('judgehost.calibration.divergence_threshold', 1.5),
+                'items' => [],
+                'machines' => [],
+                'coverage' => [
+                    'accepted' => 0,
+                    'measured' => 0,
+                    'hosts_measured' => 0,
+                    'groups' => 0,
+                    'groups_comparable' => 0,
+                ],
+            ]]);
         }
 
         return response()->json(['data' => $calibration->forContest($contest)]);

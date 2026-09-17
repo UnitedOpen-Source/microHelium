@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useFeature } from './useFeature.js';
 import { dateTime, request } from './api.js';
 import FeatureState from './FeatureState.vue';
@@ -16,6 +16,15 @@ const name = ref(''), token = ref(null), disabling = ref(null), form = ref(null)
 // a parte do listamento principal para que uma falha aqui nao derrube a
 // tela de maquinas, que e operacional.
 const calibracao = ref(null), calibracaoFalhou = ref(false);
+
+// Issue #273 -- o caso que parece saudavel e nao e: a prova produziu envios
+// aceitos, e nenhum deles chegou com tempo medido. Foi o sintoma silencioso
+// de o judgehost remoto nao reportar a medicao.
+const medicaoAusente = computed(() => {
+    const c = calibracao.value?.coverage;
+
+    return !!c && c.accepted > 0 && c.measured === 0;
+});
 
 // A forma e CONFERIDA antes de ser usada, e nao so o status HTTP.
 //
@@ -220,6 +229,25 @@ async function setEnabled(host, enabled) {
                             Uma comparação precisa do mesmo problema e linguagem julgados em <strong>duas
                             máquinas diferentes</strong>, com veredito aceito. Enquanto isso não acontecer,
                             não há medição — o que <em>não</em> quer dizer que as máquinas sejam equivalentes.
+                        </p>
+                        <!--
+                            Issue #273 -- os numeros que dizem POR QUE nao ha
+                            o que comparar. Sem eles, "aceito nenhum ainda" e
+                            "aceitos existem, mas nenhum foi medido" produzem
+                            a mesma tela, e a segunda quer dizer que a
+                            medicao esta quebrada.
+                        -->
+                        <p v-if="calibracao.coverage" class="feature-help">
+                            Nesta prova: <strong>{{ calibracao.coverage.accepted }}</strong>
+                            {{ calibracao.coverage.accepted === 1 ? 'envio aceito' : 'envios aceitos' }},
+                            <strong>{{ calibracao.coverage.measured }}</strong> com medição de tempo,
+                            em <strong>{{ calibracao.coverage.hosts_measured }}</strong>
+                            {{ calibracao.coverage.hosts_measured === 1 ? 'máquina' : 'máquinas' }}.
+                        </p>
+                        <p v-if="medicaoAusente" class="feature-message feature-error" role="alert">
+                            Há envios aceitos e <strong>nenhum</strong> com medição de tempo. Isso não é
+                            ausência de divergência — é ausência de dado, e impede a comparação. Verifique
+                            se as máquinas que julgaram estão reportando os tempos medidos.
                         </p>
                     </div>
 

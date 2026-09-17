@@ -68,7 +68,39 @@ class JudgehostCalibration
             'threshold' => (float) config('judgehost.calibration.divergence_threshold', 1.5),
             'items' => $rows,
             'machines' => Judgehost::orderBy('name')->get(['id', 'name', 'enabled'])->all(),
+            // Issue #273 -- quantas runs entraram na comparacao.
+            //
+            // Uma tabela vazia responde "nao ha divergencia" e "nao ha
+            // medicao" com o mesmo silencio, e as duas pedem reacoes
+            // opostas: a primeira e boa noticia, a segunda quer dizer que a
+            // comparacao esta cega. Estes numeros sao o que separa as duas.
+            //
+            // O caso que motivou: por muito tempo o judgehost remoto nao
+            // enviava os tempos medidos, entao `medidos` era zero enquanto
+            // `aceitos` crescia -- e a tela parecia saudavel.
+            'coverage' => [
+                'accepted' => $this->acceptedCount($contest),
+                'measured' => $runs->count(),
+                'hosts_measured' => $runs->pluck('judgehost_id')->unique()->count(),
+                'groups' => $groups->count(),
+                'groups_comparable' => count($rows),
+            ],
         ];
+    }
+
+    /**
+     * Envios ACEITOS da prova, medidos ou nao.
+     *
+     * Consulta propria, e de contagem, para nao trazer para a memoria as
+     * runs sem medicao: elas nao entram em comparacao nenhuma, so no
+     * denominador.
+     */
+    private function acceptedCount(Contest $contest): int
+    {
+        return Run::query()
+            ->where('contest_id', $contest->id)
+            ->whereHas('answer', fn ($query) => $query->where('is_accepted', true))
+            ->count();
     }
 
     /**

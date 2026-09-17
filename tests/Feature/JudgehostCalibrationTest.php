@@ -234,4 +234,66 @@ class JudgehostCalibrationTest extends TestCase
 
         $this->assertSame([], $body['items']);
     }
+
+    // --- quantas runs entraram na comparacao (#273) ------------------------
+
+    /**
+     * Issue #273 -- a tabela vazia respondia duas perguntas com o mesmo
+     * silencio.
+     *
+     * "Nao ha divergencia" e boa noticia. "Nao ha medicao" quer dizer que a
+     * comparacao esta cega. Os numeros sao o que separa as duas.
+     */
+    public function test_the_report_says_how_many_runs_entered_the_comparison(): void
+    {
+        $this->judged($this->rapida, 1000);
+        $this->judged($this->lenta, 3000);
+
+        $coverage = $this->report()['coverage'];
+
+        $this->assertSame(2, $coverage['accepted']);
+        $this->assertSame(2, $coverage['measured']);
+        $this->assertSame(2, $coverage['hosts_measured']);
+        $this->assertSame(1, $coverage['groups_comparable']);
+    }
+
+    /**
+     * O caso que motivou a issue: a prova produziu envios aceitos e NENHUM
+     * chegou com tempo medido.
+     *
+     * Foi o sintoma silencioso de o judgehost remoto nao reportar a medicao
+     * -- `accepted` crescia, `measured` ficava em zero, e a tela parecia
+     * saudavel.
+     */
+    public function test_accepted_runs_with_no_measurement_are_visible_as_a_gap(): void
+    {
+        Run::factory()->judged($this->yes)->create([
+            'contest_id' => $this->contest->id,
+            'user_id' => $this->team->user_id,
+            'problem_id' => $this->problem->id,
+            'language_id' => $this->language->id,
+            'judgehost_id' => $this->rapida->id,
+            'measured_cpu_ms' => null,
+            'measured_wall_ms' => null,
+        ]);
+
+        $report = $this->report();
+
+        $this->assertSame([], $report['items'], 'sem medicao nao ha linha de comparacao');
+        $this->assertSame(1, $report['coverage']['accepted'], 'o envio aceito precisa aparecer no denominador');
+        $this->assertSame(0, $report['coverage']['measured']);
+        $this->assertSame(0, $report['coverage']['hosts_measured']);
+    }
+
+    /**
+     * O outro lado, para os numeros nao valerem por contar sempre zero.
+     */
+    public function test_a_contest_with_nothing_judged_reports_zeroes(): void
+    {
+        $coverage = $this->report()['coverage'];
+
+        $this->assertSame(0, $coverage['accepted']);
+        $this->assertSame(0, $coverage['measured']);
+        $this->assertSame(0, $coverage['groups']);
+    }
 }
