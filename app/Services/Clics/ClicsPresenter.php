@@ -160,16 +160,28 @@ class ClicsPresenter
             // prova, que e exatamente o que `sites` significa aqui.
             'group_ids' => $team->site_id ? [(string) $team->site_id] : [],
             'organization_id' => $this->organizationIdFor($team),
+            // Issue #270 -- `users.icpc_id` existe desde o #89 e a Contest
+            // API define `icpc_id` no recurso de equipe, mas este metodo
+            // nao o emitia. Sem ele o consumidor nao consegue casar a
+            // equipe com o cadastro nacional, que e o ponto inteiro de o
+            // campo existir.
+            'icpc_id' => $team->icpc_id !== null && $team->icpc_id !== ''
+                ? (string) $team->icpc_id
+                : null,
         ])->all();
     }
 
     /**
      * As organizacoes das equipes desta prova.
      *
-     * Nao existe `users.organization_id`: o vinculo e por
-     * OrganizationMembership (#46). Uma equipe sem vinculo sai com
-     * `organization_id: null`, que a spec permite -- e o #188 e justamente
-     * sobre esse vinculo ser hoje dificil de criar.
+     * Issue #270 -- o vinculo mora em `users.organization_id`, e nao mais na
+     * governanca do banco de problemas. Uma equipe sem vinculo sai com
+     * `organization_id: null`, que a spec permite.
+     *
+     * Ordenado por id de proposito: esta lista alimenta o pacote de
+     * resultados (#271), que exige saida identica byte a byte em duas
+     * exportacoes do mesmo contest. Ordem de iteracao nao deterministica e
+     * a primeira coisa que quebra essa propriedade.
      *
      * @param  Collection<int, User>  $teams
      * @return list<array<string, mixed>>
@@ -178,11 +190,22 @@ class ClicsPresenter
     {
         $ids = $teams->map(fn (User $team) => $this->organizationIdFor($team))->filter()->unique();
 
-        return Organization::whereIn('id', $ids)->get()->map(fn (Organization $organization) => [
-            'id' => (string) $organization->id,
-            'name' => $organization->name,
-            'formal_name' => $organization->name,
-        ])->all();
+        return Organization::whereIn('id', $ids)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Organization $organization) => [
+                'id' => (string) $organization->id,
+                'icpc_id' => $organization->icpc_id !== null && $organization->icpc_id !== ''
+                    ? (string) $organization->icpc_id
+                    : null,
+                'name' => $organization->name,
+                // Nulo quer dizer "use o `name`", que e o que este metodo
+                // fazia por nao ter onde ler. Assim uma instalacao existente
+                // continua respondendo exatamente o mesmo sem preencher
+                // nada.
+                'formal_name' => $organization->formal_name ?: $organization->name,
+                'country' => $organization->country ?: null,
+            ])->all();
     }
 
     /**
@@ -308,9 +331,10 @@ class ClicsPresenter
 
     private function organizationIdFor(User $team): ?string
     {
-        $membership = OrganizationMembershipLookup::for($team);
+        // Issue #270 -- a afiliacao propria, e nao a governanca do banco.
+        $affiliation = TeamAffiliation::for($team);
 
-        return $membership !== null ? (string) $membership : null;
+        return $affiliation !== null ? (string) $affiliation : null;
     }
 
     private function freezeMinutes(Contest $contest): int

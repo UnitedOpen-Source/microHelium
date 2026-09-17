@@ -37,6 +37,12 @@ class User extends Authenticatable
         'user_type',
         'contest_id',
         'site_id',
+        // Issue #270 -- por qual instituicao esta equipe COMPETE, que e
+        // pergunta diferente de "pode editar o acervo de", respondida por
+        // `organization_memberships` (#46). Antes disto a Contest API
+        // inferia a primeira da governanca do banco de problemas, por ordem
+        // de id.
+        'organization_id',
         'description',
         // Issue #100: the column has existed since
         // 2025_11_25_000007_update_users_table and was never fillable, so
@@ -99,6 +105,19 @@ class User extends Authenticatable
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /**
+     * Issue #270 -- a instituicao pela qual esta equipe compete.
+     *
+     * Distinta de `organization_memberships`, que diz de quais acervos esta
+     * pessoa e editora (#46). Duas perguntas, dois mecanismos.
+     *
+     * @return BelongsTo<\App\Models\Organization, $this>
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Organization::class);
     }
 
     /** @return BelongsTo<Contest, $this> */

@@ -410,14 +410,18 @@ class ContestApiTest extends TestCase
         $this->assertContains('JE', $types);
     }
 
+    /**
+     * Issue #270 -- a afiliacao vem de `users.organization_id`.
+     *
+     * Este teste criava uma `OrganizationMembership` e exigia que a API
+     * relatasse aquela organizacao: ele afirmava a INFERENCIA que a #270
+     * conserta. `organization_memberships` responde "pode editar o acervo
+     * de", e estava sendo lida como "compete por".
+     */
     public function test_an_organization_a_team_points_at_is_listed(): void
     {
         $org = Organization::create(['name' => 'Universidade Exemplo']);
-        OrganizationMembership::create([
-            'organization_id' => $org->id,
-            'user_id' => $this->team->user_id,
-            'role' => OrganizationMembership::ROLE_EDITOR,
-        ]);
+        $this->team->update(['organization_id' => $org->id]);
 
         $base = "/api/clics/contests/{$this->contest->id}";
         $orgIds = array_column($this->getJson("{$base}/organizations")->json(), 'id');
@@ -425,6 +429,155 @@ class ContestApiTest extends TestCase
 
         $this->assertSame((string) $org->id, $teams[0]['organization_id']);
         $this->assertContains((string) $org->id, $orgIds);
+    }
+
+    /**
+     * Issue #270 -- quem edita o acervo de uma instituicao e compete por
+     * outra aparece com a instituicao pela qual COMPETE.
+     *
+     * E o caso que a inferencia errava parecendo certa.
+     */
+    public function test_bank_governance_no_longer_decides_who_a_team_competes_for(): void
+    {
+        $ondeEdita = Organization::create(['name' => 'Onde Ela Edita o Acervo']);
+        $ondeCompete = Organization::create(['name' => 'Onde Ela Compete']);
+
+        OrganizationMembership::create([
+            'organization_id' => $ondeEdita->id,
+            'user_id' => $this->team->user_id,
+            'role' => OrganizationMembership::ROLE_EDITOR,
+        ]);
+
+        $this->team->update(['organization_id' => $ondeCompete->id]);
+
+        $base = "/api/clics/contests/{$this->contest->id}";
+        $teams = $this->getJson("{$base}/teams")->json();
+        $orgIds = array_column($this->getJson("{$base}/organizations")->json(), 'id');
+
+        $this->assertSame(
+            (string) $ondeCompete->id,
+            $teams[0]['organization_id'],
+            'a governanca do banco de problemas voltou a decidir a afiliacao'
+        );
+
+        $this->assertNotContains(
+            (string) $ondeEdita->id,
+            $orgIds,
+            'a instituicao onde ela apenas edita o acervo entrou na lista de organizacoes da prova'
+        );
+    }
+
+    /**
+     * Issue #270 -- membro de duas organizacoes tinha afiliacao decidida
+     * pelo MENOR id, o que e arbitrario e nao auditavel.
+     *
+     * Agora a resposta e a coluna, e nenhuma das duas governancas influi.
+     */
+    public function test_two_memberships_no_longer_pick_one_arbitrarily(): void
+    {
+        $primeira = Organization::create(['name' => 'Primeira Por Id']);
+        $segunda = Organization::create(['name' => 'Segunda Por Id']);
+        $verdadeira = Organization::create(['name' => 'Pela Qual Compete']);
+
+        foreach ([$primeira, $segunda] as $org) {
+            OrganizationMembership::create([
+                'organization_id' => $org->id,
+                'user_id' => $this->team->user_id,
+                'role' => OrganizationMembership::ROLE_EDITOR,
+            ]);
+        }
+
+        $this->team->update(['organization_id' => $verdadeira->id]);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertSame((string) $verdadeira->id, $teams[0]['organization_id']);
+    }
+
+    /**
+     * Issue #270 -- equipe que nao e membro de banco nenhum TEM instituicao.
+     *
+     * Era o caso mais comum: a esmagadora maioria das equipes de uma
+     * regional nunca tocou o banco de problemas, e todas saiam sem
+     * instituicao.
+     */
+    public function test_a_team_that_never_touched_the_problem_bank_still_has_an_organization(): void
+    {
+        $org = Organization::create(['name' => 'Instituto Sem Acervo']);
+        $this->team->update(['organization_id' => $org->id]);
+
+        $this->assertDatabaseCount('organization_memberships', 0);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertSame((string) $org->id, $teams[0]['organization_id']);
+    }
+
+    /**
+     * Issue #270 -- `icpc_id` da equipe passa a sair.
+     *
+     * `users.icpc_id` existe desde o #89 e a Contest API define o campo no
+     * recurso de equipe, mas `teams()` nao o emitia. Sem ele o consumidor
+     * nao consegue casar a equipe com o cadastro nacional.
+     */
+    public function test_the_team_reports_its_icpc_id(): void
+    {
+        $this->team->update(['icpc_id' => 'BR-12345']);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertSame('BR-12345', $teams[0]['icpc_id']);
+    }
+
+    /**
+     * E sem icpc_id sai `null`, e nao string vazia: a spec distingue os dois,
+     * e um consumidor que teste `=== null` nao pode receber `''`.
+     */
+    public function test_a_team_without_an_icpc_id_reports_null(): void
+    {
+        $this->team->update(['icpc_id' => '']);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertNull($teams[0]['icpc_id']);
+    }
+
+    /**
+     * Issue #270 -- identidade externa da instituicao.
+     */
+    public function test_the_organization_reports_its_external_identity(): void
+    {
+        $org = Organization::create([
+            'name' => 'UFMG',
+            'icpc_id' => 'ufmg',
+            'formal_name' => 'Universidade Federal de Minas Gerais',
+            'country' => 'BRA',
+        ]);
+
+        $this->team->update(['organization_id' => $org->id]);
+
+        $orgs = $this->getJson("/api/clics/contests/{$this->contest->id}/organizations")->json();
+
+        $this->assertSame('ufmg', $orgs[0]['icpc_id']);
+        $this->assertSame('Universidade Federal de Minas Gerais', $orgs[0]['formal_name']);
+        $this->assertSame('BRA', $orgs[0]['country']);
+    }
+
+    /**
+     * `formal_name` vazio cai no `name`, que e o que o presenter fazia por
+     * nao ter onde ler -- uma instalacao existente continua respondendo
+     * exatamente o mesmo sem preencher nada.
+     */
+    public function test_a_blank_formal_name_falls_back_to_the_name(): void
+    {
+        $org = Organization::create(['name' => 'Instituto Sem Nome Formal']);
+        $this->team->update(['organization_id' => $org->id]);
+
+        $orgs = $this->getJson("/api/clics/contests/{$this->contest->id}/organizations")->json();
+
+        $this->assertSame('Instituto Sem Nome Formal', $orgs[0]['formal_name']);
+        $this->assertNull($orgs[0]['icpc_id']);
+        $this->assertNull($orgs[0]['country']);
     }
 
     /**

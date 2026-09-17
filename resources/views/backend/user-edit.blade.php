@@ -74,6 +74,17 @@
             <div>
                 <label for="icpc_id" class="block text-sm font-medium text-foreground mb-1">ID ICPC <span class="text-muted-foreground">(opcional, equipes)</span></label>
                 <input id="icpc_id" type="text" name="icpc_id" maxlength="50" value="{{ old('icpc_id', $user->icpc_id) }}" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground">
+            </div>
+            {{-- Issue #270 -- a instituicao pela qual esta equipe compete. --}}
+            <div>
+                <label for="organization_id" class="block text-sm font-medium text-foreground mb-1">Instituicao <span class="text-muted-foreground">(opcional, equipes)</span></label>
+                <select id="organization_id" name="organization_id" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground">
+                    <option value="">Sem instituicao</option>
+                    @foreach($organizations as $organization)
+                    <option value="{{ $organization->id }}" @selected((string) old('organization_id', $user->organization_id) === (string) $organization->id)>{{ $organization->name }}</option>
+                    @endforeach
+                </select>
+                <p class="text-sm text-muted-foreground mt-1">E a chave do agregado nacional por instituicao. Nao confundir com as permissoes do banco de problemas.</p>
                 <p class="text-xs text-muted-foreground mt-1">Usado no relatório de classificação da ICPC (<code>contest:icpc-report</code>).</p>
             </div>
 
