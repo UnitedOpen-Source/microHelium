@@ -8,7 +8,7 @@ use App\Models\Run;
 use App\Services\ContestClock;
 use App\Services\Clics\ClicsPresenter;
 use App\Services\Clics\EventFeedBuilder;
-use App\Services\Clics\OrganizationMembershipLookup;
+use App\Services\Clics\TeamAffiliation;
 use App\Services\FrozenScoreboard;
 use App\Services\ScoreboardTeams;
 use Illuminate\Http\JsonResponse;
@@ -125,7 +125,7 @@ class ContestApiController extends Controller
     public function teams(Contest $contest): JsonResponse
     {
         $this->authorizeContestVisibility($contest);
-        OrganizationMembershipLookup::flush();
+        TeamAffiliation::flush();
 
         return response()->json($this->presenter->teams(ScoreboardTeams::forContest($contest)));
     }
@@ -133,7 +133,7 @@ class ContestApiController extends Controller
     public function organizations(Contest $contest): JsonResponse
     {
         $this->authorizeContestVisibility($contest);
-        OrganizationMembershipLookup::flush();
+        TeamAffiliation::flush();
 
         return response()->json($this->presenter->organizations(ScoreboardTeams::forContest($contest)));
     }

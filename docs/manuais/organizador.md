@@ -182,6 +182,36 @@ congelamento nessa sede**, branco quer dizer "usa o do contest".
 > acima: é registrado, auditável e reversível. A duração própria serve para o
 > caso diferente de uma sede que roda um formato mais curto de propósito.
 
+### Instituição de cada equipe
+
+**Em Usuários → editar, campo "Instituição".** É por qual universidade ou
+escola aquela equipe compete — e é a chave de qualquer agregado nacional por
+instituição.
+
+> **Não confunda com as permissões do banco de problemas.** São duas coisas
+> diferentes, e antes do #270 o sistema confundia: a instituição era *inferida*
+> de `organization_memberships`, a tabela que diz **quem pode editar o acervo
+> de** uma instituição. Quem editava o banco de uma universidade e competia por
+> outra aparecia com a errada — e parecia certo.
+
+Antes da prova, rode:
+
+```bash
+php artisan affiliations:report
+```
+
+Ele sai com **erro** enquanto houver equipe sem instituição, de propósito: um
+checklist que passa com afiliação faltando não checa nada. E separa dois casos:
+
+| O que ele diz | O que fazer |
+|---|---|
+| *"a migração não pôde decidir"* | a equipe tem **mais de uma** instituição na governança do banco. O sistema **não escolhe por você** — quem edita o acervo de uma pode competir por outra. Escolha à mão. |
+| *"sem pista nenhuma"* | a equipe nunca tocou o banco de problemas. Preencha a instituição. |
+
+Se você já rodava uma versão anterior, a atualização **derivou** a instituição
+de quem tinha exatamente uma — ali a inferência antiga e a resposta certa
+coincidem. Rodar de novo não desfaz escolha que você já fez à mão.
+
 ### Premiação
 
 A finalização deriva a premiação. **As medalhas vêm zeradas por padrão** —

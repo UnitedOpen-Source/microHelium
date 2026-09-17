@@ -15,6 +15,14 @@ class Organization extends Model
 {
     protected $fillable = [
         'name',
+        // Issue #270 -- identidade externa. `organizations` guardava o
+        // minimo (id, name, archived_at), e a Contest API da ICPC define os
+        // tres campos abaixo no recurso: sem identificador externo, um
+        // agregado nacional nao consegue dizer que a "UFMG" de uma edicao e
+        // a "UFMG" de outra.
+        'icpc_id',
+        'formal_name',
+        'country',
         'archived_at',
     ];
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Backend;
 
 use App\Http\Controllers\Controller;
+use App\Models\Organization;
 use App\Models\Site;
 use App\Services\ManagedAccountProvisioner;
 use Helium\User;
@@ -27,7 +28,14 @@ class UserController extends Controller
         // different contest than intended.
         $sitesByContest = Site::with('contest:id,name')->orderBy('name')->get()->groupBy('contest.name');
 
-        return view('backend.users', compact('users', 'sitesByContest'));
+        // Issue #270 -- as instituicoes pelas quais uma equipe pode
+        // competir. Arquivadas ficam fora: o #46 criou `archived_at` para
+        // preservar historico de acervo, e oferecer uma instituicao
+        // arquivada como afiliacao nova e oferecer o que nao deve mais ser
+        // escolhido.
+        $organizations = $this->selectableOrganizations();
+
+        return view('backend.users', compact('users', 'sitesByContest', 'organizations'));
     }
 
     /**
@@ -65,6 +73,14 @@ class UserController extends Controller
             // what the ICPC standings report keys on, and a report with the
             // column blank is useless to whoever files it.
             'icpc_id' => ['nullable', 'string', 'max:50'],
+            // Issue #270 -- a instituicao pela qual a equipe compete.
+            // Escopada a instituicoes nao arquivadas pelo mesmo motivo do
+            // select: `Rule::exists` consulta a tabela crua, entao sem o
+            // `whereNull` uma arquivada passaria.
+            'organization_id' => [
+                'nullable',
+                Rule::exists('organizations', 'id')->whereNull('archived_at'),
+            ],
         ]);
 
         $siteId = $validated['site_id'] ?? null;
@@ -78,6 +94,10 @@ class UserController extends Controller
             'site_id' => $siteId,
             'contest_id' => $siteId ? Site::find($siteId)->contest_id : null,
             'icpc_id' => $validated['icpc_id'] ?? null,
+            // `?:` e nao `??`: o select vazio chega como string vazia, que o
+            // `nullable` deixa passar e viraria 0 -- id de instituicao que
+            // nao existe.
+            'organization_id' => ($validated['organization_id'] ?? null) ?: null,
             'is_enabled' => true,
             'created_at' => now(),
             'updated_at' => now(),
@@ -95,7 +115,9 @@ class UserController extends Controller
     {
         $sitesByContest = Site::with('contest:id,name')->orderBy('name')->get()->groupBy('contest.name');
 
-        return view('backend.user-edit', compact('user', 'sitesByContest'));
+        $organizations = $this->selectableOrganizations();
+
+        return view('backend.user-edit', compact('user', 'sitesByContest', 'organizations'));
     }
 
     public function update(Request $request, User $user)
@@ -120,6 +142,14 @@ class UserController extends Controller
                 Rule::exists('sites', 'id')->whereNull('deleted_at'),
             ],
             'icpc_id' => ['nullable', 'string', 'max:50'],
+            // Issue #270 -- a instituicao pela qual a equipe compete.
+            // Escopada a instituicoes nao arquivadas pelo mesmo motivo do
+            // select: `Rule::exists` consulta a tabela crua, entao sem o
+            // `whereNull` uma arquivada passaria.
+            'organization_id' => [
+                'nullable',
+                Rule::exists('organizations', 'id')->whereNull('archived_at'),
+            ],
             'is_enabled' => ['nullable', 'boolean'],
         ]);
 
@@ -147,6 +177,7 @@ class UserController extends Controller
             // The contest follows the site, exactly as it does on create.
             'contest_id' => $siteId ? Site::find($siteId)->contest_id : null,
             'icpc_id' => $validated['icpc_id'] ?? null,
+            'organization_id' => ($validated['organization_id'] ?? null) ?: null,
             'is_enabled' => $enabled,
         ];
 
@@ -157,6 +188,17 @@ class UserController extends Controller
         $user->update($attributes);
 
         return redirect()->route('backend.users')->with('success', 'Usuario atualizado com sucesso!');
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Organization>
+     */
+    private function selectableOrganizations()
+    {
+        return Organization::query()
+            ->whereNull('archived_at')
+            ->orderBy('name')
+            ->get(['id', 'name']);
     }
 
     private function isLastAdmin(User $user): bool
