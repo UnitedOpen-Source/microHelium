@@ -33,6 +33,12 @@ Neste documento:
 - **P1** identifica requisito importante para operação completa do produto.
 - **P2** identifica requisito complementar ou de conveniência.
 - Identificadores `RF-*`, `RNF-*`, `RN-*`, `UC-*`, `ENT-*` e `INT-*` são estáveis e devem ser preferidos em issues, pull requests, testes e decisões arquiteturais.
+- **Marca de não conformidade.** Quando um requisito é legítimo mas o sistema
+  ainda **não** o cumpre, a linha diz isso em negrito e cita a issue aberta.
+  Este documento afirma descrever comportamento implementado; onde não
+  descrever, prefere dizê-lo a fingir conformidade. Requisito sem marca é
+  requisito que se acredita cumprido — e, se não estiver, é defeito do
+  documento e vale uma issue.
 
 ### Sumário
 
@@ -393,12 +399,12 @@ flowchart LR
 | RN-010 | A hora do servidor é a referência canônica para tempo de contest; clientes não devem decidir estados críticos apenas pelo relógio local. |
 | RN-011 | Ajustes de tempo devem ser registrados como eventos/entidades auditáveis, e não por reescrita silenciosa do histórico. |
 | RN-012 | Ajuste global altera a duração efetiva do contest; ajuste de sede afeta somente a sede correspondente. |
-| RN-013 | Uma sede pertence a um contest e pode sobrescrever parâmetros operacionais permitidos, mantendo fallback para configuração do contest. |
+| RN-013 | Uma sede pertence a um contest e pode sobrescrever parâmetros operacionais permitidos, mantendo fallback para configuração do contest. **Não conforme para duração e congelamento: as colunas e os métodos existem, mas nada os chama — #276.** |
 | RN-014 | Roteamento de julgamento multi-site deve ser explícito; ausência de rota adicional significa julgamento da própria sede. |
 | RN-015 | Restrição de rede de uma sede pode aceitar IPs exatos e faixas CIDR; ausência de regra implica ausência dessa restrição específica. |
 | RN-016 | Login de usuário associado a sede restrita deve validar a origem antes de conceder sessão utilizável. |
 | RN-017 | Contas associadas a rede restrita não devem contornar validação por sessão persistente que sobreviva ao contexto de rede sem nova checagem. |
-| RN-018 | Usuários desabilitados não devem autenticar nem executar operações protegidas. |
+| RN-018 | Usuários desabilitados não devem autenticar nem executar operações protegidas. **Não conforme hoje: o login web não consulta `is_enabled` — #277.** |
 | RN-019 | Cada usuário deve ter papel explícito compatível com o conjunto de permissões efetivas. |
 | RN-020 | Administrador e conta de sistema podem exercer autoridade administrativa; demais papéis recebem apenas capacidades necessárias. |
 | RN-021 | Tokens de API pertencem ao usuário e podem ser listados e revogados pelo próprio titular. |
@@ -419,7 +425,7 @@ flowchart LR
 | RN-036 | Código submetido deve executar fora do processo web e sob isolamento que restrinja filesystem, processos, memória e tempo. |
 | RN-037 | A raiz da aplicação, segredos e arquivos de configuração não devem ser montados de forma legível dentro do sandbox de submissão. |
 | RN-038 | O resultado do auto-judge deve preservar diagnóstico suficiente para banca sem expor detalhes secretos ao participante. |
-| RN-039 | Quando verificação manual estiver habilitada no contest, veredito não verificado deve ser retido de participantes, público, webcast e placar público. |
+| RN-039 | Quando verificação manual estiver habilitada no contest, veredito não verificado deve ser retido de participantes, público, webcast e placar público. **Parcial: a Contest API e o event feed não aplicam o gate — #274.** |
 | RN-040 | Admin, judge, staff e site podem ver veredito retido somente quando isso for necessário ao papel operacional; equipes e público aguardam liberação. |
 | RN-041 | Run com veredito retido não deve alterar classificação visível ao participante. |
 | RN-042 | Rejudging em lote deve oferecer prévia/dry-run, motivo e conjunto de runs antes da aplicação. |
@@ -436,7 +442,7 @@ flowchart LR
 | RN-053 | Treino livre deve reutilizar mecanismos seguros de problema e julgamento sem ser tratado como competição oficial. |
 | RN-054 | Estatísticas de treino associadas a pessoas devem respeitar regras de privacidade. |
 | RN-055 | Análise de similaridade deve operar sobre fontes autorizadas e restringir resultados sensíveis à organização/banca. |
-| RN-056 | Webcast e CLICS devem aplicar freeze e retenção de veredito antes de publicar dados externos. |
+| RN-056 | **CLICS** deve aplicar freeze e retenção de veredito antes de publicar dados externos. O **webcast** aplica a retenção de veredito (`BocaWebcastZipBuilder`) e serve o placar **descongelado por desenho** — é a tela da cerimônia, e a decisão está registrada em `docs/specs/44-webcast.md`. Pendências da Contest API em #274. |
 | RN-057 | Dados públicos de CLICS podem ser lidos sem conta quando o contrato assim exigir; a ausência de autenticação não elimina as regras de publicação. |
 | RN-058 | Operações mutáveis suscetíveis a repetição por falha de rede devem ser idempotentes quando o contrato fornecer Idempotency-Key. |
 | RN-059 | Backup deve abranger banco e artefatos necessários para reconstruir o estado operacional; restauração deve ser validada antes de ser considerada concluída. |
@@ -652,7 +658,7 @@ Os requisitos funcionais estão organizados por capacidade de negócio. Cada req
 | RF-F02-003 | P0 | Permitir logout invalidando sessão e regenerando token CSRF. | Sessão anterior não acessa recurso protegido após logout. |
 | RF-F02-004 | P0 | Permitir emissão de token de API por credenciais e autenticação subsequente via Sanctum. | Token válido autentica somente como seu titular e pode ser revogado. |
 | RF-F02-005 | P0 | Permitir ao usuário listar e revogar os próprios tokens, incluindo o token corrente. | Usuário não lista nem revoga token de outro usuário. |
-| RF-F02-006 | P0 | Respeitar estado `is_enabled` da conta. | Conta desabilitada não obtém acesso protegido. |
+| RF-F02-006 | P0 | Respeitar estado `is_enabled` da conta. | Conta desabilitada não obtém acesso protegido. **Não conforme no login web — #277.** |
 | RF-F02-007 | P1 | Permitir cadastro/gestão de contas com nome, username, e-mail, papel, contest, sede e dados autorizados. | Validações de unicidade e autorização são aplicadas no servidor. |
 | RF-F02-008 | P1 | Suportar fluxo de conta gerenciada com ativação por token quando habilitado. | Token de ativação válido conclui o fluxo uma única vez e não vaza em logs. |
 
@@ -764,7 +770,7 @@ Os requisitos funcionais estão organizados por capacidade de negócio. Cada req
 | RF-F09-004 | P0 | Reivindicar run atomicamente com judgehost, horário e claim token. | Dois workers não processam a mesma lease válida ao mesmo tempo. |
 | RF-F09-005 | P0 | Rejeitar resultado devolvido com claim token obsoleto. | Lease antiga não sobrescreve julgamento posterior. |
 | RF-F09-006 | P0 | Permitir devolver/reconciliar run presa preservando motivo e contadores. | Run volta ao estado elegível sem perder histórico de tentativa operacional. |
-| RF-F09-007 | P1 | Registrar wall time e CPU time medidos quando disponíveis. | Métricas ficam associadas à run julgada e são acessíveis à banca. |
+| RF-F09-007 | P1 | Registrar wall time e CPU time medidos quando disponíveis. | Métricas ficam associadas à run julgada e são acessíveis à banca. **Não conforme no julgamento remoto: o contrato de resultado não carrega os tempos, e a calibração fica sem dado — #273.** |
 | RF-F09-008 | P1 | Manter capacidades por judgehost para roteamento/diagnóstico. | Admin consegue distinguir host indisponível de incompatibilidade de capacidade. |
 | RF-F09-009 | P1 | Expor health operacional sem segredos. | Tela/API mostra estado útil sem tokens, fontes ou credenciais. |
 
@@ -952,7 +958,7 @@ Os requisitos funcionais estão organizados por capacidade de negócio. Cada req
 
 | ID | Prioridade | Requisito | Critério de aceite |
 | --- | --- | --- | --- |
-| RF-F22-001 | P0 | Aplicar freeze e verification gate aos dados externos. | Webcast não revela solve/veredito que a equipe ainda não pode ver. |
+| RF-F22-001 | P0 | Aplicar o verification gate aos dados externos. | Webcast não revela veredito retido. O placar servido é **descongelado por desenho** — ver RN-056. |
 | RF-F22-002 | P1 | Permitir emitir e revogar credenciais de webcast. | Credencial revogada deixa de autorizar acesso imediatamente ou dentro do TTL definido. |
 | RF-F22-003 | P1 | Restringir capacidade de exportação a credenciais explicitamente autorizadas. | Credencial somente-leitura não baixa artefato de export. |
 | RF-F22-004 | P1 | Gerar exportação BOCA/webcast somente quando consumidor/formato suportado estiver habilitado. | Feature indisponível retorna estado explícito, não dados fictícios. |
@@ -1141,7 +1147,39 @@ A interface web deve oferecer superfícies distintas por papel e estado, mantend
 | INT-UI-011 | Similaridade | Criação de check, estado e pares restritos |
 | INT-UI-012 | Webcast | Credenciais, capacidades, exportações e revogação |
 
-### 3.3.2 Interfaces de Hardware
+### 3.3.2 Interface de Linha de Comando
+
+Parte da operação não acontece pelo navegador. Instalar um judgehost, provar que
+uma máquina emprestada confina, gerar o arquivo de resultados depois que a sala
+esvaziou e criar um ponto de restauração são tarefas de terminal, e a interface
+de comando é normativa como qualquer outra.
+
+| ID | Comando | Papel na operação |
+| --- | --- | --- |
+| INT-CLI-001 | `autojudge:start` | laço de julgamento local; é o `CMD` da imagem do juiz |
+| INT-CLI-002 | `judgehost:work` | agente de julgamento distribuído, que reivindica trabalho do servidor |
+| INT-CLI-003 | `judgehost:create` | registra uma máquina de julgamento |
+| INT-CLI-004 | `judgehost:selftest` | prova, **na máquina que vai julgar**, que o sandbox confina (RF-19) |
+| INT-CLI-005 | `judgehost:prune` | remove judgehosts que não dão mais sinal |
+| INT-CLI-006 | `judging:alerts` | avisa quando o julgamento para de andar |
+| INT-CLI-007 | `contest:icpc-report` | arquivo de classificação da ICPC, o que se envia ao fim da prova |
+| INT-CLI-008 | `backup:create` | ponto de restauração (RF-23) |
+| INT-CLI-009 | `teams:import` | importa equipes do arquivo da ICPC |
+| INT-CLI-010 | `event:import` | provisiona uma prova inteira a partir de arquivo declarativo |
+| INT-CLI-011 | `runs:reconcile-stuck` | devolve à fila runs abandonadas por judgehost que caiu |
+
+Requisitos que valem para toda esta superfície:
+
+- **DEVE** usar código de saída 0 para sucesso e diferente de zero para falha,
+  porque estes comandos são encadeados em scripts de implantação e em
+  verificação pré-prova.
+- **DEVE** escrever diagnóstico em `stderr` e resultado em `stdout`, para que a
+  saída possa ser redirecionada a arquivo sem contaminação.
+- **NÃO DEVE** exigir interação quando destinado a execução automatizada.
+- Quando oferecer formato legível por máquina, este **DEVE** conter apenas o
+  documento — sem cabeçalho, saudação ou rodapé que quebre o consumidor.
+
+### 3.3.3 Interfaces de Hardware
 
 O Helium não exige hardware proprietário, mas depende das seguintes capacidades operacionais:
 
@@ -1154,7 +1192,7 @@ O Helium não exige hardware proprietário, mas depende das seguintes capacidade
 - impressora opcional para fila de impressão;
 - estação de projeção opcional para scoreboard/webcast.
 
-### 3.3.3 Interfaces de Software
+### 3.3.4 Interfaces de Software
 
 | ID | Componente | Interface |
 | --- | --- | --- |
@@ -1168,7 +1206,7 @@ O Helium não exige hardware proprietário, mas depende das seguintes capacidade
 | INT-SW-008 | CLICS | Interoperabilidade com consumidores da ICPC Contest API |
 | INT-SW-009 | BOCA/problem packages | Importação/exportação nos formatos suportados |
 
-### 3.3.4 Interfaces de Comunicação
+### 3.3.5 Interfaces de Comunicação
 
 - HTTP/HTTPS para navegação e APIs;
 - sessão + cookies + CSRF para interface web mutável;
@@ -1365,7 +1403,6 @@ classDiagram
       +id
       +contest_id
       +type
-      +occurred_at
       +payload
     }
     Contest "1" --> "*" Site
@@ -3334,10 +3371,10 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | ENT-001 | contests / Contest | Configuração e estado da competição. | id, name, start_time, duration, freeze_time, penalty, is_active, is_public, is_practice, verification_required, unfrozen_at, finalized_at | sites, users, languages, problems, runs, clarifications, tasks, logs |
 | ENT-002 | sites / Site | Sede física/lógica de um contest. | id, contest_id, name, ip_address, permit_logins, auto_judge, duration, freeze_time, score_visibility, max_judge_wait_time | contest, users, runs, tasks, clarifications, judging routes |
-| ENT-003 | users / User | Identidade humana/sistêmica e papel. | user_id, contest_id, site_id, fullname, username, email, password_hash, user_type, is_enabled, profile_visibility, managed_by | contest, site, runs e outros recursos por FK |
+| ENT-003 | users / `Helium\User` (não `App\Models\User`) | Identidade humana/sistêmica e papel. | user_id, contest_id, site_id, fullname, username, email, password, user_type, is_enabled, profile_visibility, managed_by, icpc_id | contest, site, runs e outros recursos por FK |
 | ENT-004 | languages / Language | Linguagem/toolchain habilitada. | id, contest_id, name, extension/configuração | contest, runs, limits |
 | ENT-005 | answers / Answer | Catálogo de respostas/vereditos. | id, contest_id, name/code, is_accepted | runs |
-| ENT-006 | problems / Problem | Problema de competição. | id, contest_id, short_name, name, basename, description_file, color, time_limit, memory_limit, output_limit, auto_judge, judging_paused_at, sort_order | contest, test cases, runs, scores, clarifications, limits |
+| ENT-006 | problems / Problem | Problema de competição. | id, contest_id, short_name, name, basename, description_file, color_name, color_hex, time_limit, memory_limit, output_limit, auto_judge, judging_paused_at, sort_order | contest, test cases, runs, scores, clarifications, limits |
 | ENT-007 | test_cases / TestCase | Caso de teste oculto. | id, problem_id, number, input/output metadata/hash | problem |
 | ENT-008 | problem_language_limits / ProblemLanguageLimit | Override de execução por linguagem. | problem_id, language_id, time_limit, memory_limit, auto_judge_enabled | problem, language |
 | ENT-009 | runs / Run | Fato de submissão e julgamento. | id, contest_id, site_id, user_id, problem_id, language_id, answer_id, run_number, source_file/hash, contest_time, status, judgehost_id, claim_token, verified_at, measured times | contest, site, user, problem, language, answer, judgehost, rejudgings |
@@ -3347,7 +3384,7 @@ erDiagram
 | ENT-013 | sos_calls / SosCall | Chamado operacional. | contest_id, site_id, user_id, status, acknowledged_at, resolved_at | contest, site, user |
 | ENT-014 | backups / Backup | Registro de backup/resultado. | id, tipo, path/metadata/status conforme implementação | artefatos operacionais |
 | ENT-015 | contest_logs / ContestLog | Trilha de auditoria. | contest_id, actor/user, level, message, context, timestamp | contest, user |
-| ENT-016 | contest_events / ContestEvent | Eventos ordenáveis do contest. | contest_id, type, occurred_at/sequence, payload | contest; event feed |
+| ENT-016 | contest_events / ContestEvent | Eventos ordenáveis do contest. | contest_id, type, object_id, op, payload, after_freeze, created_at (a ordem é o `id` autoincrement; não há `occurred_at`) | contest; event feed |
 | ENT-017 | contest_time_adjustments / ContestTimeAdjustment | Intervalo/tempo removido ou acrescido ao relógio efetivo. | contest_id, site_id opcional, motivo, duração/intervalo, ator | contest, site |
 | ENT-018 | judgehosts / Judgehost | Agente de julgamento distribuído. | id, name, enabled/status, last_seen e metadados operacionais | runs, capabilities |
 | ENT-019 | judgehost_capabilities / JudgehostCapability | Capacidade declarada do host. | judgehost_id, capability, value | judgehost |
@@ -3360,8 +3397,8 @@ erDiagram
 | ENT-026 | organization_memberships / OrganizationMembership | Associação usuário-organização. | organization_id, user_id, role | organization, user |
 | ENT-027 | practice_publications / PracticePublication | Publicação de item para treino. | item/problema, estado e timestamps de publicação | problem bank/practice contest |
 | ENT-028 | similarity_checks / SimilarityCheck | Execução de análise de similaridade. | contest_id, status, creator, parâmetros | pairs |
-| ENT-029 | similarity_pairs / SimilarityPair | Par encontrado por similaridade. | check_id, run_a, run_b, score/metadados | similarity check, runs |
-| ENT-030 | webcast_credentials / WebcastCredential | Credencial de transmissão/exportação. | id, hash, capabilities, revoked_at | webcast endpoints |
+| ENT-029 | similarity_pairs / SimilarityPair | Par encontrado por similaridade. | similarity_check_id, run_id_a, run_id_b, similarity_score | similarity check, runs |
+| ENT-030 | webcast_credentials / WebcastCredential | Credencial de transmissão. | id, contest_id, label, token_hash, expires_at, revoked_at, last_used_at, created_by (não há coluna `capabilities`) | webcast endpoints |
 | ENT-031 | account_activations / AccountActivation | Ativação de conta gerenciada. | user_id, token hash, expiry/used state | user |
 | ENT-032 | idempotency_keys / IdempotencyKey | Resultado de mutação idempotente. | actor, route, key, payload fingerprint, result/status | requests mutáveis |
 | ENT-033 | personal_access_tokens | Tokens Sanctum. | tokenable, name, token hash, abilities, last_used_at | user |
