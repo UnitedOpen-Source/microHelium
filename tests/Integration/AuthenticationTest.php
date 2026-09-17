@@ -346,6 +346,18 @@ class AuthenticationTest extends TestCase
     /**
      * Test user registration with valid data
      *
+     * Issue #275 -- este teste AFIRMAVA o defeito.
+     *
+     * Ele exigia `assertRedirect('/home')` e `assertAuthenticated()`, ou
+     * seja: fixava que o auto-cadastro entrega sessao autenticada na hora,
+     * que e exatamente o que a issue aponta como caminho para obter sessao
+     * sem decisao de ninguem da organizacao. Um teste que protege o defeito
+     * e pior que nenhum, porque a proxima pessoa o le como requisito.
+     *
+     * O contrato agora: a conta e criada DESABILITADA, o visitante volta
+     * para o login com a mensagem de espera, e nao ha sessao. Ver
+     * tests/Feature/SelfRegistrationTest.php para o conjunto completo.
+     *
      * @return void
      */
     public function testUserCanRegisterWithValidData()
@@ -358,20 +370,19 @@ class AuthenticationTest extends TestCase
             'password_confirmation' => 'password123',
         ]);
 
-        // Assert redirect to home
-        $response->assertRedirect('/home');
-        $response->assertSessionHas('success', 'Conta criada com sucesso!');
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('success');
 
-        // Assert user was created
+        // A conta existe, e nasce esperando liberacao.
         $this->assertDatabaseHas('users', [
             'fullname' => 'John Doe',
             'username' => 'johndoe',
             'email' => 'john@example.com',
             'user_type' => 'team',
+            'is_enabled' => false,
         ]);
 
-        // Assert user is authenticated after registration
-        $this->assertAuthenticated();
+        $this->assertGuest();
     }
 
     /**

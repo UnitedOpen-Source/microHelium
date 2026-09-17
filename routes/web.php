@@ -14,6 +14,7 @@ use App\Http\Controllers\JudgeController;
 use App\Http\Controllers\PrintRequestController;
 use App\Http\Controllers\ProblemController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\RejudgingScreenController;
 use App\Http\Controllers\ScoreboardController;
 use App\Http\Controllers\SiteController;
@@ -212,33 +213,21 @@ Route::post('/login', function () {
     ])->withInput(request()->only('email'));
 })->middleware('throttle:5,1');
 
-Route::get('/register', function () {
-    return view('auth.register');
-})->name('register');
-
-Route::post('/register', function () {
-    $validated = request()->validate([
-        'fullname' => 'required|string|max:255',
-        'username' => 'required|string|max:255|unique:users',
-        'email' => 'required|string|email|max:255|unique:users',
-        'password' => 'required|string|min:8|confirmed',
-    ]);
-
-    $userId = DB::table('users')->insertGetId([
-        'fullname' => $validated['fullname'],
-        'username' => $validated['username'],
-        'email' => $validated['email'],
-        'password' => bcrypt($validated['password']),
-        'user_type' => 'team',
-        'is_enabled' => true,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-
-    auth()->loginUsingId($userId);
-
-    return redirect('/home')->with('success', 'Conta criada com sucesso!');
-});
+// Issue #275 -- o auto-cadastro deixou de entregar sessao.
+//
+// Era um par de closures que criava a conta com `DB::table()`, gravava
+// `is_enabled => true` e chamava `auth()->loginUsingId()` -- sem throttle,
+// enquanto o `/login` logo acima tem `throttle:5,1`. Uma rota publica sem
+// limite de tentativas que cria conta habilitada e ja loga e um caminho para
+// obter sessao autenticada sem que ninguem da organizacao tenha decidido
+// isso, e o SRS nao descrevia a rota em requisito nenhum.
+//
+// O throttle e o MESMO do `/login`, de proposito: as duas portas para a
+// mesma tabela de usuarios nao podem ter limites diferentes, senao a mais
+// frouxa e a que vale.
+Route::get('/register', [RegistrationController::class, 'create'])->name('register');
+Route::post('/register', [RegistrationController::class, 'store'])
+    ->middleware('throttle:5,1');
 
 Route::post('/logout', function () {
     auth()->logout();

@@ -74,5 +74,12 @@
 @endsection
 
 @section('footer')
+    {{-- Issue #275 -- nao oferece uma porta que nao abre. Fechado o
+         auto-cadastro, a rota responde 404, e um link para 404 na tela de
+         entrada e pior que nenhum link. --}}
+    @if(config('registration.open', true))
     Não tem uma conta? <a href="{{ route('register') }}" class="font-semibold text-primary hover:text-primary/80 transition-colors">Cadastre-se</a>
+    @else
+    Contas são criadas pela organização do evento.
+    @endif
 @endsection

@@ -661,6 +661,7 @@ Os requisitos funcionais estão organizados por capacidade de negócio. Cada req
 | RF-F02-006 | P0 | Respeitar estado `is_enabled` da conta. | Conta desabilitada não obtém acesso protegido. **Não conforme no login web — #277.** |
 | RF-F02-007 | P1 | Permitir cadastro/gestão de contas com nome, username, e-mail, papel, contest, sede e dados autorizados. | Validações de unicidade e autorização são aplicadas no servidor. |
 | RF-F02-008 | P1 | Suportar fluxo de conta gerenciada com ativação por token quando habilitado. | Token de ativação válido conclui o fluxo uma única vez e não vaza em logs. |
+| RF-F02-009 | P1 | Permitir auto-cadastro público configurável (`REGISTRATION_OPEN`), criando conta **desabilitada** e **sem sessão**, pendente de liberação pela organização. | `POST /register` tem o mesmo limite de tentativas de `POST /login`; a conta criada não autentica e não entra até ser habilitada em `/backend/users`. Desligado, `GET`/`POST /register` respondem 404 e a tela de login não oferece o link. |
 
 ### F03. Autorização, Escopo e Privacidade
 
@@ -1134,7 +1135,8 @@ A interface web deve oferecer superfícies distintas por papel e estado, mantend
 
 | ID | Interface | Requisitos principais |
 | --- | --- | --- |
-| INT-UI-001 | Login / ativação | Credenciais, feedback de erro, throttle, rede autorizada, ativação quando aplicável |
+| INT-UI-001 | Login / ativação | Credenciais, feedback de erro, throttle, rede autorizada, ativação quando aplicável; oferece auto-cadastro somente quando `REGISTRATION_OPEN` está ligado (RF-F02-009) |
+| INT-UI-001b | Auto-cadastro (`/register`) | Quatro campos validados, mesmo throttle do login, conta criada **desabilitada** e **sem sessão**; 404 quando desligado |
 | INT-UI-002 | Home / dashboard | Estado do contest, relógio do servidor, ações permitidas e alertas relevantes |
 | INT-UI-003 | Problemas | Lista autorizada, enunciado, status de julgamento e ação de submissão |
 | INT-UI-004 | Submissões | Histórico próprio, estado, resultado liberado e fonte própria |
