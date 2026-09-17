@@ -1,4 +1,13 @@
 @import "tailwindcss";
+
+/* Issue #257 -- o plugin estava declarado so em `tailwind.config.js`, que o
+   Tailwind v4 nao le sem `@config`. Sem esta linha, `animate-in`,
+   `fade-in-0`, `zoom-in-95` e as `slide-in-from-*` usadas em DialogContent e
+   DropdownMenuContent nao sao geradas, e o navegador ignora em silencio a
+   classe que nao existe: dialogo e menu aparecem sem animacao nenhuma.
+   `FrontendAnimationClassesTest` e o que impede isso voltar. */
+@plugin "tailwindcss-animate";
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
