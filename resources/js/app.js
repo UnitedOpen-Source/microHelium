@@ -1,4 +1,3 @@
-import './bootstrap';
 import { createApp } from 'vue';
 import { initializeUI } from './ui';
 
