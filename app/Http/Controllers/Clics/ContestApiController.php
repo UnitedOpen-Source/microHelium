@@ -186,6 +186,22 @@ class ContestApiController extends Controller
 
         $runs = $this->runs($contest)->filter(fn (Run $run) => $run->answer_id !== null);
 
+        // Issue #274 -- o gate de verificacao, que faltava aqui.
+        //
+        // O congelamento ja era respeitado logo abaixo, com o argumento
+        // escrito no docblock: um consumidor publico que recebesse o
+        // veredito de um envio do congelamento "entregaria a classificacao
+        // pela porta dos fundos". O mesmo argumento vale, palavra por
+        // palavra, para o veredito que a banca ainda nao liberou -- e esta
+        // rota e ANONIMA, entao o consumidor nem precisa de conta.
+        //
+        // `isStaff()` ja e a regra do #138 (Run::viewerSeesWithheldVerdicts),
+        // usada duas linhas adiante para o freeze. Uma definicao, duas
+        // perguntas.
+        if (! $this->isStaff($request)) {
+            $runs = $runs->filter(fn (Run $run) => ! $run->isVerdictWithheld());
+        }
+
         if ($this->frozenFor($request, $contest)) {
             $cutoff = FrozenScoreboard::cutoffSeconds($contest);
             $runs = $runs->filter(fn (Run $run) => (int) $run->contest_time < $cutoff);

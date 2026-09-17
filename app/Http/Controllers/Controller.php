@@ -8,6 +8,7 @@ use App\Models\ContestLog;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 use App\Models\Run;
+use App\Services\Clics\ContestEventRecorder;
 use App\Models\Score;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
@@ -212,6 +213,14 @@ class Controller extends BaseController
         // makes a released verdict land on the scoreboard at the minute the
         // team actually submitted rather than the minute a judge got to it.
         Score::recomputeFor($run);
+
+        // Issue #274 -- a outra metade da supressao no feed.
+        //
+        // ContestEventRecorder::judgementRecorded() nao grava evento de
+        // veredito retido, entao a liberacao e o momento em que ele passa a
+        // existir para quem consome a Contest API. Sem esta linha o
+        // julgamento sumiria do feed para sempre.
+        app(ContestEventRecorder::class)->judgementRecorded($run->fresh());
 
         ContestLog::info($run->contest_id, "Run #{$run->run_number} verdict verified", [
             'run_id' => $run->id,

@@ -69,6 +69,18 @@ class ContestEventRecorder
             return;
         }
 
+        // Issue #274 -- veredito retido nao entra no feed ainda.
+        //
+        // O feed grava o evento UMA vez e o reproduz depois, entao nao ha
+        // como "esconder na leitura" como o /judgements faz: o que for
+        // gravado aqui sai para o consumidor anonimo. A simetria disto esta
+        // em Controller::markRunVerified(), que emite o evento no momento da
+        // liberacao -- suprimir sem emitir depois seria pior que o defeito,
+        // porque o resolver nunca veria aquele julgamento.
+        if ($run->isVerdictWithheld()) {
+            return;
+        }
+
         $payload = $this->presenter->judgements($contest, collect([$run]))[0];
 
         $this->write($contest, 'judgements', (string) $run->id, $this->isAfterFreeze($contest, $run), $payload);

@@ -361,4 +361,67 @@ class EventFeedTest extends TestCase
         $this->assertStringContainsString('event-feed', $api['provider']['notes']);
         $this->assertStringNotContainsString('nao funciona', $api['provider']['notes']);
     }
+
+    // -- o gate de verificacao (#274) ---------------------------------------
+
+    /**
+     * Issue #274 -- o feed grava o evento UMA vez e o reproduz depois.
+     *
+     * Por isso nao da para "esconder na leitura" como o /judgements faz: o
+     * que for gravado sai para o consumidor anonimo. A supressao acontece na
+     * gravacao, e a liberacao e que emite -- ver o teste seguinte, que e o
+     * que impede esta guarda de virar "o julgamento sumiu para sempre".
+     */
+    public function test_a_withheld_verdict_does_not_enter_the_feed(): void
+    {
+        $this->contest->update(['verification_required' => true]);
+
+        $this->judge($this->submitAt(10));
+
+        $julgamentos = array_values(array_filter(
+            $this->feed(),
+            fn (array $linha) => ($linha['type'] ?? null) === 'judgements'
+        ));
+
+        $this->assertSame([], $julgamentos, 'veredito nao verificado entrou no feed');
+    }
+
+    /**
+     * A outra metade: liberar o veredito o coloca no feed.
+     *
+     * Sem isto a supressao acima seria pior que o defeito -- o resolver
+     * nunca veria aquele julgamento.
+     */
+    public function test_releasing_the_verdict_puts_the_judgement_in_the_feed(): void
+    {
+        $this->contest->update(['verification_required' => true]);
+
+        $run = $this->judge($this->submitAt(10));
+
+        $this->actingAs($this->staff())
+            ->post("/judge/runs/{$run->id}/verify", ['comment' => 'conferido'])
+            ->assertRedirect();
+
+        $julgamentos = array_values(array_filter(
+            $this->feed(),
+            fn (array $linha) => ($linha['type'] ?? null) === 'judgements'
+        ));
+
+        $this->assertCount(1, $julgamentos, 'o veredito liberado precisa aparecer no feed');
+    }
+
+    /**
+     * Sem verificacao manual configurada, nada muda.
+     */
+    public function test_without_manual_verification_the_judgement_enters_at_once(): void
+    {
+        $this->judge($this->submitAt(10));
+
+        $julgamentos = array_values(array_filter(
+            $this->feed(),
+            fn (array $linha) => ($linha['type'] ?? null) === 'judgements'
+        ));
+
+        $this->assertCount(1, $julgamentos);
+    }
 }
