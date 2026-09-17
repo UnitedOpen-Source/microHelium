@@ -24,6 +24,10 @@ Entre em `/login`. Três coisas podem impedir o acesso:
 - **A conta ainda não foi ativada.** Contas criadas com link de ativação
   precisam que você defina a senha em `/activate/{token}` antes do primeiro
   login.
+- **A conta foi criada, mas não liberada.** Se você se cadastrou sozinho em
+  `/register`, a conta **existe e ainda não entra**: quem libera é a
+  organização do evento. Isso é de propósito — competição não é cadastro
+  aberto, e ninguém entra na prova sem que a organização saiba.
 
 ### Confira o relógio
 

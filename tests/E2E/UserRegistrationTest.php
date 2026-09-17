@@ -56,10 +56,12 @@ class UserRegistrationTest extends TestCase
         $response = $this->followingRedirects()
             ->post('/register', $userData);
 
-        // Assert successful registration with redirect to home
+        // Issue #275 -- o cadastro leva de volta ao login, e nao a home.
+        // A conta nasce desabilitada e sem sessao; entrar depende de a
+        // organizacao liberar.
         $response->assertStatus(200);
-        $response->assertViewIs('home');
-        $response->assertSee('Conta criada com sucesso!');
+        $response->assertViewIs('auth.login');
+        $response->assertSee('liberada pela organizacao');
 
         // Verify user was created in database
         $this->assertDatabaseHas('users', [
@@ -67,7 +69,10 @@ class UserRegistrationTest extends TestCase
             'username' => 'mariasilva',
             'email' => 'maria.silva@example.com',
             'user_type' => 'team',
-            'is_enabled' => true,
+            // Issue #275 -- era `true`. Uma conta que nasce ativa sem
+            // convite e sem ativacao contradiz as contas gerenciadas do
+            // #47, que nascem desabilitadas de proposito.
+            'is_enabled' => false,
         ]);
 
         // Verify password was hashed
@@ -97,8 +102,9 @@ class UserRegistrationTest extends TestCase
         $response = $this->post('/register', $userData);
 
         // Assert redirect to home page
-        $response->assertRedirect('/home');
-        $response->assertSessionHas('success', 'Conta criada com sucesso!');
+        // Issue #275 -- de volta ao login, com a mensagem de espera.
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('success');
     }
 
     /**
@@ -107,7 +113,7 @@ class UserRegistrationTest extends TestCase
      * @return void
      */
     #[Test]
-    public function user_is_logged_in_after_registration()
+    public function user_is_not_logged_in_after_registration()
     {
         $userData = [
             'fullname' => 'Ana Costa',
@@ -120,16 +126,23 @@ class UserRegistrationTest extends TestCase
         // Assert user is not authenticated before registration
         $this->assertGuest();
 
-        $response = $this->post('/register', $userData);
+        $this->post('/register', $userData);
 
-        // Assert user is authenticated after registration
-        $this->assertAuthenticated();
+        // Issue #275 -- este teste afirmava o DEFEITO.
+        //
+        // Ele exigia `assertAuthenticated()`, fixando que o auto-cadastro
+        // entrega sessao na hora -- que e precisamente o caminho para obter
+        // sessao autenticada sem decisao de ninguem da organizacao. Um teste
+        // que protege o defeito e pior que nenhum, porque a proxima pessoa o
+        // le como requisito.
+        $this->assertGuest();
+        $this->assertNull(auth()->user(), 'o cadastro autenticou o visitante');
 
-        // Verify the authenticated user is the one we just registered
-        $authenticatedUser = auth()->user();
-        $this->assertEquals('Ana Costa', $authenticatedUser->fullname);
-        $this->assertEquals('anacosta', $authenticatedUser->username);
-        $this->assertEquals('ana.costa@example.com', $authenticatedUser->email);
+        // A conta existe, e espera liberacao.
+        $criada = User::where('email', 'ana.costa@example.com')->first();
+        $this->assertNotNull($criada);
+        $this->assertEquals('Ana Costa', $criada->fullname);
+        $this->assertFalse((bool) $criada->is_enabled, 'a conta nasceu habilitada');
     }
 
     /**
@@ -312,19 +325,18 @@ class UserRegistrationTest extends TestCase
         $response = $this->followingRedirects()
             ->post('/register', $userData);
 
-        // Should end up on the home page
+        // Issue #275 -- termina no login, nao na home.
         $response->assertStatus(200);
-        $response->assertViewIs('home');
+        $response->assertViewIs('auth.login');
 
-        // User should be authenticated
-        $this->assertAuthenticated();
+        $this->assertGuest();
 
-        // Verify user data
-        $user = auth()->user();
+        $user = User::where('email', 'joao.pedro@example.com')->first();
+        $this->assertNotNull($user);
         $this->assertEquals('João Pedro', $user->fullname);
         $this->assertEquals('joaopedro', $user->username);
-        $this->assertEquals('joao.pedro@example.com', $user->email);
         $this->assertEquals('team', $user->user_type);
+        $this->assertFalse((bool) $user->is_enabled);
     }
 
     /**
@@ -333,7 +345,7 @@ class UserRegistrationTest extends TestCase
      * @return void
      */
     #[Test]
-    public function registered_user_can_access_protected_routes()
+    public function a_self_registered_user_cannot_reach_protected_routes_before_release()
     {
         $userData = [
             'fullname' => 'Protected User',
@@ -343,21 +355,26 @@ class UserRegistrationTest extends TestCase
             'password_confirmation' => 'password123',
         ];
 
-        // Register the user
         $this->post('/register', $userData);
 
-        // User should be authenticated
-        $this->assertAuthenticated();
+        // Issue #275 -- o inverso do que este teste afirmava.
+        //
+        // Ele exigia que a conta recem-cadastrada alcancasse /home,
+        // /submissions e /clarifications na hora -- ou seja, fixava que
+        // qualquer visitante obtem acesso as telas de participante sem
+        // ninguem da organizacao ter decidido nada.
+        $this->assertGuest();
 
-        // Should be able to access protected routes
-        $response = $this->get('/home');
-        $response->assertStatus(200);
+        foreach (['/home', '/submissions', '/clarifications'] as $rota) {
+            $this->get($rota)->assertRedirect('/login');
+        }
 
-        $response = $this->get('/submissions');
-        $response->assertStatus(200);
+        // E liberada, alcanca -- senao o bloco acima valeria por "estas
+        // rotas nao abrem para ninguem".
+        $liberada = User::where('email', 'protected@example.com')->first();
+        $liberada->update(['is_enabled' => true]);
 
-        $response = $this->get('/clarifications');
-        $response->assertStatus(200);
+        $this->actingAs($liberada)->get('/home')->assertSuccessful();
     }
 
     /**
@@ -410,7 +427,8 @@ class UserRegistrationTest extends TestCase
             ->first();
 
         $this->assertEquals('team', $user->user_type);
-        $this->assertTrue((bool) $user->is_enabled);
+        // Issue #275 -- era `assertTrue`. Nasce desabilitada.
+        $this->assertFalse((bool) $user->is_enabled);
     }
 
     /**
@@ -431,7 +449,7 @@ class UserRegistrationTest extends TestCase
 
         $response = $this->post('/register', $userData);
 
-        $response->assertRedirect('/home');
+        $response->assertRedirect(route('login'));
         $this->assertDatabaseHas('users', [
             'fullname' => 'José María O\'Connor-Smith',
             'email' => 'jose@example.com',
@@ -458,8 +476,8 @@ class UserRegistrationTest extends TestCase
 
         $response = $this->post('/register', $userData);
 
-        $response->assertRedirect('/home');
-        $this->assertAuthenticated();
+        $response->assertRedirect(route('login'));
+        $this->assertGuest();
 
         // Verify password is hashed correctly
         $user = DB::table('users')

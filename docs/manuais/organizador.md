@@ -375,6 +375,12 @@ antes de qualquer teste:
 > sandbox. Você estaria executando código de competidor sem confinamento
 > nenhum, achando que estava confinando.
 
+**Alguém se cadastrou sozinho e não consegue entrar.**
+É o comportamento correto. `/register` cria a conta **desabilitada e sem
+sessão** — quem libera é você, em `/backend/users`. Se a sua instalação não
+deve aceitar auto-cadastro nenhum, ponha `REGISTRATION_OPEN=false` no `.env`:
+a rota passa a responder 404 e o link desaparece da tela de login.
+
 **Uma equipe não consegue entrar.**
 Nesta ordem: senha; trava de IP da sede; conta ativada; papel correto;
 bloqueio por excesso de tentativas.
