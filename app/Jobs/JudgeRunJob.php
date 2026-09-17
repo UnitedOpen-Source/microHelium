@@ -3,13 +3,16 @@
 namespace App\Jobs;
 
 use App\Models\Run;
+use App\Models\ContestLog;
 use App\Services\AutoJudgeService;
+use App\Services\Judgehost\SandboxPreflight;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 /**
  * ShouldBeUnique (keyed on the run id, held for $uniqueFor) so
@@ -37,7 +40,7 @@ class JudgeRunJob implements ShouldQueue, ShouldBeUnique
         return (string) $this->run->id;
     }
 
-    public function handle(AutoJudgeService $judgeService): void
+    public function handle(AutoJudgeService $judgeService, SandboxPreflight $preflight): void
     {
         // Skip if already judged
         if ($this->run->status === 'judged') {
@@ -59,7 +62,63 @@ class JudgeRunJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        // Issue #282 -- o outro caminho que julga, e o que o compose de dev
+        // usa.
+        //
+        // `autojudge:start` recusa subir numa maquina incapaz de confinar,
+        // mas o compose de dev nao tem esse servico: ele roda `queue:work`,
+        // e o julgamento chega por aqui. Sem esta guarda, a guarda do daemon
+        // nao cobriria justamente a pilha onde o problema aparece.
+        //
+        // DEPOIS das duas checagens acima, e nao antes. Colocada no topo,
+        // ela reverteria para `pending` uma run JA JULGADA que fosse
+        // redespachada -- o watchdog do #45 redespacha -- e apagaria o
+        // resultado real trocando por uma mensagem de recusa. A ordem aqui e
+        // "isto ainda precisa de veredito?" antes de "esta maquina pode
+        // dar um?".
+        //
+        // A run fica `pending` de proposito: consertada a maquina,
+        // `runs:reconcile-stuck` a pega de novo. Marcar como julgada
+        // gravaria um veredito que ninguem apurou.
+        //
+        // E `auto_judge_result` recebe o motivo, porque a issue nasceu do
+        // silencio: o envio tem que DIZER por que nao sera julgado.
+        if ($blocker = $preflight->blocker()) {
+            $this->recordSandboxRefusal($blocker['reason']);
+
+            return;
+        }
+
         $judgeService->judge($this->run);
+    }
+
+    /**
+     * O motivo fica em tres lugares, e nenhum e redundante: na run, para
+     * quem abre o envio; no log da prova, para quem investiga depois; e no
+     * log da aplicacao, para quem esta olhando o terminal agora.
+     */
+    private function recordSandboxRefusal(string $reason): void
+    {
+        $mensagem = 'Julgamento recusado: '.$reason;
+
+        $this->run->update([
+            'status' => 'pending',
+            'auto_judge_result' => $mensagem,
+        ]);
+
+        $contestId = $this->run->contest_id;
+
+        // `contest_logs.contest_id` e obrigatorio -- uma run sem prova nao
+        // gera registro ali, e a tela que le esses registros filtra por
+        // prova de qualquer forma.
+        if ($contestId !== null) {
+            ContestLog::warning((int) $contestId, $mensagem, [
+                'run_id' => $this->run->id,
+                'host' => gethostname(),
+            ]);
+        }
+
+        Log::warning($mensagem, ['run_id' => $this->run->id, 'host' => gethostname()]);
     }
 
     public function failed(\Throwable $exception): void

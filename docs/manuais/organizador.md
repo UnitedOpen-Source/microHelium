@@ -339,8 +339,11 @@ Enquanto pausado, os envios esperam em vez de receber veredito errado.
 Corrija, retome, e rejulgue o que já tinha veredito.
 
 **Uma sede caiu.**
-Registre um **ajuste de tempo**. Lembre que o ajuste é do contest inteiro —
-não há extensão só para uma sede.
+Registre um **ajuste de tempo** com escopo **daquela sede** — é o caso que o
+mecanismo foi feito para atender, e é o que o regulamento da Maratona manda
+fazer. Veja *Global ou por sede*, na seção 3. (Uma versão anterior deste
+manual dizia que o ajuste era só do contest inteiro; estava errado, e a
+coluna de escopo existe desde o #198.)
 
 **Precisa corrigir vereditos em lote.**
 Rejulgamento em lote, com **prévia obrigatória**: o juiz vê o que vai mudar
@@ -349,6 +352,28 @@ antes de aplicar, e pode cancelar. Veja o [manual do juiz](juiz.md).
 **O placar está estranho depois de um rejulgamento.**
 O rejulgamento recalcula a pontuação. Se ainda parecer errado, `/backend/logs`
 mostra o que foi feito e por quem.
+
+**Nada está sendo julgado, e não há mensagem de erro.**
+Rode `php artisan judgehost:selftest` na máquina que deveria julgar: é a
+autoridade sobre "esta máquina pode julgar". As três causas que ele pega
+antes de qualquer teste:
+
+| O que ele diz | O que aconteceu |
+|---|---|
+| `AUTOJUDGE_USE_BWRAP esta DESLIGADO` | alguém desligou o sandbox |
+| `bwrap ausente` | a máquina não tem bubblewrap |
+| `Rodando como root` | o julgamento está numa imagem que não baixou privilégio |
+
+> **O compose de desenvolvimento não julga, de propósito** — ele não tem
+> serviço de juiz. Use `docker-compose.yml` quando o julgamento importar.
+> Desde o #282 isso não é mais silencioso: o daemon **recusa subir** numa
+> máquina que não confina, e um envio que chegue à fila ali fica **pendente
+> com o motivo escrito**, visível no envio e em `/backend/logs`.
+>
+> E **não tente "fazer funcionar"** instalando o bubblewrap na imagem da
+> aplicação: medido, nesse arranjo o `/etc/shadow` fica legível de dentro do
+> sandbox. Você estaria executando código de competidor sem confinamento
+> nenhum, achando que estava confinando.
 
 **Uma equipe não consegue entrar.**
 Nesta ordem: senha; trava de IP da sede; conta ativada; papel correto;
