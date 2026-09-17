@@ -249,7 +249,16 @@ Route::get('/openapi.yaml', function () {
 //  - `is_finalized`: o estado do #202 nao aparecia em lugar nenhum da
 //    superficie que a interface le.
 Route::get('/contest/current', function () {
-    $contest = Contest::query()->competition()->where('is_active', true)->first();
+    // Issue #254 -- `visibleTo`, e por isso o `web` la embaixo.
+    //
+    // A rota devolvia nome e cronograma completo do contest ativo para
+    // qualquer anonimo, `is_public` ou nao. O #148 achou e nao mexeu de
+    // proposito, porque filtrar sozinho apagaria o relogio de toda prova
+    // privada -- e `is_public` tem default false, entao isso e quase toda
+    // prova. O que faltava nao era o filtro, era a SESSAO: sem ela
+    // `auth()->user()` e null mesmo para quem esta logado, e um filtro
+    // honesto trataria o competidor como estranho.
+    $contest = Contest::query()->competition()->where('is_active', true)->visibleTo(auth()->user())->first();
 
     if (! $contest) {
         // Atencao, quem consome: isto sai como `{}` e nao como `null` --
@@ -288,4 +297,10 @@ Route::get('/contest/current', function () {
         // defasagem em vez de confiar no relogio da maquina de quem olha.
         'server_time' => now()->toIso8601String(),
     ]);
-});
+})
+    // A sessao do navegador, so nesta rota. `routes/api.php` inteiro nao tem
+    // `statefulApi()`, e nao e para ter: o resto e superficie de token. Aqui
+    // e o contrario -- o consumidor e o <contest-timer> de uma pagina Blade,
+    // que chega com cookie e sem token. GET, entao o VerifyCsrfToken do
+    // grupo nao entra no caminho.
+    ->middleware('web');

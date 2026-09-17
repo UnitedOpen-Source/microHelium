@@ -170,6 +170,13 @@ class ScoreboardController extends Controller
         }
 
         // Issue #43: practice runs never reach an event scoreboard.
-        return Contest::query()->competition()->where('is_active', true)->first();
+        //
+        // Issue #254: e `visibleTo`, nao a query crua. `/scoreboard` e rota
+        // PUBLICA, e a pagina imprime `short_name` e `name` de cada problema
+        // -- exatamente "a lista de problemas" que o #135 fechou para o
+        // visitante anonimo no resto da web, e que aqui continuava saindo
+        // porque esta linha nao perguntava a regra do #134. Quem compete cai
+        // no ramo de cima e nao passa por aqui.
+        return Contest::query()->competition()->where('is_active', true)->visibleTo($user)->first();
     }
 }

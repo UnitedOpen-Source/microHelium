@@ -22,7 +22,7 @@ class ScoreboardControllerTest extends TestCase
     public function test_scoreboard_index_page_loads_and_displays_teams()
     {
         // 1. Arrange
-        $contest = Contest::factory()->create(['is_active' => true]);
+        $contest = Contest::factory()->create(['is_public' => true, 'is_active' => true]);
         $alpha = User::factory()->create(['fullname' => 'Team Alpha']);
         $bravo = User::factory()->create(['fullname' => 'Team Bravo']);
 
@@ -50,7 +50,7 @@ class ScoreboardControllerTest extends TestCase
     public function test_scoreboard_export_generates_correct_csv()
     {
         // 1. Arrange
-        $contest = Contest::factory()->create(['is_active' => true]);
+        $contest = Contest::factory()->create(['is_public' => true, 'is_active' => true]);
         $user = User::factory()->create(['fullname' => 'Team CSV']);
         Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $user->user_id, 'problems_solved' => 0, 'total_time' => 0, 'rank' => 1]);
 
@@ -76,7 +76,7 @@ class ScoreboardControllerTest extends TestCase
      */
     public function test_scoreboard_export_neutralizes_formula_injection_in_team_name()
     {
-        $contest = Contest::factory()->create(['is_active' => true]);
+        $contest = Contest::factory()->create(['is_public' => true, 'is_active' => true]);
         $user = User::factory()->create(['fullname' => '=HYPERLINK("http://evil.example")']);
         Leaderboard::create(['contest_id' => $contest->id, 'user_id' => $user->user_id, 'problems_solved' => 0, 'total_time' => 0, 'rank' => 1]);
 

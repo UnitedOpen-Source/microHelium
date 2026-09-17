@@ -131,6 +131,10 @@ class ApiEndpointsTest extends TestCase
         // em "comecou agora", fora da janela de congelamento.
         $contest = \App\Models\Contest::factory()->create([
             'is_active' => true,
+            // Issue #254: o placar e rota publica e agora honra a
+            // visibilidade do #134. Este teste age como anonimo, entao diz
+            // que o contest e publico -- que e o que ele sempre quis dizer.
+            'is_public' => true,
             'start_time' => now(),
             'duration' => 300,
             'freeze_time' => 60,
@@ -163,6 +167,10 @@ class ApiEndpointsTest extends TestCase
         // dos runs, que aqui nao existem. Ver a issue #211.
         $contest = \App\Models\Contest::factory()->create([
             'is_active' => true,
+            // Issue #254: o placar e rota publica e agora honra a
+            // visibilidade do #134. Este teste age como anonimo, entao diz
+            // que o contest e publico -- que e o que ele sempre quis dizer.
+            'is_public' => true,
             'start_time' => now(),
             'duration' => 300,
             'freeze_time' => 60,

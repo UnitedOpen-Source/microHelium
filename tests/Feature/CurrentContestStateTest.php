@@ -38,8 +38,8 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_the_practice_contest_is_never_the_event(): void
     {
-        Contest::factory()->running(30)->create(['is_practice' => true, 'name' => 'Treino Livre']);
-        Contest::factory()->running(30)->create(['is_practice' => false, 'name' => 'Maratona']);
+        Contest::factory()->running(30)->create(['is_public' => true, 'is_practice' => true, 'name' => 'Treino Livre']);
+        Contest::factory()->running(30)->create(['is_public' => true, 'is_practice' => false, 'name' => 'Maratona']);
 
         $this->assertSame('Maratona', $this->current()['name']);
     }
@@ -51,7 +51,7 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_a_finished_contest_still_reports_its_freeze(): void
     {
-        $contest = Contest::factory()->finished()->create();
+        $contest = Contest::factory()->finished()->create(['is_public' => true, 'is_public' => true]);
 
         $body = $this->current();
 
@@ -67,7 +67,7 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_revealing_is_distinguishable_from_never_having_frozen(): void
     {
-        $contest = Contest::factory()->finished()->create();
+        $contest = Contest::factory()->finished()->create(['is_public' => true, 'is_public' => true]);
 
         $semCongelamento = $this->current();
         $this->assertTrue($semCongelamento['is_frozen']);
@@ -79,7 +79,7 @@ class CurrentContestStateTest extends TestCase
         $this->assertTrue($revelado['is_unfrozen']);
         $this->assertNotNull($revelado['unfrozen_at']);
 
-        $nuncaCongelou = Contest::factory()->running(10)->create();
+        $nuncaCongelou = Contest::factory()->running(10)->create(['is_public' => true, 'is_public' => true]);
         $contest->update(['is_active' => false]);
 
         $body = $this->current();
@@ -89,7 +89,7 @@ class CurrentContestStateTest extends TestCase
 
     public function test_the_finalized_state_is_visible(): void
     {
-        $contest = Contest::factory()->finished()->create(['unfrozen_at' => now()]);
+        $contest = Contest::factory()->finished()->create(['is_public' => true, 'unfrozen_at' => now()]);
 
         $this->assertFalse($this->current()['is_finalized']);
 
@@ -108,7 +108,7 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_the_end_time_reflects_an_early_end(): void
     {
-        $contest = Contest::factory()->running(100)->create();
+        $contest = Contest::factory()->running(100)->create(['is_public' => true, 'is_public' => true]);
         $antes = $this->current()['end_time'];
 
         app(ContestLifecycle::class)->endEarly($contest->fresh(), null);
@@ -131,7 +131,7 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_the_end_time_includes_removed_intervals(): void
     {
-        $contest = Contest::factory()->running(100)->create();
+        $contest = Contest::factory()->running(100)->create(['is_public' => true, 'is_public' => true]);
         $ingenuo = $contest->start_time->copy()->addMinutes($contest->duration);
 
         ContestTimeAdjustment::create([
@@ -158,7 +158,7 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_the_server_clock_travels_with_the_state(): void
     {
-        Contest::factory()->running(10)->create();
+        Contest::factory()->running(10)->create(['is_public' => true, 'is_public' => true]);
 
         $this->assertNotNull($this->current()['server_time']);
     }
@@ -180,7 +180,7 @@ class CurrentContestStateTest extends TestCase
      */
     public function test_with_no_active_competition_the_body_is_an_empty_object(): void
     {
-        Contest::factory()->running(10)->create(['is_active' => false]);
+        Contest::factory()->running(10)->create(['is_public' => true, 'is_active' => false]);
 
         $content = trim($this->getJson('/api/contest/current')->assertStatus(200)->getContent());
 
