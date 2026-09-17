@@ -482,13 +482,17 @@ network lock the web login enforces.
 
 ## User Roles
 
-| Role | Permissions |
-|------|------------|
-| **Admin** | Full system access, contest management, user management |
-| **Judge** | Evaluate submissions, answer clarifications, view all runs |
-| **Staff** | Task management, balloon delivery, printing |
-| **Team** | Submit solutions, view scoreboard, ask clarifications |
-| **Score** | View-only scoreboard access |
+| Role | Permissions | Manual |
+|------|------------|--------|
+| **Admin** | Full system access, contest management, user management | [Organizador](docs/manuais/organizador.md) |
+| **Judge** | Evaluate submissions, answer clarifications, view all runs | [Juiz](docs/manuais/juiz.md) |
+| **Staff** | Task management, printing, S.O.S. queue | [Staff](docs/manuais/staff.md) |
+| **Site** | Coordination of a single site: its teams, tasks and clarifications | [Staff](docs/manuais/staff.md) |
+| **Team** | Submit solutions, view scoreboard, ask clarifications | [Participante](docs/manuais/participante.md) |
+| **Score** | View-only scoreboard access | — |
+| **System** | Service accounts; treated as admin for authorization | — |
+
+Role-by-role manuals (in Portuguese) live in [`docs/manuais/`](docs/manuais/).
 
 ## Tech Stack
 
@@ -590,7 +594,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Documentation**: [Wiki](https://github.com/UniteOpenSource/microHelium/wiki)
+- **Documentation**: [`docs/`](docs/README.md) — manuals by role, design
+  decisions, runbooks and the API spec
+- **Wiki**: [GitHub Wiki](https://github.com/UniteOpenSource/microHelium/wiki)
 - **Issues**: [GitHub Issues](https://github.com/UniteOpenSource/microHelium/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/UniteOpenSource/microHelium/discussions)
 
