@@ -422,9 +422,19 @@ class PracticeController extends Controller
         return is_scalar($raw) ? trim((string) $raw) : '';
     }
 
+    /**
+     * Issue #284 -- aqui a constante global e a resposta certa, e nao um
+     * esquecimento.
+     *
+     * A #284 passou os dois caminhos de submissao a honrar
+     * `contests.max_file_size`. O Treino Livre nao tem prova: e superficie
+     * global por desenho (#43), e nao ha coluna de contest para ler. Le o
+     * mesmo padrao que `Contest::maxSourceKb()` usa quando fica sem prova em
+     * maos, para os dois lados nao divergirem se o padrao mudar.
+     */
     private function maxSourceBytes(): int
     {
-        return (int) config('autojudge.max_file_size', 100) * 1024;
+        return Contest::defaultMaxSourceKb() * 1024;
     }
 
     private function emptyPage(): array

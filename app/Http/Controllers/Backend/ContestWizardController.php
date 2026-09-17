@@ -43,7 +43,11 @@ class ContestWizardController extends Controller
             'duration' => 'required|integer|min:1',
             'freeze_time' => 'required|integer|min:0',
             'penalty' => 'required|integer|min:0',
-            'max_file_size' => 'required|integer|min:1',
+            // Issue #284 -- o mesmo teto dos outros quatro caminhos que
+            // gravam a coluna (edicao, as duas rotas da API e o importador).
+            // Sem ele o assistente era o unico que podia gravar um limite
+            // que os outros recusariam, e a coluna agora e aplicada de fato.
+            'max_file_size' => 'required|integer|min:1|max:10240',
         ]);
 
         $startTime = new \DateTime($validated['start_time']);

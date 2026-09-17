@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Contest;
 use App\Models\Language;
 use App\Models\Problem;
 use App\Services\ContestClock;
@@ -53,7 +54,15 @@ class SubmitController extends Controller
             return back()->withErrors(['source_file' => 'Este contest nao esta em andamento no momento.']);
         }
 
-        $maxFileSizeKb = config('autojudge.max_file_size', 100);
+        // Issue #284 -- o limite da prova, e nao a constante da instalacao.
+        // `contests.max_file_size` e coletado pelo assistente, pela edicao,
+        // pela API e pelo importador, e ate aqui nao era lido por ninguem: a
+        // tela mostrava 1024 KB e o envio recusava acima de 100.
+        //
+        // O `code_text` abaixo deriva deste mesmo numero, entao o caminho de
+        // colar codigo acompanha -- de proposito: as duas portas para o
+        // mesmo envio nao podem discordar sobre o tamanho aceito.
+        $maxFileSizeKb = $problem->contest?->maxSourceKb() ?? Contest::defaultMaxSourceKb();
 
         $validated = $request->validate([
             'language_id' => 'required|exists:languages,id',

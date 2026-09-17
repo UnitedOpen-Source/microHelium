@@ -330,6 +330,39 @@ class Contest extends Model
         return $this->finalized_at !== null;
     }
 
+    /**
+     * Issue #284 -- o limite de tamanho do fonte desta prova, em KB.
+     *
+     * A coluna existe desde a migracao inicial, e ate aqui cinco caminhos a
+     * gravavam (assistente, edicao, as duas rotas da API e o importador de
+     * evento) sem que nenhum a lesse: os tres pontos de submissao liam a
+     * constante global de config/autojudge.php. A tela prometia um numero e
+     * o envio aplicava outro -- o mesmo padrao que a #50 consertou em
+     * Site.ip_address.
+     *
+     * Zero ou negativo cai no padrao em vez de recusar tudo: uma linha
+     * antiga, ou um importador que tenha gravado 0, nao deve deixar a prova
+     * incapaz de receber envio nenhum.
+     */
+    public function maxSourceKb(): int
+    {
+        $configured = (int) $this->max_file_size;
+
+        return $configured > 0 ? $configured : self::defaultMaxSourceKb();
+    }
+
+    /**
+     * O limite para quem nao tem prova em maos.
+     *
+     * O Treino Livre (#43) e superficie global e nao pertence a contest
+     * nenhum, entao para ele esta constante continua sendo a resposta certa
+     * -- nao e esquecimento.
+     */
+    public static function defaultMaxSourceKb(): int
+    {
+        return max(1, (int) config('autojudge.max_file_size', 100));
+    }
+
     public function getContestTime(): int
     {
         if (! $this->start_time || now()->lt($this->start_time)) {

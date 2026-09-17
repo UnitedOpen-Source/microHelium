@@ -42,11 +42,28 @@ class RunController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // Issue #284 -- o limite e da prova, nao da instalacao.
+        //
+        // `max:` precisa do numero antes da validacao rodar, e o contest so
+        // chega aqui dentro do corpo do pedido. Resolver antes, sem confiar
+        // no valor, e o que mantem a ORDEM das mensagens de erro intacta: um
+        // `contest_id` inexistente cai no padrao e continua sendo reprovado
+        // pela regra `exists`, que e a mensagem certa para esse caso. Fazer
+        // o contrario -- validar `contest_id` numa passada separada antes --
+        // trocaria "o contest nao existe" por "o arquivo e grande demais"
+        // dependendo da ordem.
+        //
+        // `is_numeric` porque `?contest_id[]=1&contest_id[]=2` faria
+        // `find()` devolver uma Collection, e `?->maxSourceKb()` morreria
+        // com erro de servidor no lugar do 422 que a regra `exists` daria.
+        $contestId = $request->input('contest_id');
+        $contestForLimit = is_numeric($contestId) ? Contest::find($contestId) : null;
+
         $validated = $request->validate([
             'contest_id' => 'required|exists:contests,id',
             'problem_id' => 'required|exists:problems,id',
             'language_id' => 'required|exists:languages,id',
-            'source_file' => 'required|file|max:'.config('autojudge.max_file_size', 100),
+            'source_file' => 'required|file|max:'.($contestForLimit?->maxSourceKb() ?? Contest::defaultMaxSourceKb()),
         ]);
 
         $user = auth()->user();
