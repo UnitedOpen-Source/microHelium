@@ -2,6 +2,7 @@
     "name": "microhelium",
     "version": "2.0.0",
     "description": "Hackathon and Programming Contest Management Platform",
+    "license": "AGPL-3.0-or-later",
     "private": true,
     "engines": {
         "node": ">=22.15"

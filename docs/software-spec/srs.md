@@ -3,7 +3,7 @@
 > **Documento canônico do produto**  
 > **Projeto:** Helium  
 > **Repositório:** `UnitedOpen-Source/microHelium`  
-> **Licença do software:** ver nota em *Controle do documento*  
+> **Licença do software:** GNU AGPL-3.0-or-later  
 > **Idioma:** Português (pt-BR)  
 > **Estado do documento:** Consolidado e publicável  
 > **Data de referência:** 16 de setembro de 2026
@@ -20,7 +20,7 @@
 | Finalidade | Definir, de forma normativa e rastreável, o comportamento esperado do sistema, suas regras de negócio, interfaces, restrições, arquitetura funcional e modelos UML |
 | Público | Mantenedores, contribuidores, organizadores de competições, administradores, banca, staff, coordenadores de sede, auditores técnicos e integradores |
 | Fonte normativa do produto | Código, contratos de API, migrações, testes e documentação técnica mantidos no repositório |
-| Licença | **Pendente de resolução.** O arquivo `LICENSE` do repositório é GNU GPL v3 (e é o que o GitHub reporta), enquanto `composer.json` e o `README.md` declaram MIT. Enquanto a divergência existir, este documento não afirma nenhuma das duas. |
+| Licença | **GNU AGPL-3.0-or-later.** `LICENSE`, `composer.json` e `package.json` declaram o mesmo. A cláusula de rede da AGPL aplica-se: quem roda uma versão modificada e a oferece pela rede deve oferecer também o fonte dela. |
 
 ### Convenções normativas
 
@@ -1228,7 +1228,9 @@ O Helium não exige hardware proprietário, mas depende das seguintes capacidade
 
 ## 3.5 Requisitos de Licenciamento
 
-O Helium é distribuído sob **MIT License**. Dependências, toolchains e utilitários externos mantêm suas próprias licenças, que devem ser respeitadas por quem distribui ou implanta o produto. A licença do Helium não altera os termos de compiladores, runtimes, bibliotecas ou softwares integrados.
+O Helium é distribuído sob **GNU AGPL-3.0-or-later**. Dependências, toolchains e utilitários externos mantêm suas próprias licenças, que devem ser respeitadas por quem distribui ou implanta o produto. A licença do Helium não altera os termos de compiladores, runtimes, bibliotecas ou softwares integrados.
+
+A **cláusula de rede** da AGPL (§13) é a diferença prática em relação à GPL: quem executa uma versão **modificada** do Helium e a disponibiliza a usuários pela rede **DEVE** oferecer a esses usuários o código-fonte correspondente da versão modificada. Rodar o Helium sem modificá-lo não cria essa obrigação, e usar o sistema como competidor ou organizador tampouco.
 
 ## 3.6 Observações Legais, de Copyright e Outras
 
