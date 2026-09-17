@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Exceptions\SandboxUnavailableException;
 use App\Services\AutoJudgeService;
+use App\Services\Judgehost\SandboxPreflight;
 use App\Services\CgroupMemoryLimiter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
@@ -120,6 +121,32 @@ class JudgehostSelfTestCommand extends Command
                 $bwrap.' executavel',
                 false,
                 'bwrap ausente ou nao executavel. Instale o bubblewrap. Nao use em prova.'
+            )]);
+        }
+
+        // Issue #282 -- a terceira condicao barata, que ninguem procurava.
+        //
+        // `docker/judge/entrypoint.sh` roda como root de proposito -- delega
+        // o subtree de cgroup v2 -- e entao BAIXA para uid 1000 com
+        // `setpriv` antes de chamar o daemon (#86). Uma pilha que julga como
+        // root nao confina: medido, `fork_bomb`, `network` e `secrets`
+        // reprovavam, o ultimo com /etc/shadow legivel de dentro do sandbox.
+        //
+        // Vem aqui, antes dos casos, pelo mesmo motivo dos dois de cima: os
+        // oito casos falhariam de qualquer forma, e falhar cedo com o motivo
+        // certo e melhor que falhar tarde com tres sintomas.
+        //
+        // A definicao mora em SandboxPreflight, compartilhada com
+        // `autojudge:start` e `JudgeRunJob` -- duas definicoes de "pode
+        // julgar" seria como uma delas fica para tras.
+        if (($blocker = app(SandboxPreflight::class)->blocker()) !== null
+            && $blocker['key'] === SandboxPreflight::KEY_PRIVILEGE) {
+            return $this->report([$this->result(
+                SandboxPreflight::KEY_PRIVILEGE,
+                'O julgamento nao roda como root',
+                'uid diferente de 0',
+                false,
+                'Rodando como root: o sandbox nao confina. Nao use em prova.'
             )]);
         }
 

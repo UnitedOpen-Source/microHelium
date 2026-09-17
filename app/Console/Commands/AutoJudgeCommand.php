@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\AutoJudgeService;
+use App\Services\Judgehost\SandboxPreflight;
 use App\Services\JudgeWorkQueue;
 use Illuminate\Console\Command;
 
@@ -21,8 +22,29 @@ class AutoJudgeCommand extends Command
         parent::__construct();
     }
 
-    public function handle(): int
+    public function handle(SandboxPreflight $preflight): int
     {
+        // Issue #282 -- recusa cedo, e em voz alta.
+        //
+        // Antes disto o daemon subia em qualquer maquina e o sintoma de uma
+        // maquina incapaz de confinar era silencio: envios entravam e nada
+        // saia. Pior, alguem podia "fazer funcionar" numa imagem que roda
+        // como root e acabar executando codigo submetido sem confinamento
+        // nenhum, achando que estava confinando.
+        //
+        // A autoridade continua sendo `judgehost:selftest`, que executa oito
+        // casos de verdade. Isto e a parte barata da mesma pergunta, e quando
+        // falha os oito casos falhariam tambem.
+        if ($blocker = $preflight->blocker()) {
+            $this->error('Esta maquina nao pode julgar.');
+            $this->newLine();
+            $this->line($blocker['reason']);
+            $this->newLine();
+            $this->line('Rode `php artisan judgehost:selftest` para o diagnostico completo.');
+
+            return self::FAILURE;
+        }
+
         $this->info('Auto-judge daemon started');
 
         $once = $this->option('once');

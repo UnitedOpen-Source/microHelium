@@ -137,6 +137,46 @@ php artisan serve
 
 Visit `http://localhost:8000` in your browser.
 
+### 9. With Docker, and what the dev stack does *not* do
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+```
+
+This brings up `app`, `queue`, `webserver`, `db`, `redis` and `node` — the
+whole application, working.
+
+> **The dev stack does not judge, on purpose.** It has **no judge service**.
+> `docker-compose.yml` (production) has an `autojudge` service built from
+> `Dockerfile.judge`, with its own entrypoint that delegates a cgroup v2
+> subtree as root and then **drops to uid 1000** before judging (#86). The
+> dev stack's `queue` runs `queue:work` on the *app* image, as root, and a
+> user-namespace sandbox running as root does not confine.
+>
+> Since #282 this is no longer silent. `autojudge:start` **refuses to boot**
+> on a machine that cannot confine, and a submission that reaches the queue
+> worker there stays `pending` with the reason recorded on the run and in the
+> contest log — instead of the old behaviour, which was nothing at all.
+>
+> **Do not "make it work"** by installing `bubblewrap` into the app image and
+> adding `privileged: true`. Measured in exactly that arrangement,
+> `judgehost:selftest` fails `fork_bomb`, `network` and `secrets` — the last
+> one with `/etc/shadow` readable from inside the sandbox. You would be
+> running submitted code with no confinement while believing you had some.
+> Use `docker-compose.yml` when judging matters, and let
+> `judgehost:selftest` be the authority on whether a machine can judge.
+
+#### If every page loads with no CSS
+
+A `public/hot` file left over from an earlier `npm run dev` makes `@vite`
+point at `localhost:5173`. With the dev server down, **every page renders
+unstyled and reports no error at all** — and the file is gitignored, so it
+never shows up in `git status`. Delete it:
+
+```bash
+rm -f public/hot
+```
+
 ## Auto-Judge Setup
 
 The judge runs untrusted code, so its isolation is not optional. Since #49

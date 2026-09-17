@@ -10,6 +10,7 @@ use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Site;
 use App\Services\AutoJudgeService;
+use App\Services\Judgehost\SandboxPreflight;
 use App\Services\JudgeWorkQueue;
 use Helium\User;
 use Illuminate\Support\Facades\Queue;
@@ -123,7 +124,17 @@ class PauseProblemJudgingTest extends TestCase
         $run = $this->pendingRun();
         $this->problem->update(['judging_paused_at' => now()]);
 
-        (new JudgeRunJob($run->fresh()))->handle(app(AutoJudgeService::class));
+        // Issue #282 -- a pre-checagem do sandbox entrou no `handle()`, e
+        // aqui ela e DOBRADA para nao bloquear.
+        //
+        // Sem isso, numa maquina sem bubblewrap este teste passaria pelo
+        // motivo errado: a run ficaria `pending` porque a maquina nao pode
+        // julgar, e nao porque o problema esta pausado -- o que e
+        // exatamente o modo de falha que o docblock acima adverte.
+        (new JudgeRunJob($run->fresh()))->handle(
+            app(AutoJudgeService::class),
+            $this->umSandboxApto()
+        );
 
         $this->assertSame('pending', $run->fresh()->status);
         $this->assertNull($run->fresh()->answer_id, 'a paused problem produced a verdict');
@@ -216,5 +227,20 @@ class PauseProblemJudgingTest extends TestCase
         $run = $this->pendingRun();
 
         $this->assertSame('pending', $run->status);
+    }
+
+    /**
+     * Uma pre-checagem de sandbox que nunca bloqueia (#282), para que este
+     * arquivo continue testando a PAUSA e nao a aptidao da maquina.
+     */
+    private function umSandboxApto(): SandboxPreflight
+    {
+        return new class extends SandboxPreflight
+        {
+            public function blocker(): ?array
+            {
+                return null;
+            }
+        };
     }
 }
