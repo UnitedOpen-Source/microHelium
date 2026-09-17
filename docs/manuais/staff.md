@@ -53,8 +53,14 @@ competir em vez de ficar chamando de novo.
 **Só marque resolvido quando estiver resolvido.** O registro serve para o
 relatório do evento e para saber onde a operação falhou.
 
-Há limite de chamadas por minuto por equipe. Se uma equipe está esbarrando no
-limite, vá até a mesa — é sinal de que algo está mesmo errado.
+**Uma equipe não consegue abrir um segundo chamado enquanto o primeiro não for
+resolvido.** Isso é proposital: evita que a mesma mesa encha a fila e esconda
+as outras. Consequência prática — enquanto você não marcar como resolvido, a
+equipe **não tem como pedir outra coisa**. Mais uma razão para não deixar
+chamado pendurado.
+
+Há também limite de chamadas por minuto. Se uma equipe está esbarrando nos
+limites, vá até a mesa: é sinal de que algo está mesmo errado.
 
 ---
 
@@ -67,7 +73,26 @@ GET  /staff/tasks/{task}/file       → baixa o arquivo da tarefa
 POST /staff/tasks/{task}/complete   → conclui
 ```
 
-A fila de tarefas cobre a logística: impressão, entrega, conferência.
+A fila de tarefas cobre a logística: **balões**, impressão, entrega,
+conferência.
+
+### Balões
+
+Quando uma equipe resolve um problema pela primeira vez, o sistema cria
+sozinho uma **tarefa de entrega de balão** na fila da **sede daquela equipe**,
+já com a **cor do problema**.
+
+Três coisas que valem saber:
+
+- **É o primeiro AC que vale.** Um rejulgamento que reconfirma o mesmo AC
+  **não** gera um segundo balão.
+- **Treino não gera balão.** Ambiente de prática não tem cerimônia.
+- **A cor vem do problema**, não da sua escolha. Se a cor na tela não bater
+  com o balão que você tem, fale com o organizador — quem cadastra a cor é
+  ele.
+
+Entregar balão é mais do que logística: é o que a sala inteira usa para saber
+como a prova está indo, e é metade da atmosfera do evento.
 
 ### Impressão
 
@@ -117,9 +142,14 @@ O que fazer:
 4. Quando voltar, confirme com cada equipe que os envios dela aparecem em
    `/submissions`.
 
-> **Limite conhecido:** o ajuste de tempo é do **contest inteiro**, não de uma
-> sede. Não existe extensão só para a sede que caiu. Isso é decisão de quem
-> organiza, e é bom que a equipe de sede saiba disso **antes** da prova.
+> **O ajuste pode ser só da sua sede.** O sistema aceita os dois escopos:
+> intervalo removido da prova inteira, ou extensão apenas da sede afetada —
+> que é o caso previsto no regulamento da Maratona para queda de energia. Por
+> isso a sua anotação de **horário de início e fim da parada** é o insumo da
+> decisão: sem ela, não há em que basear o ajuste.
+>
+> O **congelamento**, esse sim, é do contest inteiro. Não existe congelamento
+> só de uma sede.
 
 ---
 

@@ -37,16 +37,29 @@ Um por papel, escrito para quem vai usar — não para quem vai programar.
 
 - [**SRS — Especificação de Requisitos de Software**](software-spec/srs.md)
 
-Documento **único e consolidado**. Cobre, numa peça só: definição da solução,
-escopo, glossário, stakeholders, arquitetura, controle de acesso, ciclo de
-vida da competição, regras de negócio (RN-01…RN-15), casos de uso
-(UC-01…UC-20), requisitos funcionais (RF-01…RF-24), não funcionais
-(usabilidade, confiabilidade, desempenho, suportabilidade, segurança e
-restrições), interfaces, priorização, rastreabilidade, modelo de dados, rotas,
-deploy e critérios de aceite.
+Documento **único, consolidado e normativo**. Usa DEVE / NÃO DEVE / PODE, e
+identificadores estáveis (`RF-*`, `RNF-*`, `RN-*`, `UC-*`, `ENT-*`, `INT-*`)
+para serem citados em issues, PRs, testes e decisões.
+
+Cobre, numa peça só:
+
+| Parte | Conteúdo |
+|---|---|
+| 1–2 | definição, escopo, glossário, stakeholders, arquitetura, **RN-001…RN-060** |
+| 3 | **F01…F25** com critérios de aceite, não funcionais em 10 categorias, interfaces |
+| 4–5 | priorização P0/P1/P2 e rastreabilidade |
+| 6–9 | classes, processo de desenvolvimento, cronograma e custo |
+| **A** | casos de uso detalhados **UC-01…UC-26** |
+| **B** | catálogo UML: pacotes, componentes, implantação, máquinas de estado, sequência, atividades |
+| **C** | modelagem de dados: DER, dicionário de entidades, integridade |
+| **D** | contratos de API e integrações, incluindo CLICS |
+| **E** | segurança, privacidade e fronteiras de confiança |
+| **F** | estratégia de testes e critérios de aceite de release |
+| **G** | eventos, auditoria e observabilidade |
+| **H** | checklist operacional de competição |
 
 Ele descreve **comportamento implementado**, não intenção. Se a tela divergir
-do documento, o documento está errado.
+do documento, o documento está desatualizado — abra uma issue.
 
 Os diagramas ficam em [`software-spec/`](software-spec/): classe, caso de uso e
 a fonte editável.

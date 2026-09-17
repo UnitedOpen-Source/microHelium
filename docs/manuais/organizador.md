@@ -139,10 +139,26 @@ removido, e o fim da prova passa a considerá-lo. Por isso o horário de
 término vem do servidor: `início + duração` deixa de bastar quando há
 ajuste.
 
-`DELETE .../time-adjustments/{adjustment}` desfaz um ajuste.
+`DELETE .../time-adjustments/{adjustment}` desfaz um ajuste — e a remoção é
+reversível e auditável, porque alguém vai perguntar depois por que aquela sede
+teve quarenta minutos a mais.
 
-> **Limite conhecido:** o congelamento é do **contest**, não da sede. Não há
-> congelamento por sede.
+### Global ou por sede
+
+O ajuste tem **escopo**, e os dois casos existem no mesmo mecanismo:
+
+| Escopo | O que é | Quando usar |
+|---|---|---|
+| **Prova inteira** | o intervalo removido que a ICPC especifica | algo parou a competição toda |
+| **Uma sede** | a extensão por sede, como o MOJ faz | queda de energia numa sede só |
+
+O segundo é o caso real da Maratona: o regulamento manda somar uma fração do
+tempo de parada **daquela sede**, e sem isso a sede faz a conta no papel e a
+classificação não bate com o placar.
+
+> **Limite conhecido:** o **congelamento**, esse sim, é do contest inteiro —
+> não há congelamento por sede. Não confunda com o ajuste de tempo, que tem
+> escopo.
 
 ### Premiação
 
