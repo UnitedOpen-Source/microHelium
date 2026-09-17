@@ -110,15 +110,41 @@ class ContestClock
         return $total;
     }
 
+    /**
+     * O fim da prova PARA ESTA SEDE.
+     *
+     * Issue #287 -- calculado a partir de `start_time`, e nao de
+     * `$contest->end_time`.
+     *
+     * Partir do `end_time` somava a extensao global DUAS VEZES:
+     * `Contest::getEndTimeAttribute()` ja soma `extensionSeconds(..., null)`,
+     * e `extensionSeconds(..., $siteId)` inclui os globais de novo, porque
+     * `ContestTimeAdjustment::appliesToSite()` diz -- corretamente -- que um
+     * ajuste global vale para toda sede.
+     *
+     * Medido antes do conserto, prova de 300 min com um ajuste global de 30:
+     *
+     *   contest->end_time  +30min   correto
+     *   endTimeFor(null)   +60min
+     *   endTimeFor(site)   +60min
+     *
+     * E nao era erro de tela: `isRunningFor()` sai daqui, e os dois caminhos
+     * de envio decidem por ele. Uma queda de energia nacional de 40 minutos
+     * registrada como ajuste global -- o uso mais obvio do mecanismo -- dava
+     * 80 minutos extras de submissao a TODAS as sedes, inclusive as que nao
+     * tinham ajuste proprio nenhum.
+     */
     public function endTimeFor(Contest $contest, ?int $siteId): ?Carbon
     {
-        $end = $contest->end_time;
-
-        if (! $end) {
+        if (! $contest->start_time) {
             return null;
         }
 
-        return Carbon::instance($end->copy()->addSeconds($this->extensionSeconds($contest, $siteId)));
+        return Carbon::instance(
+            $contest->start_time->copy()
+                ->addMinutes((int) $contest->duration)
+                ->addSeconds($this->extensionSeconds($contest, $siteId))
+        );
     }
 
     /**
