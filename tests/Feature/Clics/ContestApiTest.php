@@ -571,4 +571,68 @@ class ContestApiTest extends TestCase
 
         $this->assertSame([], $response->json(), 'um token invalido deveria ler como visitante, nao falhar nem virar banca');
     }
+
+    // -- o gate de verificacao (#274) ---------------------------------------
+
+    /**
+     * Issue #274 -- a rota e ANONIMA, e o veredito ainda nao foi liberado.
+     *
+     * O congelamento ja era respeitado aqui, com o argumento de que um
+     * consumidor publico que recebesse o veredito de um envio do
+     * congelamento "entregaria a classificacao pela porta dos fundos". O
+     * mesmo vale para o veredito retido -- e sem conta nenhuma.
+     */
+    public function test_a_public_client_does_not_get_a_withheld_verdict(): void
+    {
+        $this->contest->update(['verification_required' => true]);
+
+        $this->submit(10, $this->yes);   // julgado, nao verificado
+
+        $response = $this->getJson("/api/clics/contests/{$this->contest->id}/judgements")
+            ->assertStatus(200);
+
+        $this->assertSame([], $response->json(), 'veredito nao verificado saiu para consumidor anonimo');
+    }
+
+    public function test_the_jury_does_get_the_withheld_verdict(): void
+    {
+        $this->contest->update(['verification_required' => true]);
+
+        $this->submit(10, $this->yes);
+
+        $response = $this->actingAs($this->staff())
+            ->getJson("/api/clics/contests/{$this->contest->id}/judgements")
+            ->assertStatus(200);
+
+        $this->assertCount(1, $response->json(), 'a banca precisa ver o veredito retido -- verificar exige enxergar');
+    }
+
+    /**
+     * O outro lado, para a guarda nao passar por esconder tudo.
+     */
+    public function test_once_released_the_verdict_reaches_the_public_client(): void
+    {
+        $this->contest->update(['verification_required' => true]);
+
+        $run = $this->submit(10, $this->yes);
+        $run->update(['verified_at' => now(), 'verified_by' => $this->staff()->user_id]);
+
+        $response = $this->getJson("/api/clics/contests/{$this->contest->id}/judgements")
+            ->assertStatus(200);
+
+        $this->assertCount(1, $response->json(), 'veredito liberado tem de aparecer');
+    }
+
+    /**
+     * Sem verificacao manual configurada nada muda -- o caminho comum.
+     */
+    public function test_without_manual_verification_the_verdict_is_public_at_once(): void
+    {
+        $this->submit(10, $this->yes);
+
+        $response = $this->getJson("/api/clics/contests/{$this->contest->id}/judgements")
+            ->assertStatus(200);
+
+        $this->assertCount(1, $response->json());
+    }
 }
