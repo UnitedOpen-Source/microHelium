@@ -49,11 +49,19 @@ Sem isso, o intervalo removido corrigiria o placar e deixaria a equipe sem poder
 
 O corte do congelamento (#211) é comparado em tempo **ajustado**: com um intervalo removido da prova inteira, o congelamento começa quando as equipes tiverem vivido `duration - freeze` de tempo que conta. Comparar cru o faria começar cedo demais por exatamente o tanto removido.
 
-### Limitação assumida: o congelamento é do contest, não da sede
+### Limitação assumida na época, levantada pela #276
 
-`Contest::isFrozen()` e `Contest::end_time` consideram apenas os intervalos **globais**. Uma extensão de uma sede só move o prazo de submissão daquela sede e o tempo efetivo dos runs dela — **não** cria uma janela de congelamento própria.
+Quando isto foi escrito, `Contest::isFrozen()` e `Contest::end_time` consideravam apenas os intervalos **globais**, e uma extensão de sede só movia o prazo de submissão e o tempo efetivo dos runs daquela sede — **não** criava janela de congelamento própria.
 
-O motivo é que o placar é um só: a tela projetada na sala está congelada ou não está, e um congelamento por sede significaria o mesmo quadro escondendo coisas diferentes para pessoas diferentes — o que a tela não tem como expressar. Quem precisa do fim efetivo de uma sede pergunta a `ContestClock::endTimeFor()`.
+O motivo registrado era que o placar é um só: a tela projetada na sala está congelada ou não está, e um congelamento por sede significaria o mesmo quadro escondendo coisas diferentes para pessoas diferentes.
+
+A **#276** decidiu o contrário, e resolveu a objeção em vez de a contornar: quem tem espectador em mãos pergunta `ContestClock::isFrozenFor($contest, $siteId)`, e quem não tem — o telão, o visitante anônimo, a Contest API, a finalização — pergunta `isFrozenForAnyone()`, que é conservador: congelado enquanto **qualquer** sede ainda esconder. `Contest::isFrozen()` passou a ser exatamente essa pergunta conservadora, e é por isso que os chamadores dele não precisaram ser tocados.
+
+O ajuste de tempo continua sendo o caminho recomendado para **devolver** tempo perdido; a duração própria da sede serve para o caso diferente de uma sede que roda um formato mais curto de propósito. Ver `docs/specs/276-override-de-tempo-por-sede.md`.
+
+> Uma nota de procedência: ao reescrever `ContestClock::endTimeFor()` para a #276, descobriu-se que ele somava a extensão **global duas vezes** — `Contest::end_time` já a tinha somado. Isso é a **#287**, consertada antes desta.
+
+Quem precisa do fim efetivo de uma sede pergunta a `ContestClock::endTimeFor()`.
 
 ## Auditoria
 

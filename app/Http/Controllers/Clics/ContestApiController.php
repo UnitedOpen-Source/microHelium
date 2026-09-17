@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Clics;
 use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\Run;
+use App\Services\ContestClock;
 use App\Services\Clics\ClicsPresenter;
 use App\Services\Clics\EventFeedBuilder;
 use App\Services\Clics\OrganizationMembershipLookup;
@@ -322,7 +323,24 @@ class ContestApiController extends Controller
 
     private function frozenFor(Request $request, Contest $contest): bool
     {
-        return $contest->isFrozen() && ! $this->isStaff($request);
+        if ($this->isStaff($request)) {
+            return false;
+        }
+
+        // Issue #276 -- a janela da SEDE de quem pergunta.
+        //
+        // O consumidor tipico desta API e anonimo -- painel, resolver -- e
+        // cai na resposta conservadora de `isFrozenForAnyone()`, que e a
+        // unica defensavel aqui: entregar o quadro descongelado porque UMA
+        // sede ja acabou publicaria o que as outras ainda escondem, e esta e
+        // justamente a restricao normativa que a fase 1 do #195 protege.
+        $viewer = $request->user();
+        $siteId = $viewer?->site_id !== null ? (int) $viewer->site_id : null;
+        $clock = app(ContestClock::class);
+
+        return $siteId !== null
+            ? $clock->isFrozenFor($contest, $siteId)
+            : $clock->isFrozenForAnyone($contest);
     }
 
     /**

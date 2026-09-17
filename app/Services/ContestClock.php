@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Contest;
 use App\Models\ContestTimeAdjustment;
+use App\Models\Site;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -38,6 +39,13 @@ class ContestClock
      * @var array<int, Collection<int, ContestTimeAdjustment>>
      */
     private array $cache = [];
+
+    /**
+     * Issue #276 -- as sedes desta prova, memoizadas pelo mesmo motivo.
+     *
+     * @var array<int, Collection<int, Site>>
+     */
+    private array $siteCache = [];
 
     /**
      * Quantos segundos deste contest NAO contam para esta sede, ate o
@@ -111,6 +119,50 @@ class ContestClock
     }
 
     /**
+     * Issue #276 -- a duracao desta sede, em minutos.
+     *
+     * `sites.duration` existe desde a migracao inicial, com comentario
+     * dizendo "Site-specific duration override", e
+     * `Site::getEffectiveDuration()` sempre implementou o fallback
+     * corretamente. So que os unicos chamadores no repositorio inteiro eram
+     * dois testes de unidade: teste verde contra mecanismo desligado, que e
+     * o modo de falha que este repositorio catalogou. Quem lesse a suite
+     * concluiria que o override funcionava; quem configurasse uma sede
+     * descobriria na prova que nao.
+     *
+     * Atende RF-F04-001 e RF-F04-002 do SRS.
+     *
+     * A relacao `contest` e injetada na instancia carregada porque
+     * `getEffectiveDuration()` consulta `$this->contest->duration` para o
+     * fallback -- sem isso, uma tela de placar que pergunta o fim de cada
+     * sede faria uma consulta de contest por sede.
+     */
+    public function durationMinutesFor(Contest $contest, ?int $siteId): int
+    {
+        $site = $this->site($contest, $siteId);
+
+        return $site !== null
+            ? $site->getEffectiveDuration()
+            : (int) $contest->duration;
+    }
+
+    /**
+     * Issue #276 -- o congelamento desta sede, em minutos antes do fim DELA.
+     *
+     * Zero continua querendo dizer "sem congelamento", como o #189 exige --
+     * agora por sede. Uma prova sem congelamento cuja sede define trinta
+     * minutos congela naquela sede, e so nela.
+     */
+    public function freezeMinutesFor(Contest $contest, ?int $siteId): int
+    {
+        $site = $this->site($contest, $siteId);
+
+        return $site !== null
+            ? $site->getEffectiveFreezeTime()
+            : (int) ($contest->getAttributes()['freeze_time'] ?? 0);
+    }
+
+    /**
      * O fim da prova PARA ESTA SEDE.
      *
      * Issue #287 -- calculado a partir de `start_time`, e nao de
@@ -142,7 +194,9 @@ class ContestClock
 
         return Carbon::instance(
             $contest->start_time->copy()
-                ->addMinutes((int) $contest->duration)
+                // Issue #276 -- a duracao da SEDE, com fallback para o
+                // contest. Ate aqui era sempre a do contest.
+                ->addMinutes($this->durationMinutesFor($contest, $siteId))
                 ->addSeconds($this->extensionSeconds($contest, $siteId))
         );
     }
@@ -165,9 +219,117 @@ class ContestClock
         return $now->gte($contest->start_time) && $end !== null && $now->lte($end);
     }
 
+    /**
+     * Issue #276 -- o instante em que o congelamento COMECA para esta sede.
+     *
+     * Contado do fim da sede para tras, e nao do fim do contest: uma sede que
+     * corre quatro horas congela na terceira hora e meia dela, e nao na
+     * quarta e meia de uma prova que ela nao vai viver.
+     *
+     * Devolve null quando a sede nao congela (zero minutos), que e diferente
+     * de "ainda nao congelou".
+     */
+    public function freezeStartFor(Contest $contest, ?int $siteId): ?Carbon
+    {
+        $minutes = $this->freezeMinutesFor($contest, $siteId);
+
+        if ($minutes <= 0) {
+            return null;
+        }
+
+        $end = $this->endTimeFor($contest, $siteId);
+
+        return $end?->copy()->subMinutes($minutes);
+    }
+
+    /**
+     * O placar esta congelado PARA QUEM OLHA DESTA SEDE?
+     *
+     * As tres condicoes sao as do #189, por sede: a prova comecou, a janela
+     * daquela sede abriu, e ninguem revelou a classificacao ainda.
+     *
+     * `is_active` deliberadamente fora, como o #225 estabeleceu: desativar
+     * um contest nao descongela nada, porque estar ativo e "este e o evento
+     * corrente" e nao "a classificacao ja foi liberada".
+     */
+    public function isFrozenFor(Contest $contest, ?int $siteId): bool
+    {
+        if (! $contest->start_time || now()->lt($contest->start_time)) {
+            return false;
+        }
+
+        if ($contest->unfrozen_at !== null) {
+            return false;
+        }
+
+        $freezeStart = $this->freezeStartFor($contest, $siteId);
+
+        return $freezeStart !== null && now()->gte($freezeStart);
+    }
+
+    /**
+     * Alguma sede desta prova ainda esta com o placar congelado?
+     *
+     * Esta e a pergunta conservadora, e a que `Contest::isFrozen()` passou a
+     * fazer -- por isso os chamadores que NAO tem um espectador em maos
+     * (finalizacao, tela de operacoes, rejulgamento, a listagem do admin)
+     * continuam corretos sem terem sido tocados.
+     *
+     * Conservador e a escolha certa aqui porque o congelamento existe para
+     * esconder: se UMA sede ainda esta na janela dela, revelar o quadro
+     * inteiro entrega o que aquela sede esconde. Com sedes sem override -- o
+     * caso de toda prova existente -- a resposta e identica a de antes, ja
+     * que todas compartilham a janela do contest.
+     *
+     * Uma prova sem sede nenhuma cai no calculo do proprio contest.
+     */
+    public function isFrozenForAnyone(Contest $contest): bool
+    {
+        $sites = $this->sites($contest);
+
+        if ($sites->isEmpty()) {
+            return $this->isFrozenFor($contest, null);
+        }
+
+        foreach ($sites as $site) {
+            if ($this->isFrozenFor($contest, $site->id)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function forget(): void
     {
         $this->cache = [];
+        $this->siteCache = [];
+    }
+
+    /**
+     * @return Collection<int, Site>
+     */
+    private function sites(Contest $contest): Collection
+    {
+        return $this->siteCache[$contest->id] ??= Site::query()
+            ->where('contest_id', $contest->id)
+            ->orderBy('id')
+            ->get()
+            // O fallback de `getEffectiveDuration()` le
+            // `$this->contest->duration`; sem a relacao injetada, cada sede
+            // faria a sua propria consulta de contest.
+            ->each(fn (Site $site) => $site->setRelation('contest', $contest));
+    }
+
+    private function site(Contest $contest, ?int $siteId): ?Site
+    {
+        if ($siteId === null) {
+            return null;
+        }
+
+        // Sede de outra prova, ou apagada: cai no contest, que e a resposta
+        // segura. Nao ha "duracao de uma sede que nao existe".
+        return $this->sites($contest)->firstWhere('id', $siteId);
     }
 
     /**
