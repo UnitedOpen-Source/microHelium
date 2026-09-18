@@ -1,3 +1,55 @@
+# ---------------------------------------------------------------------------
+# GNU Prolog e SWI-Prolog (issue #305, Lote D) -- construidos do fonte.
+#
+# Nenhum dos dois tem pacote no Alpine 3.24, e nenhum dos dois publica
+# binario para musl. O porque de cada flag -- inclusive o `-std=gnu17`, sem
+# o qual o GNU Prolog 1.5.0 NAO compila com o gcc 15 -- esta escrito no
+# Dockerfile.judge, uma vez so.
+#
+# Esta imagem precisa dos dois pelo mesmo motivo que precisa dos outros
+# compiladores: docker-compose.yml roda ELA nos servicos `queue` e
+# `scheduler`, e e la que o JudgeRunJob compila e executa codigo submetido.
+FROM php:8.3-fpm-alpine AS gprolog-builder
+
+ARG GPROLOG_VERSION=1.5.0
+ARG GPROLOG_SHA256=670642b43c0faa27ebd68961efb17ebe707688f91b6809566ddd606139512c01
+RUN set -eux; \
+    apk add --no-cache gcc make musl-dev libc-dev; \
+    wget -q "https://ftp.gnu.org/gnu/gprolog/gprolog-${GPROLOG_VERSION}.tar.gz" -O /tmp/gprolog.tar.gz; \
+    echo "${GPROLOG_SHA256}  /tmp/gprolog.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/gprolog-src; \
+    tar -xzf /tmp/gprolog.tar.gz -C /tmp/gprolog-src --strip-components=1; \
+    cd /tmp/gprolog-src/src; \
+    ./configure \
+        --prefix=/opt \
+        --with-install-dir=/opt/gprolog \
+        --without-links-dir \
+        --disable-gui-console \
+        --with-c-flags="-std=gnu17 -O2 -fno-strict-aliasing -fcommon -Wno-char-subscripts"; \
+    make; \
+    make install; \
+    test -x /opt/gprolog/bin/gplc; \
+    test -x /opt/gprolog/bin/pl2wam
+
+FROM php:8.3-fpm-alpine AS swipl-builder
+
+ARG SWIPL_VERSION=10.0.2
+ARG SWIPL_SHA256=e42cc098f7b8a6051c4f79a99b55162d467098aba60f69649bdc7583f0734b57
+RUN set -eux; \
+    apk add --no-cache cmake samurai gcc g++ musl-dev libc-dev gmp-dev ncurses-dev zlib-dev; \
+    wget -q "https://www.swi-prolog.org/download/stable/src/swipl-${SWIPL_VERSION}.tar.gz" -O /tmp/swipl.tar.gz; \
+    echo "${SWIPL_SHA256}  /tmp/swipl.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/swipl-src; \
+    tar -xzf /tmp/swipl.tar.gz -C /tmp/swipl-src --strip-components=1; \
+    cmake -S /tmp/swipl-src -B /tmp/swipl-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/opt/swipl \
+        -DSWIPL_PACKAGES=OFF \
+        -DUSE_GMP=ON; \
+    ninja -C /tmp/swipl-build; \
+    ninja -C /tmp/swipl-build install; \
+    /opt/swipl/bin/swipl --version
+
 # MicroHelium Dockerfile
 # PHP 8.3 with required extensions for Laravel 12
 
@@ -90,6 +142,17 @@ RUN apk add --no-cache \
     ldc=1.42.0-r0 \
     ocaml=4.14.3-r0 \
     ghc=9.10.3-r2 \
+    # Issue #305, Lote D -- COBOL vem do proprio Alpine (`apk search -x
+    # gnucobol`), ao contrario do que a issue supunha.
+    gnucobol=3.2-r0 \
+    # Bibliotecas de execucao do SWI-Prolog construido nos estagios acima
+    # (medido com `ldd`), e o shim de glibc de que o Dart precisa. Ver
+    # Dockerfile.judge para a medicao completa.
+    gmp=6.3.0-r4 \
+    ncurses-libs=6.6_p20260516-r0 \
+    zlib=1.3.2-r0 \
+    gcompat=1.1.0-r4 \
+    libstdc++=15.2.0-r5 \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
     bash=5.3.9-r1 \
@@ -148,6 +211,112 @@ RUN set -eu; \
     printf -- '-Fu/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n-Fl/opt/fpc/%s/lib/fpc/%s/units/%s/rtl\n' \
         "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" "$FPC_VERSION" "$FPC_VERSION" "$fpc_arch" > /etc/fpc.cfg; \
     rm -rf /tmp/fpc.tar /tmp/fpcx
+
+# ---------------------------------------------------------------------------
+# Issue #305, Lote D -- as linguagens que vieram de FORA da distribuicao.
+#
+# Este bloco e o gemeo do que esta no Dockerfile.judge, e a razao de cada
+# escolha (por que o zip GENERICO do Scala e nao o de plataforma, por que a
+# linha 3.3 LTS, por que o Dart precisa de gcompat, o que a poda do SDK tira
+# e por que ela vem com smoke test) esta escrita la, uma vez so.
+ARG SCALA_VERSION=3.3.8
+ARG SCALA_SHA256=777423024bb2b4c2b33e18f9c28da7cea117b39478b9bb6811baf7b1a1cf22a7
+RUN set -eux; \
+    wget -q "https://github.com/scala/scala3/releases/download/${SCALA_VERSION}/scala3-${SCALA_VERSION}.zip" -O /tmp/scala.zip; \
+    echo "${SCALA_SHA256}  /tmp/scala.zip" | sha256sum -c -; \
+    unzip -q /tmp/scala.zip -d /opt; \
+    mv "/opt/scala3-${SCALA_VERSION}" /opt/scala3; \
+    rm /tmp/scala.zip; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/scala3/bin/scalac "$@"\n' > /usr/local/bin/scalac; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/scala3/bin/scala "$@"\n' > /usr/local/bin/scala; \
+    chmod 755 /usr/local/bin/scalac /usr/local/bin/scala; \
+    mkdir -p /tmp/fumaca-scala; \
+    printf 'object Fumaca { def main(args: Array[String]): Unit = println("ok") }\n' > /tmp/fumaca-scala/Fumaca.scala; \
+    cd /tmp/fumaca-scala; \
+    scalac Fumaca.scala; \
+    test "$(scala Fumaca)" = "ok"; \
+    cd /; \
+    rm -rf /tmp/fumaca-scala
+
+ARG GROOVY_VERSION=4.0.33
+ARG GROOVY_SHA256=395a69a81d5e9915d360d630663c1d98534c9dec134cb267798e49370855d93d
+RUN set -eux; \
+    wget -q "https://archive.apache.org/dist/groovy/${GROOVY_VERSION}/distribution/apache-groovy-binary-${GROOVY_VERSION}.zip" -O /tmp/groovy.zip; \
+    echo "${GROOVY_SHA256}  /tmp/groovy.zip" | sha256sum -c -; \
+    unzip -q /tmp/groovy.zip -d /opt; \
+    mv "/opt/groovy-${GROOVY_VERSION}" /opt/groovy; \
+    rm /tmp/groovy.zip; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/groovy/bin/groovyc "$@"\n' > /usr/local/bin/groovyc; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/groovy/bin/groovy "$@"\n' > /usr/local/bin/groovy; \
+    chmod 755 /usr/local/bin/groovyc /usr/local/bin/groovy; \
+    mkdir -p /tmp/fumaca-groovy; \
+    printf 'println "ok"\n' > /tmp/fumaca-groovy/fumaca.groovy; \
+    cd /tmp/fumaca-groovy; \
+    groovyc fumaca.groovy; \
+    test "$(groovy fumaca.groovy)" = "ok"; \
+    cd /; \
+    rm -rf /tmp/fumaca-groovy
+
+ARG DART_VERSION=3.13.4
+ARG DART_SHA256_AARCH64=1d545609bdf9da6fb5e68fbd96a599e2836e44ee64379991bd4493ee764d2fdb
+ARG DART_SHA256_X86_64=6487a10df5eab890d746d14a55f4c70bec3c1c0633f51804eb504cbc0fc395bb
+RUN set -eux; \
+    arch="$(apk --print-arch)"; \
+    case "$arch" in \
+        aarch64) dart_arch=arm64; dart_sha256="${DART_SHA256_AARCH64}" ;; \
+        x86_64)  dart_arch=x64;   dart_sha256="${DART_SHA256_X86_64}" ;; \
+        *) echo "Sem SDK do Dart para a arquitetura $arch" >&2; exit 1 ;; \
+    esac; \
+    wget -q "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-${dart_arch}-release.zip" -O /tmp/dart.zip; \
+    echo "${dart_sha256}  /tmp/dart.zip" | sha256sum -c -; \
+    unzip -q /tmp/dart.zip -d /opt; \
+    rm /tmp/dart.zip; \
+    rm -rf /opt/dart-sdk/bin/resources/devtools; \
+    rm -f /opt/dart-sdk/bin/dartaotruntime_asan \
+          /opt/dart-sdk/bin/dartaotruntime_msan \
+          /opt/dart-sdk/bin/dartaotruntime_tsan; \
+    find /opt/dart-sdk -name '*.sym' -delete; \
+    rm -f /opt/dart-sdk/bin/snapshots/analysis_server.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/analysis_server_aot.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dartdevc.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dartdevc_aot.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dart2js_aot.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dart2wasm_product.snapshot \
+          /opt/dart-sdk/bin/snapshots/dart2bytecode.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/kernel_worker_aot.dart.snapshot \
+          /opt/dart-sdk/bin/utils/wasm-opt; \
+    printf '#!/bin/sh\nexec /opt/dart-sdk/bin/dart "$@"\n' > /usr/local/bin/dart; \
+    chmod 755 /usr/local/bin/dart; \
+    mkdir -p /tmp/fumaca-dart; \
+    printf 'import "dart:io";\nvoid main() { print(int.parse(stdin.readLineSync()!.trim()) + 1); }\n' > /tmp/fumaca-dart/fumaca.dart; \
+    cd /tmp/fumaca-dart; \
+    dart compile exe fumaca.dart -o fumaca; \
+    test "$(echo 7 | ./fumaca)" = "8"; \
+    cd /; \
+    rm -rf /tmp/fumaca-dart
+
+COPY --from=swipl-builder /opt/swipl /opt/swipl
+RUN set -eux; \
+    printf '#!/bin/sh\nexec /opt/swipl/bin/swipl "$@"\n' > /usr/local/bin/swipl; \
+    chmod 755 /usr/local/bin/swipl; \
+    printf 'main :- write(ok), nl.\n' > /tmp/fumaca.pl; \
+    test "$(swipl --on-error=status -g main,halt -l /tmp/fumaca.pl < /dev/null)" = "ok"; \
+    rm -f /tmp/fumaca.pl
+
+# O PATH dentro do invocador do `gplc` nao e decoracao: ele chama `pl2wam`,
+# `wam2ma` e `ma2asm` pelo PATH, e sem isto a compilacao morre com
+# "error trying to execute pl2wam". Ver Dockerfile.judge.
+COPY --from=gprolog-builder /opt/gprolog /opt/gprolog
+RUN set -eux; \
+    printf '#!/bin/sh\nPATH="/opt/gprolog/bin:$PATH"\nexport PATH\nexec /opt/gprolog/bin/gplc "$@"\n' > /usr/local/bin/gplc; \
+    chmod 755 /usr/local/bin/gplc; \
+    mkdir -p /tmp/fumaca-gprolog; \
+    printf 'main :- write(ok), nl.\n:- initialization(main).\n' > /tmp/fumaca-gprolog/fumaca.pro; \
+    cd /tmp/fumaca-gprolog; \
+    gplc --no-top-level -o fumaca fumaca.pro; \
+    test "$(./fumaca < /dev/null)" = "ok"; \
+    cd /; \
+    rm -rf /tmp/fumaca-gprolog
 
 # JPlag (issue #42, similarity analysis) -- pinned to v6.2.0, the last
 # release built against JDK 21 (v6.3.0 bumped the minimum to JDK 25; see

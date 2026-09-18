@@ -98,6 +98,21 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'd_ldc' => ['d_ldc', 'ldc2 --version', '1.42', 'D (LDC 1.42)'],
             'hs' => ['hs', 'ghc --numeric-version', '9.10', 'Haskell (GHC 9.10)'],
             'ml' => ['ml', 'ocamlopt -version', '4.14', 'OCaml 4.14'],
+            // Issue #305, Lote D -- as seis que vieram de fora do Alpine.
+            //
+            // Aqui o rotulo nao anuncia so "a versao que o distro calhou de
+            // ter": cada uma destas e um artefato ESCOLHIDO e fixado por
+            // sha256 no Dockerfile. Se alguem subir o pino e esquecer o
+            // rotulo (ou o contrario), este teste e quem avisa.
+            'scala' => ['scala', 'scalac -version 2>&1', '3.3', 'Scala 3 (3.3 LTS)'],
+            'groovy' => ['groovy', 'groovy --version 2>&1', '4.0', 'Groovy 4'],
+            'dart' => ['dart', 'dart --version 2>&1', '3.13', 'Dart 3.13'],
+            'cob' => ['cob', 'cobc --version 2>&1', '3.2', 'COBOL (GnuCOBOL 3.2)'],
+            'prolog_swi' => ['prolog_swi', 'swipl --version 2>&1', '10', 'Prolog (SWI-Prolog 10)'],
+            // `gplc --version` escreve a versao no stderr e sai com codigo
+            // 1; o `2>&1` do comando ja traz o texto, e o teste so le o
+            // texto.
+            'prolog_gnu' => ['prolog_gnu', 'gplc --version 2>&1', '1.5', 'Prolog (GNU Prolog 1.5)'],
         ];
     }
 
