@@ -55,6 +55,19 @@ class MultiLanguageJudgingTest extends TestCase
      */
     private const LIMITES_POR_LINGUAGEM = [
         'portugol_studio' => 30,
+        // Issue #305, Lote D -- as duas linguagens de JVM do lote.
+        //
+        // Nao e o mesmo caso do Portugol Studio (que sobe DUAS JVMs), mas e
+        // o mesmo mecanismo: o limite do problema e de 1 s de CPU, e so a
+        // partida da JVM com o runtime de Scala ou de Groovy na frente ja
+        // passa disso. O `scala` do lancador oficial carrega o dist inteiro
+        // no classpath, e o `groovy` COMPILA o script antes de executa-lo.
+        //
+        // Afrouxar o limite do PROBLEMA daria mais tempo a todas as
+        // linguagens; `problem_language_limits` existe exatamente para nao
+        // ter de fazer isso.
+        'scala' => 30,
+        'groovy' => 30,
     ];
 
     public static function activeLanguages(): array
@@ -100,6 +113,73 @@ class MultiLanguageJudgingTest extends TestCase
             // descobriu.
             'perl' => ['file' => 'solution.pl', 'source' => "my @p = split ' ', <STDIN>;\nprint \$p[0] + \$p[1], \"\\n\";\n"],
             'sh' => ['file' => 'solution.sh', 'source' => "read a b\necho $((a + b))\n"],
+
+            // Issue #305, Lote D -- linguagens que NAO existem no Alpine e
+            // vieram de fora da distribuicao.
+
+            // Scala: o arquivo TEM de se chamar Main.scala. O
+            // `run_command` e `scala {classname}`, e o AutoJudgeService
+            // troca `{classname}` pelo nome do arquivo sem extensao -- o
+            // mesmo mecanismo do Java, pelo mesmo motivo.
+            'scala' => ['file' => 'Main.scala', 'source' => "object Main {\n  def main(args: Array[String]): Unit = {\n    val t = scala.io.StdIn.readLine().trim.split(\"\\\\s+\").map(_.toInt)\n    println(t(0) + t(1))\n  }\n}\n"],
+
+            'groovy' => ['file' => 'solution.groovy', 'source' => "def linha = System.in.newReader().readLine()\ndef p = linha.trim().split(/\\s+/)\nprintln(p[0].toInteger() + p[1].toInteger())\n"],
+
+            // COBOL: `DISPLAY R` sobre um `PIC S9(9)` imprime
+            // `+000000008`, e nao `8` -- medido. O campo editado com
+            // `FUNCTION TRIM` e o que produz a saida que um problema de
+            // maratona espera.
+            'cob' => [
+                'file' => 'solution.cob',
+                'source' => "       IDENTIFICATION DIVISION.\n"
+                    ."       PROGRAM-ID. SOMA.\n"
+                    ."       DATA DIVISION.\n"
+                    ."       WORKING-STORAGE SECTION.\n"
+                    ."       01 LINHA PIC X(80).\n"
+                    ."       01 A     PIC S9(9).\n"
+                    ."       01 B     PIC S9(9).\n"
+                    ."       01 R     PIC S9(9).\n"
+                    ."       01 SAIDA PIC -(9)9.\n"
+                    ."       PROCEDURE DIVISION.\n"
+                    ."           ACCEPT LINHA FROM CONSOLE\n"
+                    ."           UNSTRING LINHA DELIMITED BY ALL SPACES INTO A B\n"
+                    ."           COMPUTE R = A + B\n"
+                    ."           MOVE R TO SAIDA\n"
+                    ."           DISPLAY FUNCTION TRIM(SAIDA)\n"
+                    ."           STOP RUN.\n",
+            ],
+
+            // Dart: `\\s+` escapado porque a fonte vive numa string PHP de
+            // aspas duplas -- o Dart precisa receber `r'\s+'`.
+            'dart' => ['file' => 'solution.dart', 'source' => "import 'dart:io';\nvoid main() {\n  var p = stdin.readLineSync()!.trim().split(RegExp(r'\\s+'));\n  print(int.parse(p[0]) + int.parse(p[1]));\n}\n"],
+
+            // SWI-Prolog: `main/0` e o predicado que o `run_command`
+            // chama (`-g "main,halt"`), entao o nome nao e escolha do
+            // fixture, e contrato do catalogo.
+            'prolog_swi' => [
+                'file' => 'solution.pl',
+                'source' => "main :-\n"
+                    ."    read_line_to_string(user_input, S),\n"
+                    ."    split_string(S, \" \", \"\", P),\n"
+                    ."    [A, B] = P,\n"
+                    ."    number_string(X, A),\n"
+                    ."    number_string(Y, B),\n"
+                    ."    Z is X + Y,\n"
+                    ."    write(Z), nl.\n",
+            ],
+
+            // GNU Prolog: `:- initialization(main).` e o que faz o binario
+            // compilado rodar alguma coisa -- sem isso ele nao executa o
+            // predicado, so termina.
+            'prolog_gnu' => [
+                'file' => 'solution.pro',
+                'source' => "main :-\n"
+                    ."    read_integer(A),\n"
+                    ."    read_integer(B),\n"
+                    ."    C is A + B,\n"
+                    ."    write(C), nl.\n"
+                    .":- initialization(main).\n",
+            ],
 
             // `sed` nao tem aritmetica -- nenhum programa sed soma dois
             // numeros lidos da entrada. A fonte abaixo e uma substituicao

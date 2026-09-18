@@ -67,6 +67,22 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'cs_dotnet' => ['cs_dotnet', 'dotnet --version', '8.0', 'C# (.NET 8)'],
             'pas_fpc' => ['pas_fpc', 'fpc -iV', '3.2.2', 'Pascal (FPC)'],
             'perl' => ['perl', 'perl -e "print substr($^V,1)"', '5', 'Perl 5'],
+
+            // Issue #305, Lote D -- as seis que vieram de fora do Alpine.
+            //
+            // Aqui o rotulo nao anuncia so "a versao que o distro calhou de
+            // ter": cada uma destas e um artefato ESCOLHIDO e fixado por
+            // sha256 no Dockerfile. Se alguem subir o pino e esquecer o
+            // rotulo (ou o contrario), este teste e quem avisa.
+            'scala' => ['scala', 'scalac -version 2>&1', '3.3', 'Scala 3 (3.3 LTS)'],
+            'groovy' => ['groovy', 'groovy --version 2>&1', '4.0', 'Groovy 4'],
+            'dart' => ['dart', 'dart --version 2>&1', '3.13', 'Dart 3.13'],
+            'cob' => ['cob', 'cobc --version 2>&1', '3.2', 'COBOL (GnuCOBOL 3.2)'],
+            'prolog_swi' => ['prolog_swi', 'swipl --version 2>&1', '10', 'Prolog (SWI-Prolog 10)'],
+            // `gplc --version` escreve a versao no stderr e sai com codigo
+            // 1; o `2>&1` do comando ja traz o texto, e o teste so le o
+            // texto.
+            'prolog_gnu' => ['prolog_gnu', 'gplc --version 2>&1', '1.5', 'Prolog (GNU Prolog 1.5)'],
         ];
     }
 
