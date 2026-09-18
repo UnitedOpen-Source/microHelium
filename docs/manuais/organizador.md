@@ -274,6 +274,39 @@ ou baixando por `GET /api/frontend/contests/{contest}/icpc-report`.
 
 Prova de treino não tem classificação e não produz este relatório.
 
+### Scratch como linguagem
+
+A partir do #268 o `.sb3` do participante é julgado como qualquer outro
+programa. O projeto vira um programa que lê `stdin` e escreve `stdout` por
+uma convenção de blocos:
+
+| Bloco | Efeito |
+|---|---|
+| `say [texto]` | escreve o texto e uma quebra de linha |
+| `think [texto]` | escreve **sem** quebra de linha |
+| `ask [read_token] and wait` | lê **um token** separado por espaço |
+| `ask [qualquer outra pergunta] and wait` | lê **uma linha inteira** |
+
+O valor lido fica no reporter `answer`.
+
+> **Ao escrever o problema, evite blocos que tornam o julgamento
+> irreprodutível:** `pick random`, `timer`, `days since 2000` e
+> `current [hora]`. Dois envios idênticos precisam receber o mesmo veredito,
+> e esses blocos quebram isso — o programa passa numa execução e falha na
+> seguinte, sem ninguém ter mudado nada.
+
+> **Scratch é ordens de grandeza mais lento que C++.** Use o limite de tempo
+> **por linguagem** (`problem_language_limits`) em vez de afrouxar o limite do
+> problema para todo mundo. Atenção: o limite do sandbox é **tempo de CPU**, e
+> não de relógio.
+
+Duas coisas que ficam de fora nesta fase, de propósito: **similaridade** não é
+oferecida para Scratch (a tela responde 422 e não quebra), e o **Treino Livre**
+não aceita envio binário.
+
+Quem não quiser Scratch numa prova desativa a linguagem em **Linguagens**,
+naquele contest.
+
 ### O pacote de resultados, para um ranking nacional
 
 ```

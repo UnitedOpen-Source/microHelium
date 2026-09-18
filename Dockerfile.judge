@@ -1,3 +1,39 @@
+# ---------------------------------------------------------------------------
+# Scratch (issue #268) -- construido aqui, e nao baixado.
+#
+# O release publica binarios empacotados com `pkg`, e eles NAO RODAM nesta
+# imagem. Medido: o `scratch-run_0.1.7_linux_arm64` e ELF glibc
+# (`interpreter /lib/ld-linux-aarch64.so.1`), e no musl do Alpine da
+# `not found`. Com `gcompat` + `libstdc++` ele avanca ate
+# `Error relocating: fcntl64: symbol not found` -- o shim nao cobre binario
+# de Node empacotado.
+#
+# O que roda e o bundle do proprio projeto: `npx webpack` produz um UNICO
+# arquivo de ~645 KB que o `node` da imagem executa direto. Melhor que as
+# tres alternativas: nao precisa de gcompat, nao carrega 79 MB de
+# node_modules, e -- medido -- o bundle silencia os avisos
+# "No storage module present" que o `src/index.js` cru manda para stderr, o
+# que importa porque o juiz le stderr.
+#
+# Estagio separado para o node_modules da construcao nao entrar na imagem
+# final.
+FROM node:24-alpine AS scratch-run-builder
+
+# Commit fixado, e nao a tag: tag se move, commit nao. Corresponde a 0.1.7.
+ARG SCRATCH_RUN_COMMIT=02f11e519210f8593cdcf04f257237fc0ceb7180
+
+RUN apk add --no-cache git \
+    && git clone --no-checkout https://github.com/VNOI-Admin/scratch-run.git /src \
+    && cd /src \
+    && git fetch --depth 1 origin "${SCRATCH_RUN_COMMIT}" \
+    && git checkout --detach "${SCRATCH_RUN_COMMIT}"
+
+WORKDIR /src
+RUN npm install --no-audit --no-fund && npx webpack
+
+# O bundle e o unico artefato que sai daqui.
+RUN test -s /src/dist/index.js
+
 # MicroHelium Auto-Judge Dockerfile
 # Specialized container for code compilation and execution
 
@@ -74,6 +110,21 @@ RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VER
     && rm /tmp/kotlin.zip \
     && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc \
     && ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin
+
+# Scratch (issue #268). O bundle vem do estagio acima; aqui entra so o
+# arquivo e o invocador.
+#
+# `/opt` ja esta em config/autojudge.php -> sandbox_paths, entao isto fica
+# visivel dentro do sandbox sem bind novo.
+#
+# O invocador existe porque `MachineCapabilities::executableOf()` olha o
+# PRIMEIRO TOKEN do comando e o sonda com `command -v`: um run_command
+# escrito como `node /opt/... ` anunciaria a capacidade "node", e nao
+# "scratch".
+COPY --from=scratch-run-builder /src/dist/index.js /opt/scratch-run/index.js
+RUN printf '#!/bin/sh\nexec node /opt/scratch-run/index.js "$@"\n' > /usr/local/bin/scratch-run \
+    && chmod 755 /usr/local/bin/scratch-run \
+    && echo 'x' | scratch-run --version
 
 # Free Pascal has no Alpine package either; installed from the official
 # per-architecture SourceForge binary tarball. See Dockerfile.dev for the

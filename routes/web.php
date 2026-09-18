@@ -83,6 +83,10 @@ Route::post('/clarifications', [ClarificationController::class, 'store'])->middl
 Route::get('/submissions', [SubmissionController::class, 'index'])->middleware('auth')->name('submissions');
 
 Route::get('/submission/{run}', [SubmissionController::class, 'show'])->middleware('auth')->name('submission.show');
+// Issue #268 -- baixar o fonte. E o unico jeito util quando ele e binario:
+// um `.sb3` e um ZIP, e renderiza-lo num `<pre>` despeja centenas de KB de
+// U+FFFD no HTML.
+Route::get('/submission/{run}/source', [SubmissionController::class, 'source'])->middleware('auth')->name('submission.source');
 
 // Submit solution -- creates a real Run and dispatches it to the auto-judge
 // queue (see App\Http\Controllers\SubmitController). Previously this was a
@@ -227,7 +231,7 @@ Route::post('/login', function () {
 // frouxa e a que vale.
 Route::get('/register', [RegistrationController::class, 'create'])->name('register');
 Route::post('/register', [RegistrationController::class, 'store'])
-    ->middleware('throttle:5,1');
+    ->middleware('throttle:register');
 
 Route::post('/logout', function () {
     auth()->logout();

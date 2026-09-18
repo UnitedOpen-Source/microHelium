@@ -3,17 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Run;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class SubmissionController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\View\View
+     * @return View
      */
     public function index()
     {
@@ -34,8 +34,8 @@ class SubmissionController extends Controller
                 ->leftJoin('contests', 'runs.contest_id', '=', 'contests.id')
                 ->where('runs.user_id', $userId)
                 ->select('runs.*', 'problems.name as problem_name', 'problems.short_name as problem_letter',
-                         'answers.short_name as result', 'languages.name as language',
-                         'contests.verification_required as contest_verification_required')
+                    'answers.short_name as result', 'languages.name as language',
+                    'contests.verification_required as contest_verification_required')
                 ->orderBy('runs.created_at', 'desc')
                 ->get()
                 ->map(fn ($submission) => $this->maskWithheldRow($submission));
@@ -43,7 +43,7 @@ class SubmissionController extends Controller
             // Counted AFTER the mask, on purpose: "3 aceitas" next to three
             // rows that show no verdict would announce the withheld one as
             // loudly as printing it.
-            $acceptedCount = $submissions->filter(fn($s) => in_array($s->result, ['Yes', 'AC', 'Accepted']))->count();
+            $acceptedCount = $submissions->filter(fn ($s) => in_array($s->result, ['Yes', 'AC', 'Accepted']))->count();
             $totalCount = $submissions->count();
         }
 
@@ -59,7 +59,7 @@ class SubmissionController extends Controller
     {
         $user = auth()->user();
 
-        if (!$user->isAdmin() && !$user->isJudge() && $run->user_id !== $user->user_id) {
+        if (! $user->isAdmin() && ! $user->isJudge() && $run->user_id !== $user->user_id) {
             abort(403, 'Voce nao pode ver esta submissao.');
         }
 
@@ -71,9 +71,73 @@ class SubmissionController extends Controller
         // same question and passing the first does not answer the second.
         $this->maskWithheldVerdict($run);
 
-        $sourceCode = file_exists($run->getSourcePath()) ? file_get_contents($run->getSourcePath()) : null;
+        // Issue #268 -- fonte binaria nao vai para dentro de `<pre>`.
+        //
+        // Isto lia o arquivo inteiro e a view o despejava num `{{ }}`. Um
+        // `.sb3` e um ZIP: cada byte invalido em UTF-8 vira U+FFFD, e o
+        // arquivo inteiro -- centenas de KB de lixo -- entra no HTML. Nao e
+        // so feio: a pagina fica pesada, o leitor de tela le o lixo, e quem
+        // queria VER o envio nao consegue.
+        //
+        // A deteccao e "o conteudo e UTF-8 valido e nao tem byte nulo", e
+        // nao a extensao: a extensao vem do envio e mente quando alguem
+        // renomeia. Binario ganha download em vez de render.
+        $path = $run->getSourcePath();
+        $sourceCode = null;
+        $sourceIsBinary = false;
+        $sourceBytes = null;
 
-        return view('submission-show', compact('run', 'sourceCode'));
+        if (file_exists($path)) {
+            $conteudo = (string) file_get_contents($path);
+            $sourceBytes = strlen($conteudo);
+            $sourceIsBinary = ! self::isText($conteudo);
+            $sourceCode = $sourceIsBinary ? null : $conteudo;
+        }
+
+        return view('submission-show', compact('run', 'sourceCode', 'sourceIsBinary', 'sourceBytes'));
+    }
+
+    /**
+     * Issue #268 -- baixar o fonte, que e o unico jeito util quando ele e
+     * binario.
+     *
+     * Mesma autorizacao do `show()`, e nao uma segunda: "quem pode ver este
+     * envio" nao pode existir em duas versoes.
+     */
+    public function source(Run $run): Response
+    {
+        $user = auth()->user();
+
+        if (! $user->isAdmin() && ! $user->isJudge() && $run->user_id !== $user->user_id) {
+            abort(403, 'Voce nao pode ver esta submissao.');
+        }
+
+        $path = $run->getSourcePath();
+
+        if (! file_exists($path)) {
+            abort(404, 'Arquivo de codigo-fonte nao encontrado.');
+        }
+
+        // `octet-stream` sempre, mesmo para fonte de texto: o navegador nao
+        // deve tentar interpretar o que um competidor enviou. Um `.html`
+        // servido como `text/html` do proprio dominio seria XSS armazenado.
+        return response()->download($path, basename((string) $run->filename), [
+            'Content-Type' => 'application/octet-stream',
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'no-store, private',
+        ]);
+    }
+
+    /**
+     * UTF-8 valido e sem byte nulo.
+     *
+     * O byte nulo entra na conta porque ha binario que passa por UTF-8
+     * valido por acaso -- e nenhum fonte de programa legitimo tem um.
+     */
+    private static function isText(string $content): bool
+    {
+        return $content === ''
+            || (! str_contains($content, "\0") && mb_check_encoding($content, 'UTF-8'));
     }
 
     /**

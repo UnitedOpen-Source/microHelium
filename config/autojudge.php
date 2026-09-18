@@ -204,6 +204,12 @@ return [
         'pypy3' => 128,
         'rb' => 64,
 
+        // Issue #268 -- o `scratch-run` e um bundle de Node executado pelo
+        // `node` da imagem, entao o perfil de espaco de enderecamento e o
+        // mesmo das entradas `js_node*`. Vale quando nao ha cgroup delegado
+        // e o `ulimit -v` entra.
+        'scratch' => 1024,
+
         // null = no address-space barrier at all, and that is deliberate.
         // Measured on this image, the smallest `ulimit -v` each of these
         // will even boot under, for a 256 MB problem limit:

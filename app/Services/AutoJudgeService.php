@@ -542,6 +542,20 @@ class AutoJudgeService
             ];
         }
 
+        // Issue #268 -- o diagnostico de um run ACEITO nao se perde aqui.
+        //
+        // Este laco devolvia um array novo com `'stderr' => ''`, jogando
+        // fora o que cada caso produziu. Nao era visivel enquanto o stderr
+        // ia junto com a saida comparada: um programa que escrevesse nele
+        // nao dava AC, entao nunca chegava neste return.
+        //
+        // Guarda o ULTIMO caso que falou alguma coisa, com o numero dele, e
+        // nao a concatenacao de todos: uma prova com cem casos e um
+        // programa tagarela encheria a coluna, e `recordVerdict()` a trunca
+        // em 65535 EM SILENCIO -- um diagnostico cortado no meio e pior que
+        // um diagnostico curto e completo.
+        $diagnostico = '';
+
         foreach ($testCases as $index => $testCase) {
             $testResult = $this->runTestCase($run, $runDir, $testCase);
 
@@ -553,13 +567,17 @@ class AutoJudgeService
             if (! $testResult['success']) {
                 return $testResult;
             }
+
+            if (trim((string) ($testResult['stderr'] ?? '')) !== '') {
+                $diagnostico = "[caso {$testCase->number}] ".trim((string) $testResult['stderr']);
+            }
         }
 
         return [
             'verdict' => 'AC',
             'message' => 'Accepted',
             'stdout' => '',
-            'stderr' => '',
+            'stderr' => $diagnostico,
         ];
     }
 
@@ -642,11 +660,30 @@ class AutoJudgeService
             $outputFile
         );
 
+        // Issue #268 -- o diagnostico sobrevive ao caminho de SUCESSO.
+        //
+        // `executeProgram()` devolve o stderr do programa em todos os
+        // ramos, e ate aqui so os de FALHA chegavam ao banco: num AC o
+        // `compareOutput()` devolvia o proprio resultado e o texto sumia.
+        //
+        // Isso nao era visivel enquanto o stderr ia junto com a saida
+        // comparada -- um programa que escrevesse nele nao dava AC. Agora
+        // da, e a linha de depuracao que o autor deixou e exatamente o que
+        // o juiz quer ler quando alguem contesta.
+        $diagnostico = trim(($compareResult['stderr'] ?? '')."\n".($runResult['stderr'] ?? ''));
+
+        if ($diagnostico !== '') {
+            $compareResult['stderr'] = $diagnostico;
+        }
+
         return $compareResult;
     }
 
     protected function executeProgram(Run $run, string $runDir, string $inputFile, string $outputFile): array
     {
+        // Issue #268 -- ao lado da saida, e nao dentro dela.
+        $stderrFile = $outputFile.'.stderr';
+
         $language = $run->language;
         $problem = $run->problem;
         $basename = pathinfo($run->filename, PATHINFO_FILENAME);
@@ -666,7 +703,22 @@ class AutoJudgeService
             $runCommand = str_replace('{source}', $run->filename, $runCommand);
             $runCommand = str_replace('{memory}', $memoryLimit, $runCommand);
 
-            $command = $runCommand." < {$inputFile} > {$outputFile} 2>&1";
+            // Issue #268 -- stderr NAO entra na saida comparada.
+            //
+            // Isto era `2>&1`, e misturava o erro do programa no arquivo que
+            // vai para o diff. Em ICPC o que se compara e o stdout; stderr e
+            // diagnostico, e ignora-lo e o que BOCA e DOMjudge fazem.
+            //
+            // O que forcou a questao foi o `scratch-run`: ele escreve em
+            // stderr, entao um projeto Scratch que falhasse produziria um
+            // diff cheio de mensagem de erro em vez de um veredito legivel.
+            // Mas o defeito nao e do Scratch -- qualquer programa que
+            // imprima uma linha de depuracao em stderr recebia WA hoje, e
+            // isso esta errado para todas as linguagens.
+            //
+            // O texto nao se perde: vai para um arquivo proprio e volta em
+            // `stderr`, que e onde o juiz o le.
+            $command = $runCommand." < {$inputFile} > {$outputFile} 2> {$stderrFile}";
         }
 
         // The test case input lives under storage/app/problems, i.e. inside
@@ -716,6 +768,12 @@ class AutoJudgeService
 
         $exitCode = $result->exitCode();
 
+        // Issue #268 -- o stderr do PROGRAMA, que ate aqui ia para o diff.
+        // `$result->errorOutput()` e o do shell/bwrap em volta, e os dois
+        // interessam a quem investiga: o de fora diz se o sandbox subiu, o
+        // de dentro diz o que o programa reclamou.
+        $programStderr = is_file($stderrFile) ? (string) file_get_contents($stderrFile) : '';
+
         // Issue #196 -- uma leitura so, porque ela CONSOME o arquivo.
         // Chamar peakRssKb() depois disto devolveria null: o
         // @unlink() ja aconteceu.
@@ -735,7 +793,7 @@ class AutoJudgeService
                 'verdict' => 'MLE',
                 'message' => 'Memory Limit Exceeded',
                 'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
+                'stderr' => trim($result->errorOutput()."\n".$programStderr),
             ];
         }
 
@@ -751,7 +809,7 @@ class AutoJudgeService
                 'verdict' => 'MLE',
                 'message' => 'Memory Limit Exceeded',
                 'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
+                'stderr' => trim($result->errorOutput()."\n".$programStderr),
             ];
         }
 
@@ -767,7 +825,7 @@ class AutoJudgeService
                 'verdict' => 'TLE',
                 'message' => 'Time Limit Exceeded',
                 'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
+                'stderr' => trim($result->errorOutput()."\n".$programStderr),
             ];
         }
 
@@ -780,7 +838,7 @@ class AutoJudgeService
                 'verdict' => 'RE',
                 'message' => 'Runtime Error (output size limit exceeded)',
                 'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
+                'stderr' => trim($result->errorOutput()."\n".$programStderr),
             ];
         }
 
@@ -790,7 +848,7 @@ class AutoJudgeService
                 'verdict' => 'RE',
                 'message' => 'Runtime Error (Segmentation Fault)',
                 'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
+                'stderr' => trim($result->errorOutput()."\n".$programStderr),
             ];
         }
 
@@ -800,14 +858,14 @@ class AutoJudgeService
                 'verdict' => 'RE',
                 'message' => "Runtime Error (Exit code: {$exitCode})",
                 'stdout' => $result->output(),
-                'stderr' => $result->errorOutput(),
+                'stderr' => trim($result->errorOutput()."\n".$programStderr),
             ];
         }
 
         return [
             'success' => true,
             'stdout' => $result->output(),
-            'stderr' => $result->errorOutput(),
+            'stderr' => trim($result->errorOutput()."\n".$programStderr),
         ];
     }
 
