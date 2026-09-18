@@ -111,6 +111,22 @@ DB_USERNAME=your_username
 DB_PASSWORD=your_password
 ```
 
+#### Foreign keys, if you use SQLite
+
+SQLite turns foreign keys **off** by default, and until #293 this project
+never turned them on. The schema declares `cascadeOnDelete()` and
+`nullOnDelete()` throughout; on SQLite **none of it fired** — deleting a
+contest left its sites, users and runs pointing at a row that no longer
+existed.
+
+They are now on by default. If you are upgrading an installation that ran
+without them, it may already contain dangling references, and the first write
+that touches one will be refused. `DB_FOREIGN_KEYS=false` restores the old
+behaviour so you can bring the app up and clean the data first — it is an
+escape hatch, not a setting to leave alone.
+
+MySQL and PostgreSQL enforced them all along; nothing changes there.
+
 ### 5. Run Migrations
 
 ```bash

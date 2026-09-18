@@ -277,12 +277,20 @@ class ProblemModelTest extends TestCase
             'updated_at' => now(),
         ]);
 
+        // Issue #293 -- uma linguagem DE VERDADE, e nao o id 1.
+        //
+        // Com as chaves estrangeiras aplicadas, `language_id => 1` sem linha
+        // correspondente e `FOREIGN KEY constraint failed`. Ate aqui passava
+        // porque o SQLite nao aplicava nada -- o teste montava um run que
+        // nao poderia existir em producao e afirmava coisas sobre ele.
+        $language = \App\Models\Language::factory()->create(['contest_id' => $contest->id]);
+
         Run::create([
             'problem_id' => $problem->id,
             'contest_id' => $contest->id,
             'site_id' => $siteId,
             'user_id' => $user->user_id,
-            'language_id' => 1,
+            'language_id' => $language->id,
             'run_number' => 1,
             'filename' => 'solution.c',
             'source_file' => 'runs/1.c',

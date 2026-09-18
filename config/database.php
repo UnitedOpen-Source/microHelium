@@ -37,6 +37,22 @@ return [
             'driver' => 'sqlite',
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
+
+            // Issue #293 -- as chaves estrangeiras passam a ser APLICADAS.
+            //
+            // Esta chave nao existia, e o SQLite desliga as FKs por padrao:
+            // medido dentro da suite, `PRAGMA foreign_keys` vinha 0. O
+            // esquema inteiro declarava `cascadeOnDelete()` e
+            // `nullOnDelete()` que NAO ACONTECIAM -- nem nos testes, nem numa
+            // instalacao SQLite de producao.
+            //
+            // O repositorio ja sabia que referencia pendurada derruba tela:
+            // `Backend\SiteController::destroy()` limpa a mao porque o
+            // soft delete nao dispara FK, e o comentario de la diz que sem
+            // isso o JudgeController "crashes the next time that judge loads
+            // /judge/runs". O que ninguem sabia e que no SQLite a FK tambem
+            // nao dispara no delete REAL.
+            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
         ],
 
         'mysql' => [
