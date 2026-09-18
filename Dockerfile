@@ -10,6 +10,15 @@ LABEL description="MicroHelium - Hackathon and Programming Contest Management Pl
 WORKDIR /var/www/html
 
 # Install system dependencies
+# Issue #303 -- os toolchains abaixo estao com VERSAO FIXADA.
+#
+# O criterio: tudo que compila ou executa codigo de competidor -- e o
+# `bubblewrap`, que o confina -- e fixado; o que so constroi a imagem (git,
+# curl, os -dev) nao e. Um veredito nao pode depender do dia em que a imagem
+# foi construida, ainda mais com julgamento distribuido (#53), em que a
+# imagem e construida tambem por parceiros.
+#
+# Esta lista tem de acompanhar a do Dockerfile.judge.
 RUN apk add --no-cache \
     git \
     curl \
@@ -26,7 +35,7 @@ RUN apk add --no-cache \
     libxml2-dev \
     postgresql-dev \
     linux-headers \
-    bubblewrap \
+    bubblewrap=0.12.0-r0 \
     # Issue #142: `backup:create` shells out to mysqldump, and this image had
     # no MySQL client at all -- the backup button would have failed on the
     # one host where it matters. Alpine's client is MariaDB's;
@@ -42,20 +51,23 @@ RUN apk add --no-cache \
     # Language::getDefaultLanguages() marks is_active by default, or admins
     # can select a language in the Contest Wizard that the judge then can't
     # actually compile/run.
-    gcc \
-    g++ \
+    gcc=15.2.0-r5 \
+    clang22=22.1.3-r2 \
+    g++=15.2.0-r5 \
     make \
-    python3 \
-    openjdk21-jdk \
-    nodejs \
-    npm \
-    dotnet8-sdk \
-    go \
-    rust \
-    ruby \
+    python3=3.14.7-r1 \
+    openjdk21-jdk=21.0.12_p8-r0 \
+    openjdk25-jdk=25.0.4_p7-r0 \
+    nodejs=24.18.1-r0 \
+    npm=11.12.1-r0 \
+    dotnet8-sdk=8.0.131-r0 \
+    go=1.26.8-r0 \
+    rust=1.96.1-r0 \
+    ruby=3.4.9-r0 \
+    perl=5.42.2-r0 \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
-    bash \
+    bash=5.3.9-r1 \
     # setpriv, for docker/php/entrypoint.sh's privilege drop (issue #136).
     # Busybox ships a /bin/setpriv that only implements --inh-caps and
     # --no-new-privs; --reuid/--regid are util-linux's. Dockerfile.judge
@@ -63,7 +75,8 @@ RUN apk add --no-cache \
     util-linux
 
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
-RUN npm install -g typescript
+ARG TYPESCRIPT_VERSION=7.0.2
+RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
 
 # Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
 # zip. This is the same install method used by every other Kotlin judge

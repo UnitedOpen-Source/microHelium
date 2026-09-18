@@ -52,7 +52,7 @@ use Illuminate\Support\Carbon;
  *    the extension because that is the technical key -- Problem::
  *    getCompileScriptPath() builds a path out of it and SubmitController
  *    names the submitted file from it -- while the name is a label that
- *    gets prettified between editions ("C++17" -> "C++ (G++ 13)").
+ *    gets prettified between editions ("C++17" -> "C++ (G++ 15)").
  *
  *  - problem: (contest_id, basename). Same reasoning, more sharply: the
  *    basename is the directory the package lives in
