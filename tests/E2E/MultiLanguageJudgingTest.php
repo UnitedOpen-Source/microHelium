@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\RequiresJudgeSandbox;
+use Tests\Support\ScratchProject;
 use Tests\TestCase;
 
 /**
@@ -61,6 +62,12 @@ class MultiLanguageJudgingTest extends TestCase
             'php' => ['file' => 'solution.php', 'source' => "<?php\nfscanf(STDIN, \"%d %d\", \$a, \$b);\necho \$a + \$b, PHP_EOL;\n"],
             'rb' => ['file' => 'solution.rb', 'source' => "a, b = gets.split.map(&:to_i)\nputs a + b\n"],
             'pas_fpc' => ['file' => 'solution.pas', 'source' => "program Solution;\nvar a, b: integer;\nbegin\n  readln(a, b);\n  writeln(a + b);\nend.\n"],
+            // Issue #268 -- o unico caso cuja fonte e BINARIA: um `.sb3` e
+            // um ZIP. Montado por codigo em Tests\Support\ScratchProject
+            // para o programa julgado ser legivel na revisao -- um blob de
+            // terceiro no repositorio ninguem sabe o que faz sem abrir o
+            // editor.
+            'scratch' => ['file' => 'solution.sb3', 'source' => file_get_contents(ScratchProject::sumOfTwoTokens())],
         ];
 
         $active = collect(Language::getDefaultLanguages())->where('is_active', true)->pluck('extension');
@@ -92,8 +99,62 @@ class MultiLanguageJudgingTest extends TestCase
         $this->assertEmpty($missing, 'is_active languages with no MultiLanguageJudgingTest fixture: ' . implode(', ', $missing));
     }
 
+    /**
+     * Issue #268 -- stderr NAO entra na saida comparada.
+     *
+     * O comando de execucao usava `2>&1`, misturando o erro do programa no
+     * arquivo que vai para o diff. Em ICPC o que se compara e o stdout;
+     * stderr e diagnostico, e e o que BOCA e DOMjudge ignoram.
+     *
+     * Quem forcou a questao foi o `scratch-run`, que escreve em stderr. Mas
+     * o defeito nunca foi do Scratch: ate aqui QUALQUER programa que
+     * imprimisse uma linha de depuracao em stderr recebia WA, em todas as
+     * linguagens -- e a equipe lia "resposta errada" sobre uma resposta
+     * certa.
+     *
+     * Este teste roda em C de proposito: a linguagem mais antiga da suite,
+     * para deixar claro que o conserto nao e sobre Scratch.
+     */
+    public function test_a_program_that_writes_to_stderr_is_still_accepted()
+    {
+        $fonte = "#include <stdio.h>\n"
+            ."int main(){int a,b;scanf(\"%d %d\",&a,&b);"
+            ."fprintf(stderr,\"depuracao: li %d e %d\\n\",a,b);"
+            ."printf(\"%d\\n\",a+b);return 0;}\n";
+
+        $run = $this->judgeSolution('c_gcc13', 'solution.c', $fonte);
+
+        $this->assertTrue(
+            $run->answer->is_accepted,
+            "stderr entrou na saida comparada: veredito '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+
+        // E o texto NAO se perdeu -- foi para onde o juiz o le.
+        $this->assertStringContainsString(
+            'depuracao: li 3 e 5',
+            (string) $run->auto_judge_stderr,
+            'o stderr do programa sumiu em vez de ir para o diagnostico'
+        );
+    }
+
     #[DataProvider('activeLanguages')]
     public function test_active_language_compiles_and_judges_a_correct_solution_as_accepted(string $extension, string $filename, string $source)
+    {
+        $run = $this->judgeSolution($extension, $filename, $source);
+
+        $this->assertSame('judged', $run->status);
+        $this->assertNotNull($run->answer_id, "no verdict produced for {$extension} -- stderr: {$run->auto_judge_stderr}");
+        $this->assertTrue(
+            $run->answer->is_accepted,
+            "expected AC for {$extension}, got '{$run->answer?->short_name}': {$run->auto_judge_result}\nstdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+    }
+
+    /**
+     * O corpo comum: monta uma prova de "A + B", envia e julga de verdade.
+     */
+    private function judgeSolution(string $extension, string $filename, string $source): Run
     {
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()->subMinutes(5), 'duration' => 300]);
         $site = Site::factory()->create(['contest_id' => $contest->id]);
@@ -156,12 +217,6 @@ class MultiLanguageJudgingTest extends TestCase
 
         app(AutoJudgeService::class)->judge($run->fresh());
 
-        $run->refresh();
-        $this->assertSame('judged', $run->status);
-        $this->assertNotNull($run->answer_id, "no verdict produced for {$extension} -- stderr: {$run->auto_judge_stderr}");
-        $this->assertTrue(
-            $run->answer->is_accepted,
-            "expected AC for {$extension}, got '{$run->answer?->short_name}': {$run->auto_judge_result}\nstdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
-        );
+        return $run->fresh();
     }
 }

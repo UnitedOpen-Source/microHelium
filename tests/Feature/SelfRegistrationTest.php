@@ -115,8 +115,16 @@ class SelfRegistrationTest extends TestCase
     // ---------------------------------------------------------------
 
     /**
-     * As duas portas para a mesma tabela de usuários não podem ter limites
-     * diferentes: a mais frouxa é a que vale.
+     * As duas portas para a mesma tabela de usuários têm o mesmo limite --
+     * a mais frouxa seria a que vale.
+     *
+     * Mas em BALDES SEPARADOS, e isso foi um defeito meu que a suíte pegou:
+     * `ThrottleRequests::resolveRequestSignature()` devolve
+     * `sha1(dominio|ip)`, **sem a rota**, então duas rotas com
+     * `throttle:5,1` dividem um balde só por IP. O limite do `/register`
+     * estava descontando das tentativas de `/login` -- e num laboratório de
+     * prova, onde a sede sai por um NAT, cinco cadastros recusados
+     * trancariam o login de todos por um minuto. Limitador nomeado separa.
      */
     public function test_the_sixth_attempt_in_a_minute_is_refused(): void
     {
@@ -128,6 +136,36 @@ class SelfRegistrationTest extends TestCase
 
         $this->cadastrar(email: 'tentativa6@example.com', extra: ['username' => 'tentativa6'])
             ->assertStatus(429);
+    }
+
+    /**
+     * E o login continua com o orçamento dele intacto.
+     *
+     * Este é o teste que faltava: sem ele, o balde compartilhado só aparecia
+     * como falha de OUTRO arquivo, quando a ordem dos testes mudava.
+     */
+    public function test_exhausting_the_register_limit_does_not_lock_out_login(): void
+    {
+        for ($i = 1; $i <= 6; $i++) {
+            $this->cadastrar(email: "gasta{$i}@example.com", extra: ['username' => "gasta{$i}"]);
+        }
+
+        // Conta criada pela organização -- e não por `/register`, que já
+        // está no limite. É justamente o caso que importa: uma equipe
+        // legítima tentando entrar de um IP onde alguém abusou do cadastro.
+        $this->createTestUser([
+            'email' => 'valida@example.com',
+            'username' => 'valida',
+            'password' => \Illuminate\Support\Facades\Hash::make('senha-bem-grande'),
+            'is_enabled' => true,
+        ]);
+
+        $this->post('/login', [
+            'email' => 'valida@example.com',
+            'password' => 'senha-bem-grande',
+        ])->assertRedirect('/home');
+
+        $this->assertAuthenticated();
     }
 
     // ---------------------------------------------------------------

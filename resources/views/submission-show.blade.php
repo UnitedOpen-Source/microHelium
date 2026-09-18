@@ -65,6 +65,16 @@
             <p class="text-xs font-medium text-muted-foreground uppercase mb-2" id="submission-source">Código-fonte</p>
             @if($sourceCode !== null)
                 <pre tabindex="0" translate="no" role="region" aria-labelledby="submission-source" class="bg-muted rounded p-4 text-sm overflow-x-auto max-h-[32rem] overflow-y-auto">{{ $sourceCode }}</pre>
+                <p class="mt-3"><a href="{{ route('submission.source', $run) }}" class="text-sm text-primary hover:underline">Baixar o arquivo enviado</a></p>
+            @elseif($sourceIsBinary ?? false)
+                {{-- Issue #268 -- um `.sb3` de Scratch e um ZIP. Renderizar
+                     isto num `<pre>` poria centenas de KB de U+FFFD no HTML,
+                     que o leitor de tela le em voz alta e que nao mostra
+                     nada a ninguem. --}}
+                <div class="bg-muted rounded p-4">
+                    <p class="text-sm text-foreground">Este envio é um arquivo binário ({{ number_format(($sourceBytes ?? 0) / 1024, 1, ',', '.') }} KB) e não pode ser mostrado como texto.</p>
+                    <p class="mt-3"><a href="{{ route('submission.source', $run) }}" class="text-sm text-primary hover:underline">Baixar o arquivo enviado</a></p>
+                </div>
             @else
                 <p class="text-sm text-muted-foreground">Arquivo de código-fonte não encontrado.</p>
             @endif

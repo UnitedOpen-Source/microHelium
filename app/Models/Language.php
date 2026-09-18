@@ -75,6 +75,34 @@ class Language extends Model
             ['name' => 'JavaScript (Node 20 LTS)', 'extension' => 'js_node20', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'TypeScript (Node 24)', 'extension' => 'ts', 'file_ext' => 'ts', 'compile_command' => 'npx tsc --strict --module commonjs {source}', 'run_command' => 'node --max-old-space-size={memory} {executable}.js', 'is_active' => true, 'category' => 'compiled'],
 
+            // Issue #268 -- Scratch, julgado como qualquer outra linguagem.
+            //
+            // O projeto do participante e um `.sb3` (um ZIP), e o
+            // `scratch-run` o transforma num programa que le stdin e escreve
+            // stdout pela convencao de blocos do VNOJ:
+            //
+            //     say [texto]                  escreve linha
+            //     think [texto]                escreve sem quebra
+            //     ask [read_token] and wait    le um token
+            //     ask [outra coisa] and wait   le uma linha
+            //
+            // `--check` e a etapa de COMPILACAO: valida o projeto e sai 0 ou
+            // 1. Existe de verdade para uma linguagem que nao compila, que e
+            // o que este pipeline exige -- `compile_command` e obrigatorio em
+            // LanguageController.
+            //
+            // `is_active` true pela regra que este catalogo ja segue: as
+            // entradas inativas acima estao inativas porque "selecting them
+            // today would silently fail" -- ou seja, INATIVO quer dizer
+            // toolchain ausente. A do Scratch esta na imagem, entao marca-la
+            // inativa mentiria sobre o motivo.
+            //
+            // E ligada ela ganha a verificacao que importa: o
+            // MultiLanguageJudgingTest julga um `.sb3` de verdade dentro da
+            // imagem do juiz, no job Judging do CI. Quem nao quiser Scratch
+            // numa prova desativa a linguagem naquele contest.
+            ['name' => 'Scratch', 'extension' => 'scratch', 'file_ext' => 'sb3', 'compile_command' => 'scratch-run --check {source}', 'run_command' => 'scratch-run {source}', 'is_active' => true, 'category' => 'interpreted'],
+
             // JVM Languages
             ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Scala 3', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala {classname}', 'is_active' => false, 'category' => 'compiled'],
