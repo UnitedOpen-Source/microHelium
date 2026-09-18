@@ -1,4 +1,45 @@
 # ---------------------------------------------------------------------------
+# Portugol Studio (issue #269, parte A) -- construido do fonte.
+#
+# Os releases publicam so instaladores de ~123 MB, sem jar do console, entao
+# nao ha o que baixar. O modulo `console` e oficial e existe para isto.
+#
+# JDK 11 e nao 21: o projeto usa Gradle 4.10 (2018), que nao roda em JDK
+# moderno. O JAR resultante e bytecode 11 e roda sem problema sob o JDK 21 da
+# imagem final -- medido.
+FROM eclipse-temurin:11-jdk AS portugol-studio-builder
+
+# Commit fixado, e nao a tag: tag se move, commit nao. Ultimo commit do
+# master em 12/04/2023 -- o upstream esta parado, e por isso o pino importa
+# ainda mais: nao ha release para acompanhar.
+ARG PORTUGOL_STUDIO_COMMIT=5640a2e95de1c5d63c11f453c324812b4d6a8f6c
+
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --no-checkout https://github.com/UNIVALI-LITE/Portugol-Studio.git /src \
+    && cd /src \
+    && git fetch --depth 1 origin "${PORTUGOL_STUDIO_COMMIT}" \
+    && git checkout --detach "${PORTUGOL_STUDIO_COMMIT}"
+
+WORKDIR /src
+
+# `:portugol-console` e nao `:console`: o settings.gradle renomeia todo
+# subprojeto com o prefixo `portugol-`, e `:console` responde "Project
+# 'console' not found".
+RUN ./gradlew :portugol-console:jar --no-daemon -q
+
+# A etapa de compilacao do juiz. Ver o docblock da classe para as quatro
+# medicoes que provam que o Console nao serve para isso.
+COPY docker/judge/portugol/VerificaPortugol.java /verifica/
+
+RUN set -eux; \
+    libs="$(find /src/console/build/libs -name '*.jar' | tr '\n' ':')"; \
+    mkdir -p /verifica/classes; \
+    javac -encoding UTF-8 -cp "$libs" -d /verifica/classes /verifica/VerificaPortugol.java; \
+    test -s /verifica/classes/VerificaPortugol.class
+
+# ---------------------------------------------------------------------------
 # Scratch (issue #268) -- construido aqui, e nao baixado.
 #
 # O release publica binarios empacotados com `pkg`, e eles NAO RODAM nesta
@@ -125,6 +166,35 @@ COPY --from=scratch-run-builder /src/dist/index.js /opt/scratch-run/index.js
 RUN printf '#!/bin/sh\nexec node /opt/scratch-run/index.js "$@"\n' > /usr/local/bin/scratch-run \
     && chmod 755 /usr/local/bin/scratch-run \
     && echo 'x' | scratch-run --version
+
+# Portugol Studio (issue #269, parte A). O jar vem do estagio acima.
+#
+# O layout importa: `Console.getClassPathParaCompilacao()` monta o classpath
+# lendo os jars de um diretorio `lib/` AO LADO da aplicacao -- nao e um fat
+# jar solto, e achatar isso quebra a execucao.
+#
+# `/opt` ja esta em config/autojudge.php -> sandbox_paths.
+#
+# A execucao precisa de `javac` EM TEMPO DE EXECUCAO: o Portugol Studio
+# compila o programa para Java e chama o compilador. Medido -- sem JDK a
+# execucao morre com `Cannot run program "javac"`. O `openjdk21-jdk` acima ja
+# cobre isso, e e a razao de ele nao poder virar `-jre`.
+COPY --from=portugol-studio-builder /src/console/build/libs /opt/portugol-studio
+COPY --from=portugol-studio-builder /verifica/classes/VerificaPortugol.class /opt/portugol-studio/
+
+# Dois invocadores, e nao um: o roteamento por capacidade
+# (`MachineCapabilities::executableOf()`) olha o PRIMEIRO TOKEN do comando e o
+# sonda com `command -v`. Comandos escritos como `java -jar ...` anunciariam
+# a capacidade "java", e nao "portugol_studio".
+RUN set -eux; \
+    printf '#!/bin/sh\nexec java -jar /opt/portugol-studio/portugol-console-2.7.5.jar "$@" -no-wait\n' \
+        > /usr/local/bin/portugol-studio; \
+    printf '#!/bin/sh\nexec java -cp "/opt/portugol-studio:$(find /opt/portugol-studio -name \x27*.jar\x27 | tr \x27\\n\x27 \x27:\x27)" VerificaPortugol "$@"\n' \
+        > /usr/local/bin/portugol-studio-check; \
+    chmod 755 /usr/local/bin/portugol-studio /usr/local/bin/portugol-studio-check; \
+    printf 'programa {\n  funcao inicio() {\n    escreva("ok")\n  }\n}\n' > /tmp/fumaca.por; \
+    portugol-studio-check /tmp/fumaca.por; \
+    rm -f /tmp/fumaca.por
 
 # Free Pascal has no Alpine package either; installed from the official
 # per-architecture SourceForge binary tarball. See Dockerfile.dev for the

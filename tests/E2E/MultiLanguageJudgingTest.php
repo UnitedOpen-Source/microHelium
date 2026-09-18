@@ -6,6 +6,7 @@ use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\Language;
 use App\Models\Problem;
+use App\Models\ProblemLanguageLimit;
 use App\Models\Run;
 use App\Models\Site;
 use App\Models\TestCase as ProblemTestCase;
@@ -13,6 +14,8 @@ use App\Services\AutoJudgeService;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\RequiresJudgeSandbox;
 use Tests\Support\ScratchProject;
@@ -43,6 +46,17 @@ class MultiLanguageJudgingTest extends TestCase
         $this->enableJudgeSandbox();
     }
 
+    /**
+     * Issue #269 -- linguagens cujo tempo de partida nao cabe no limite do
+     * problema, e o quanto elas precisam.
+     *
+     * Nao e uma lista de excecoes: e a demonstracao de que
+     * `problem_language_limits` funciona, no caso real que o motivou.
+     */
+    private const LIMITES_POR_LINGUAGEM = [
+        'portugol_studio' => 30,
+    ];
+
     public static function activeLanguages(): array
     {
         $solutions = [
@@ -68,6 +82,23 @@ class MultiLanguageJudgingTest extends TestCase
             // terceiro no repositorio ninguem sabe o que faz sem abrir o
             // editor.
             'scratch' => ['file' => 'solution.sb3', 'source' => file_get_contents(ScratchProject::sumOfTwoTokens())],
+            // Issue #269 -- Portugol Studio. As palavras-chave sao
+            // acentuadas, e o arquivo vai como UTF-8: a classe de
+            // verificacao le com `StandardCharsets.UTF_8` explicito, porque
+            // a codificacao padrao da JVM depende do ambiente.
+            // Issue #269 -- o unico caso que precisa da entrada em DUAS
+            // LINHAS, e nao e detalhe de fixture: o console do Portugol
+            // Studio le com `Scanner.nextLine()`, UMA LINHA POR `leia`.
+            // Medido -- com "3 5" numa linha so o programa nao produz saida
+            // nenhuma, em silencio.
+            //
+            // Quem escreve problema para Portugol Studio precisa por um
+            // valor por linha. Esta anotado no manual do organizador.
+            'portugol_studio' => [
+                'file' => 'solution.por',
+                'source' => "programa {\n  funcao inicio() {\n    inteiro a, b\n    leia(a)\n    leia(b)\n    escreva(a + b, \"\\n\")\n  }\n}\n",
+                'input' => "3\n5\n",
+            ],
         ];
 
         $active = collect(Language::getDefaultLanguages())->where('is_active', true)->pluck('extension');
@@ -75,7 +106,14 @@ class MultiLanguageJudgingTest extends TestCase
         $cases = [];
         foreach ($active as $extension) {
             if (isset($solutions[$extension])) {
-                $cases[$extension] = [$extension, $solutions[$extension]['file'], $solutions[$extension]['source']];
+                $cases[$extension] = [
+                    $extension,
+                    $solutions[$extension]['file'],
+                    $solutions[$extension]['source'],
+                    // Issue #269 -- a entrada e "3 5" numa linha para todas,
+                    // menos onde a linguagem nao consegue ler assim.
+                    $solutions[$extension]['input'] ?? "3 5\n",
+                ];
             }
         }
 
@@ -96,7 +134,7 @@ class MultiLanguageJudgingTest extends TestCase
 
         $missing = $active->diff($covered)->values()->all();
 
-        $this->assertEmpty($missing, 'is_active languages with no MultiLanguageJudgingTest fixture: ' . implode(', ', $missing));
+        $this->assertEmpty($missing, 'is_active languages with no MultiLanguageJudgingTest fixture: '.implode(', ', $missing));
     }
 
     /**
@@ -118,8 +156,8 @@ class MultiLanguageJudgingTest extends TestCase
     public function test_a_program_that_writes_to_stderr_is_still_accepted()
     {
         $fonte = "#include <stdio.h>\n"
-            ."int main(){int a,b;scanf(\"%d %d\",&a,&b);"
-            ."fprintf(stderr,\"depuracao: li %d e %d\\n\",a,b);"
+            .'int main(){int a,b;scanf("%d %d",&a,&b);'
+            .'fprintf(stderr,"depuracao: li %d e %d\\n",a,b);'
             ."printf(\"%d\\n\",a+b);return 0;}\n";
 
         $run = $this->judgeSolution('c_gcc13', 'solution.c', $fonte);
@@ -138,10 +176,68 @@ class MultiLanguageJudgingTest extends TestCase
         );
     }
 
-    #[DataProvider('activeLanguages')]
-    public function test_active_language_compiles_and_judges_a_correct_solution_as_accepted(string $extension, string $filename, string $source)
+    /**
+     * Issue #269 -- erro de sintaxe em Portugol Studio da CE, e nao WA.
+     *
+     * E o ponto inteiro da parte A. Medido, o `Console` com `-no-wait` sai
+     * com codigo 0 num programa que nao compila: o `System.exit` mora dentro
+     * de `aguardar()`, e `-no-wait` pula esse ramo. Como o CE vem do codigo
+     * de saida da compilacao, o erro de sintaxe passaria da compilacao,
+     * despejaria as mensagens de erro e viraria WA -- dizendo a equipe que a
+     * resposta esta errada quando o programa nem compilou.
+     *
+     * Por isso o `compile_command` e `portugol-studio-check`, que chama
+     * `Portugol.compilarParaAnalise()` -- analisa sem executar.
+     *
+     * A mutacao que a issue pede nominalmente: trocar o compile_command pelo
+     * Console com -no-wait; este teste tem de deixar de dar CE.
+     */
+    public function test_a_portugol_syntax_error_is_a_compilation_error_and_not_a_wrong_answer()
     {
-        $run = $this->judgeSolution($extension, $filename, $source);
+        $run = $this->judgeSolution(
+            'portugol_studio',
+            'solution.por',
+            "programa {\n  funcao inicio() {\n    isto nao e portugol @@@\n  }\n}\n",
+            "3\n5\n"
+        );
+
+        $this->assertSame(
+            'CE',
+            $run->answer?->short_name,
+            "erro de sintaxe nao virou CE: veredito '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+
+        // E a equipe recebe ONDE consertar, e nao so "o codigo contem erros".
+        $this->assertStringContainsString(
+            'Linha: 3',
+            (string) $run->auto_judge_stderr,
+            'o CE saiu sem dizer a linha do erro'
+        );
+    }
+
+    /**
+     * O controle positivo do CE: um programa Portugol VALIDO nao vira CE.
+     *
+     * Sem ele, o teste acima passaria igual se a etapa de verificacao
+     * recusasse todo programa.
+     */
+    public function test_a_valid_portugol_program_is_not_a_compilation_error()
+    {
+        $run = $this->judgeSolution(
+            'portugol_studio',
+            'solution.por',
+            "programa {\n  funcao inicio() {\n    inteiro a, b\n    leia(a)\n    leia(b)\n    escreva(a + b, \"\\n\")\n  }\n}\n",
+            "3\n5\n"
+        );
+
+        $this->assertTrue($run->answer->is_accepted, "programa valido virou '{$run->answer?->short_name}'");
+    }
+
+    #[DataProvider('activeLanguages')]
+    public function test_active_language_compiles_and_judges_a_correct_solution_as_accepted(string $extension, string $filename, string $source, string $input = "3 5\n")
+    {
+        $run = $this->judgeSolution($extension, $filename, $source, $input);
 
         $this->assertSame('judged', $run->status);
         $this->assertNotNull($run->answer_id, "no verdict produced for {$extension} -- stderr: {$run->auto_judge_stderr}");
@@ -154,7 +250,7 @@ class MultiLanguageJudgingTest extends TestCase
     /**
      * O corpo comum: monta uma prova de "A + B", envia e julga de verdade.
      */
-    private function judgeSolution(string $extension, string $filename, string $source): Run
+    private function judgeSolution(string $extension, string $filename, string $source, string $input = "3 5\n"): Run
     {
         $contest = Contest::factory()->create(['is_active' => true, 'start_time' => now()->subMinutes(5), 'duration' => 300]);
         $site = Site::factory()->create(['contest_id' => $contest->id]);
@@ -176,24 +272,45 @@ class MultiLanguageJudgingTest extends TestCase
 
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
 
+        // Issue #269 -- o Portugol Studio precisa de mais que um segundo de
+        // CPU, e isso nao e frouxidao de teste.
+        //
+        // Medido: o comando do juiz aplica `ulimit -t 1` (o limite do
+        // problema), e o Portugol Studio COMPILA PARA JAVA em tempo de
+        // execucao -- chama `javac` e sobe uma segunda JVM. Duas partidas de
+        // JVM nao cabem em um segundo de CPU, e o console engole a falha
+        // como "Erro na compilacao!".
+        //
+        // `problem_language_limits` e o mecanismo que existe exatamente para
+        // isto, e usa-lo aqui e o que prova que ele funciona. Afrouxar o
+        // limite do PROBLEMA daria mais tempo a todas as linguagens, que e o
+        // que este campo existe para evitar.
+        if (($limite = self::LIMITES_POR_LINGUAGEM[$extension] ?? null) !== null) {
+            ProblemLanguageLimit::create([
+                'problem_id' => $problem->id,
+                'language_id' => $language->id,
+                'time_limit' => $limite,
+            ]);
+        }
+
         $inputRelative = "problems/{$contest->id}/{$problem->id}/input/1";
         $outputRelative = "problems/{$contest->id}/{$problem->id}/output/1";
-        \Illuminate\Support\Facades\Storage::disk('local')->put($inputRelative, "3 5\n");
-        \Illuminate\Support\Facades\Storage::disk('local')->put($outputRelative, "8\n");
+        Storage::disk('local')->put($inputRelative, $input);
+        Storage::disk('local')->put($outputRelative, "8\n");
 
         ProblemTestCase::create([
             'problem_id' => $problem->id,
             'number' => 1,
             'input_file' => $inputRelative,
             'output_file' => $outputRelative,
-            'input_hash' => hash('sha256', "3 5\n"),
+            'input_hash' => hash('sha256', $input),
             'output_hash' => hash('sha256', "8\n"),
             'is_sample' => true,
         ]);
 
         $team = User::create([
             'fullname' => 'Lang Test Team',
-            'username' => 'lang_test_' . $extension,
+            'username' => 'lang_test_'.$extension,
             'email' => "lang-test-{$extension}@example.com",
             'password' => bcrypt('password'),
             'user_type' => 'team',
@@ -202,7 +319,7 @@ class MultiLanguageJudgingTest extends TestCase
             'site_id' => $site->id,
         ]);
 
-        \Illuminate\Support\Facades\Bus::fake();
+        Bus::fake();
 
         $file = UploadedFile::fake()->createWithContent($filename, $source);
 

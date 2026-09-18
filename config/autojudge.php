@@ -210,6 +210,12 @@ return [
         // e o `ulimit -v` entra.
         'scratch' => 1024,
 
+        // Issue #269 -- o Portugol Studio roda SOBRE a JVM, e ainda chama
+        // `javac` durante a execucao para compilar o programa para Java.
+        // Segue o tratamento de `java*` logo abaixo: `null`, sem barreira de
+        // espaco de enderecamento, pelo mesmo motivo escrito la.
+        'portugol_studio' => null,
+
         // null = no address-space barrier at all, and that is deliberate.
         // Measured on this image, the smallest `ulimit -v` each of these
         // will even boot under, for a 256 MB problem limit:

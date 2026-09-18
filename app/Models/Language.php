@@ -4,9 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Language extends Model
 {
@@ -102,6 +102,30 @@ class Language extends Model
             // imagem do juiz, no job Judging do CI. Quem nao quiser Scratch
             // numa prova desativa a linguagem naquele contest.
             ['name' => 'Scratch', 'extension' => 'scratch', 'file_ext' => 'sb3', 'compile_command' => 'scratch-run --check {source}', 'run_command' => 'scratch-run {source}', 'is_active' => true, 'category' => 'interpreted'],
+
+            // Issue #269, parte A -- Portugol Studio (UNIVALI), o
+            // pseudocodigo em portugues usado para ensinar algoritmos no
+            // Brasil. +200 mil usuarios em universidades e institutos.
+            //
+            // A ETAPA DE COMPILACAO NAO E O CONSOLE, e isso nao e estilo.
+            // Medido, o console:
+            //
+            //   com -no-wait, programa invalido      -> codigo 0
+            //   sem -no-wait, programa invalido      -> codigo 1
+            //   sem -no-wait, programa valido que le -> codigo 1 (falso CE:
+            //                                           stdin fechado)
+            //   sem -no-wait, laco infinito          -> TRAVA
+            //
+            // Nao ha combinacao de flags que analise sem executar. Com
+            // -no-wait o erro de sintaxe passaria da compilacao e viraria WA
+            // -- dizendo a equipe que a resposta esta errada quando o
+            // programa nem compilou. `portugol-studio-check` chama
+            // `Portugol.compilarParaAnalise()`, que analisa e nao executa.
+            //
+            // A execucao usa -no-wait de proposito: sem ele o console
+            // imprime "Programa finalizado" e "Pressione ENTER para
+            // continuar" na saida comparada.
+            ['name' => 'Portugol Studio', 'extension' => 'portugol_studio', 'file_ext' => 'por', 'compile_command' => 'portugol-studio-check {source}', 'run_command' => 'portugol-studio {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // JVM Languages
             ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
@@ -219,6 +243,7 @@ class Language extends Model
     public function getFileExtension(): string
     {
         $defaults = collect(self::getDefaultLanguages())->keyBy('extension');
+
         return $defaults[$this->extension]['file_ext'] ?? $this->extension;
     }
 }

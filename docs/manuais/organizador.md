@@ -307,6 +307,37 @@ não aceita envio binário.
 Quem não quiser Scratch numa prova desativa a linguagem em **Linguagens**,
 naquele contest.
 
+### Portugol Studio como linguagem
+
+A partir do #269 o `.por` do Portugol Studio (UNIVALI) é julgado como qualquer
+outro programa. Duas coisas que **quem escreve o problema precisa saber**, e
+que não são detalhe:
+
+> **Um valor por linha.** O console do Portugol Studio lê com `nextLine()` —
+> **uma linha inteira por `leia`**. Um caso de teste com `3 5` na mesma linha
+> não preenche duas variáveis: o programa simplesmente não produz saída, em
+> silêncio. Escreva os casos com um valor por linha.
+
+> **Dê mais tempo, por linguagem.** O Portugol Studio **compila o programa
+> para Java em tempo de execução** — chama o `javac` e sobe uma segunda JVM.
+> Duas partidas de JVM não cabem em um segundo de CPU. Use o limite **por
+> linguagem** (`problem_language_limits`) em vez de afrouxar o limite do
+> problema para todas: medido, 30 segundos é folgado e 1 segundo não passa.
+
+Detalhes de formatação que mudam a saída esperada:
+
+| | |
+|---|---|
+| `escrever(real)` | independente de locale (`3.14`, não `3,14`), mas **notação científica** fora de `[10⁻³, 10⁷)` — `10000000.0` sai `1.0E7` |
+| booleano | sai em português: `verdadeiro` / `falso` |
+
+Erro de sintaxe dá **CE** e diz a linha e a coluna — não vira "resposta
+errada". Similaridade não é oferecida para Portugol (responde 422, não
+quebra), e o Treino Livre não entra nesta fase.
+
+Quem não quiser Portugol numa prova desativa a linguagem em **Linguagens**,
+naquele contest.
+
 ### O pacote de resultados, para um ranking nacional
 
 ```
