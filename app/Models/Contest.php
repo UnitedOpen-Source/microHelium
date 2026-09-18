@@ -17,6 +17,13 @@ class Contest extends Model
     protected $fillable = [
         'name',
         'description',
+        // Issue #271 -- identidade do evento para um agregado nacional. O
+        // `uuid` NAO entra aqui de proposito: ele e gerado uma vez no
+        // `creating` e nao deve ser reescrito por atribuicao em massa, senao
+        // a propriedade que ele existe para ter -- "este pacote e uma nova
+        // exportacao daquela prova" -- some.
+        'edition',
+        'phase',
         'start_time',
         'duration',
         'freeze_time',
@@ -49,6 +56,23 @@ class Contest extends Model
         // installation (see the migration for why).
         'verification_required' => 'boolean',
     ];
+
+    /**
+     * Issue #271 -- o `uuid` nasce com a prova, e uma vez so.
+     *
+     * `contests.id` e auto-incremento local: a prova 12 de uma instalacao e
+     * a prova 12 de outra colidem, e um site nacional recebendo trinta
+     * pacotes nao distinguiria uma da outra. O `uuid` e o que permite dizer
+     * "este pacote e uma nova exportacao daquela prova" em vez de "este e
+     * outro evento" -- e por isso ele e imutavel, e fica fora do
+     * `$fillable`.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $contest) {
+            $contest->uuid ??= (string) \Illuminate\Support\Str::uuid();
+        });
+    }
 
     /**
      * Issue #43 -- everything that means "a competition" must exclude the

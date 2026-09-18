@@ -73,6 +73,25 @@
                         class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
                         value="{{ old('max_file_size', $contest->max_file_size ?? 100) }}">
                 </div>
+                {{-- Issue #271 -- identidade do evento no pacote de
+                     resultados. Uma regional e uma final nacional nao sao o
+                     mesmo tipo de evento no agregado nacional, e o nome da
+                     prova sozinho nao carrega essa distincao. --}}
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="edition" class="block text-sm font-medium text-foreground mb-2">Edicao <span class="text-muted-foreground">(opcional)</span></label>
+                        <input id="edition" type="text" name="edition" maxlength="50" placeholder="Ex: 2026"
+                            class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                            value="{{ old('edition', $contest->edition ?? '') }}">
+                    </div>
+                    <div>
+                        <label for="phase" class="block text-sm font-medium text-foreground mb-2">Fase <span class="text-muted-foreground">(opcional)</span></label>
+                        <input id="phase" type="text" name="phase" maxlength="50" placeholder="Ex: regional, final nacional"
+                            class="w-full px-4 py-3 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                            value="{{ old('phase', $contest->phase ?? '') }}">
+                    </div>
+                </div>
+                <p class="text-sm text-muted-foreground">Entram no pacote de resultados enviado a um ranking nacional. Em branco, ficam ausentes do manifesto.</p>
             </div>
         </div>
 

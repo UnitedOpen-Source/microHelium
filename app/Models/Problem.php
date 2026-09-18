@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,35 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Problem extends Model
 {
+    /**
+     * Issue #271 -- a ordem em que os problemas de uma prova aparecem.
+     *
+     * `Contest::problems()` já aplica `orderBy('sort_order')`, e isso não
+     * basta: `sort_order` **não é único**. Dois problemas com o mesmo valor
+     * voltam na ordem que o banco escolher, e o `ordinal` da Contest API sai
+     * do ÍNDICE da coleção -- então a posição publicada dos dois troca entre
+     * duas leituras da mesma prova, sem nada ter mudado.
+     *
+     * É também a primeira coisa que quebraria a reprodutibilidade do pacote
+     * de resultados (#271), que exige duas exportações idênticas byte a byte.
+     *
+     * Um escopo, e não três `orderBy` soltos no chamador, porque "a ordem
+     * dos problemas de uma prova" é um conceito do domínio e precisa ter um
+     * lugar só -- e porque assim a garantia é verificável: um teste pergunta
+     * ao escopo qual SQL ele produz. Sem isso a mutação que remove os
+     * desempates passa limpa no SQLite, onde o motor devolve a ordem certa
+     * por coincidência. Medido.
+     *
+     * @param  Builder<Problem>  $query
+     */
+    public function scopeInContestOrder($query)
+    {
+        return $query
+            ->orderBy('sort_order')
+            ->orderBy('short_name')
+            ->orderBy('id');
+    }
+
     use HasFactory, SoftDeletes;
 
     protected $fillable = [

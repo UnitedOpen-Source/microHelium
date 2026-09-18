@@ -486,6 +486,12 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             'penalty' => 'integer|min:0|max:120',
             'freeze_time' => 'integer|min:0',
             'max_file_size' => 'integer|min:1|max:10240',
+            // Issue #271 -- identidade do evento para um agregado nacional.
+            // Uma regional e uma final nacional nao sao o mesmo tipo de
+            // evento no ranking, e o nome da prova sozinho nao carrega essa
+            // distincao de forma legivel por maquina.
+            'edition' => 'nullable|string|max:50',
+            'phase' => 'nullable|string|max:50',
             'unlock_key' => 'nullable|string|max:100',
         ]);
 
@@ -515,6 +521,18 @@ Route::prefix('backend')->middleware(['auth', 'admin'])->group(function () {
             'freeze_time' => $validated['freeze_time'] ?? 60,
             'penalty' => $validated['penalty'] ?? 20,
             'max_file_size' => $validated['max_file_size'] ?? 100,
+            // Campo em branco vira NULL, e nao string vazia: "" no
+            // manifesto do pacote de resultados seria pior que ausente,
+            // porque o consumidor teria que tratar dois jeitos de dizer "nao
+            // informado".
+            //
+            // Quem faz isso e o `ConvertEmptyStringsToNull` do grupo `web`,
+            // que roda ANTES da validacao -- medido, nao suposto. Escrevi um
+            // `?: null` aqui antes de medir, e uma mutacao mostrou que ele
+            // nao guardava nada. O `??` cobre o caso real que sobra: a chave
+            // ausente, quando o corpo nao traz o campo.
+            'edition' => $validated['edition'] ?? null,
+            'phase' => $validated['phase'] ?? null,
             'is_active' => $request->has('is_active'),
             'is_public' => $request->has('is_public'),
             // `unlock_key` e nullable na validacao, e regra nullable que
