@@ -244,7 +244,23 @@ class JudgeWorkQueue
             'problem' => [
                 'id' => $problem->id,
                 'short_name' => $problem->short_name,
-                'time_limit' => $problem->getTimeLimitFor($language),
+                // Issue #251 -- o limite SERVIDO, ajustado para a maquina
+                // que vai rodar. Preso entre metade e o dobro do valor
+                // digitado; maquina sem medicao recebe o digitado.
+                //
+                // Aqui e o unico lugar onde o ajuste PODE acontecer para um
+                // judgehost remoto: ele nao consulta banco por desenho ("a
+                // token issued inside the lab" -- judging a run issues no
+                // queries at all), entao o numero tem que ir pronto no
+                // payload.
+                'time_limit' => app(JudgehostSpeedFactor::class)->effectiveSeconds(
+                    $problem->contest,
+                    $problem->getTimeLimitFor($language),
+                    // `judgehost_id` ja esta gravado: o payload so e montado
+                    // DEPOIS da reivindicacao (#126, sob lock de linha), e a
+                    // maquina que reivindicou e a que vai rodar.
+                    $run->judgehost_id !== null ? (int) $run->judgehost_id : null
+                ),
                 'memory_limit' => $problem->getMemoryLimitFor($language),
                 'test_case_count' => $problem->testCases()->count(),
                 // Issue #120. Three hooks in AutoJudgeService come out of the

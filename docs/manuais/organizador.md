@@ -182,6 +182,42 @@ congelamento nessa sede**, branco quer dizer "usa o do contest".
 > acima: é registrado, auditável e reversível. A duração própria serve para o
 > caso diferente de uma sede que roda um formato mais curto de propósito.
 
+### Máquinas de velocidades diferentes
+
+Quando instituições parceiras emprestam o que têm (#53), o parque fica
+heterogêneo — e a mesma solução recebia **TLE numa máquina e AC noutra**. A
+tela de **calibração** avisava; a equipe que competiu já tinha levado o
+veredito.
+
+Desde o #251 o limite é **servido por máquina**:
+
+```
+efetivo = clamp(digitado × fator, digitado × 0,5, digitado × 2,0)
+```
+
+O fator sai da medição que a própria prova produz — os **envios aceitos**, a
+mesma solução medida em máquinas diferentes. Máquina mais lenta ganha limite
+maior; mais rápida, menor. O que se iguala é a **dificuldade**, e não o número
+de segundos.
+
+> **Isto muda veredito**, dentro da faixa. O valor que você digita continua
+> sendo a referência — a medição só o ajusta entre metade e o dobro, então
+> nenhuma máquina fica livre para inventar o próprio limite.
+
+| Situação | O que acontece |
+|---|---|
+| máquina sem medição ainda | usa o valor digitado, e a calibração avisa que ela está cega |
+| prova sem envio aceito | idem — não há o que comparar |
+| um problema só, numa máquina só | não é comparação, e não entra na conta |
+
+**Para desligar** e voltar ao comportamento anterior (medir e avisar, sem
+agir), ponha piso e teto em 1:
+
+```
+JUDGEHOST_LIMIT_FLOOR=1.0
+JUDGEHOST_LIMIT_CEILING=1.0
+```
+
 ### Instituição de cada equipe
 
 **Em Usuários → editar, campo "Instituição".** É por qual universidade ou

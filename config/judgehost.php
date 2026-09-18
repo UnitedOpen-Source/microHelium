@@ -61,6 +61,26 @@ return [
     */
     'calibration' => [
         'divergence_threshold' => (float) env('JUDGEHOST_DIVERGENCE_THRESHOLD', 1.5),
+
+        /*
+         * Issue #251 (#196, fase 2) -- a FAIXA do limite servido por maquina.
+         *
+         * O limite efetivo e `digitado * fator`, preso entre `digitado *
+         * piso` e `digitado * teto`. A forma foi decidida assim, e nao como
+         * substituicao do valor digitado, para preservar o #117/#130 em
+         * espirito: a divergencia passa a ser compensada, mas LIMITADA --
+         * nenhuma maquina fica livre para inventar o proprio limite.
+         *
+         * Metade e o dobro sao escolhas de partida, e nao medicao: cobrem o
+         * parque heterogeneo tipico (uma maquina duas vezes mais lenta que a
+         * outra) e recusam o absurdo. Quem tiver medicao propria que
+         * justifique outra faixa ajusta por env.
+         *
+         * Piso 1.0 e teto 1.0 juntos desligam o ajuste e devolvem o
+         * comportamento da fase 1: medir e avisar, sem agir.
+         */
+        'limit_floor' => (float) env('JUDGEHOST_LIMIT_FLOOR', 0.5),
+        'limit_ceiling' => (float) env('JUDGEHOST_LIMIT_CEILING', 2.0),
     ],
 
     'agent' => [
