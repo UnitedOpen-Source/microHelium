@@ -68,7 +68,14 @@ class RunTest extends TestCase
 
     public function test_is_judged_returns_correct_value()
     {
-        $judgedRun = Run::factory()->create(['status' => 'judged', 'answer_id' => 1]);
+        // Issue #293 -- um veredito DE VERDADE, e nao o id 1.
+        //
+        // O teste ao lado (`test_is_accepted_returns_correct_value`) ja cria
+        // o Answer; este cravava `answer_id => 1`, e com as chaves
+        // estrangeiras aplicadas isso e `FOREIGN KEY constraint failed`.
+        // Qual veredito nao importa aqui -- o metodo so olha se ha algum.
+        $answer = Answer::factory()->create();
+        $judgedRun = Run::factory()->create(['status' => 'judged', 'answer_id' => $answer->id]);
         $pendingRun = Run::factory()->create(['status' => 'pending']);
         $judgedWithoutAnswer = Run::factory()->create(['status' => 'judged', 'answer_id' => null]);
 

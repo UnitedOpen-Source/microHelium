@@ -43,11 +43,19 @@ class CompetitorAffiliationBackfill
             ->groupBy('user_id')
             ->get();
 
-        // Só organizações que ainda existem. A coluna tem chave estrangeira
-        // e, onde ela é aplicada, uma linha de governança órfã derrubaria a
-        // migração inteira -- e onde NÃO é aplicada (medido: `PRAGMA
-        // foreign_keys` vem 0 na conexão SQLite desta suíte) gravaria um id
-        // pendurado, que é pior.
+        // Só organizações que ainda existem.
+        //
+        // Issue #293 -- desde que as chaves estrangeiras passaram a ser
+        // aplicadas também no SQLite, apagar uma organização apaga a
+        // governança em cascata, e este caso deixou de acontecer num banco
+        // novo. O ramo fica porque defende o que já existe no mundo: toda
+        // instalação SQLite anterior a #293 rodou sem as chaves, e há quem
+        // apague linha por SQL cru.
+        //
+        // E fica SEM GUARDA DE TESTE, de propósito declarado: o cenário não
+        // é reproduzível na suíte (o `RefreshDatabase` usa transação, e no
+        // SQLite `PRAGMA foreign_keys` é no-op dentro de uma). Dizer isso é
+        // melhor que um teste que parece proteger e não protege.
         $existentes = DB::table('organizations')->pluck('id')->map(fn ($id) => (int) $id)->all();
 
         $derivadas = 0;

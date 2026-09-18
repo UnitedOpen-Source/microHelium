@@ -30,14 +30,22 @@ class UserModelTest extends TestCase
      */
     public function testUserAttributesAreFillable(): void
     {
+        // Issue #293 -- prova e sede DE VERDADE, e nao os ids 1 e 1.
+        //
+        // Com as chaves estrangeiras aplicadas, cravar ids sem as linhas
+        // correspondentes e `FOREIGN KEY constraint failed`. O teste e sobre
+        // o `$fillable` aceitar os campos, e continua sendo -- so que agora
+        // sobre uma linha que poderia existir em producao.
+        $site = \App\Models\Site::factory()->create();
+
         $userData = [
             'fullname' => 'John Doe',
             'username' => 'johndoe',
             'email' => 'john@example.com',
             'password' => bcrypt('password123'),
             'user_type' => 'team',
-            'contest_id' => 1,
-            'site_id' => 1,
+            'contest_id' => $site->contest_id,
+            'site_id' => $site->id,
             'description' => 'Test user description',
             'is_enabled' => true,
         ];
@@ -48,8 +56,8 @@ class UserModelTest extends TestCase
         $this->assertEquals('johndoe', $user->username);
         $this->assertEquals('john@example.com', $user->email);
         $this->assertEquals('team', $user->user_type);
-        $this->assertEquals(1, $user->contest_id);
-        $this->assertEquals(1, $user->site_id);
+        $this->assertEquals($site->contest_id, $user->contest_id);
+        $this->assertEquals($site->id, $user->site_id);
         $this->assertEquals('Test user description', $user->description);
         $this->assertEquals(true, $user->is_enabled);
     }

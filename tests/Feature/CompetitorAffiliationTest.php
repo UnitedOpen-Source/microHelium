@@ -379,32 +379,27 @@ class CompetitorAffiliationTest extends TestCase
         );
     }
 
-    /**
-     * Linha de governanca apontando para organizacao que nao existe mais nao
-     * vira afiliacao pendurada.
+    /*
+     * Issue #293 -- o teste que existia aqui foi REMOVIDO, e vale dizer por
+     * que em vez de apagar em silencio.
+     *
+     * Ele verificava que a derivacao ignora linha de governanca cujo
+     * `organization_id` nao existe mais. Montava o cenario apagando a
+     * organizacao e contando com a linha sobreviver -- o que funcionava
+     * porque `PRAGMA foreign_keys` vinha 0 nesta suite.
+     *
+     * Com as chaves aplicadas, apagar a organizacao apaga a governanca em
+     * CASCATA, e o estado deixou de existir. Nao da para recriar: o
+     * `RefreshDatabase` envolve cada teste numa transacao, e no SQLite
+     * `PRAGMA foreign_keys` e no-op dentro de transacao.
+     *
+     * O ramo `skipped_missing_organization` em CompetitorAffiliationBackfill
+     * FICA -- defende as instalacoes que rodaram sem as chaves aplicadas,
+     * que ate este PR eram todas as de SQLite. Mas fica SEM GUARDA, e esta
+     * escrito la e aqui: um teste que nao consegue exercitar o ramo nao o
+     * protege, e fingir que protege e o modo de falha que este repositorio
+     * catalogou.
      */
-    public function test_the_backfill_skips_a_membership_whose_organization_is_gone(): void
-    {
-        $org = Organization::create(['name' => 'Sumiu']);
-        $equipe = $this->equipe('pendurada@example.com');
-
-        OrganizationMembership::create([
-            'organization_id' => $org->id,
-            'user_id' => $equipe->user_id,
-            'role' => OrganizationMembership::ROLE_EDITOR,
-        ]);
-
-        // As FKs nao sao aplicadas nesta conexao (PRAGMA foreign_keys = 0),
-        // entao a linha de governanca sobrevive a organizacao -- que e
-        // justamente o caso que a derivacao tem que ignorar.
-        $org->delete();
-
-        $resultado = app(CompetitorAffiliationBackfill::class)->run();
-
-        $this->assertSame(0, $resultado['derived']);
-        $this->assertSame(1, $resultado['skipped_missing_organization']);
-        $this->assertNull($equipe->fresh()->organization_id);
-    }
 
     private function admin(): User
     {
