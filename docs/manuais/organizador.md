@@ -274,6 +274,48 @@ ou baixando por `GET /api/frontend/contests/{contest}/icpc-report`.
 
 Prova de treino não tem classificação e não produz este relatório.
 
+### O pacote de resultados, para um ranking nacional
+
+```
+GET /api/frontend/contests/{contest}/results-bundle
+```
+
+Um ZIP com quatro arquivos, gerado **somente de prova finalizada**:
+
+| Arquivo | O que é |
+|---|---|
+| `manifest.json` | identidade da prova, datas, e o **SHA-256 de cada arquivo** |
+| `standings.json` | classificação, equipes, problemas e premiação, formato CLICS |
+| `standings.csv` | as cinco colunas do BOCA, inalteradas |
+| `organizations.json` | as instituições referenciadas |
+
+Dois consumidores num pacote só: a ferramenta que lê CLICS, e quem já espera o
+arquivo do BOCA.
+
+**Por que só de prova finalizada.** Exportar resultado provisório — com
+rejulgamento pendente, ou com o placar ainda congelado — envenena o agregado.
+A rota recusa com o motivo escrito, e não em silêncio.
+
+**A propriedade que torna o pacote confiável:** exportar a mesma prova duas
+vezes produz **os mesmos bytes**, exceto `generated_at`, que fica isolado num
+campo só do manifesto. O site nacional não precisa *confiar* no arquivo que
+recebeu — ele pede a reexportação e compara. Adulteração aparece como
+divergência, não como suspeita.
+
+> **O que o pacote leva de pessoal, e o que não leva.** A régua é: *não
+> exporta mais do que o placar público já mostra, mais a chave de agregação*.
+> O `icpc_id` da equipe **entra**, porque é o que torna a agregação possível.
+> Data de nascimento, e-mail e qualquer campo de privacidade de perfil (#47)
+> **não entram**, e há teste que varre o ZIP inteiro procurando por eles.
+
+Antes de enviar, confira `affiliations:report` (acima) — equipe sem instituição
+ou sem `icpc_id` entra no pacote sem a chave que o agregador usa, e o próprio
+`standings.json` lista quem ficou de fora em `teams_missing_icpc_id`.
+
+**Edição e fase** (em Configurações → editar contest) valem a pena preencher:
+uma regional e uma final nacional não são o mesmo tipo de evento no agregado, e
+o nome da prova sozinho não carrega essa distinção.
+
 ### As outras saídas
 
 | O quê | Onde |

@@ -134,6 +134,10 @@ class ClicsPresenter
     {
         return $contest->problems()
             ->where('is_fake', false)
+            // Issue #271 -- a ordem tem um nome, e mora em
+            // Problem::scopeInContestOrder(). Ver o docblock de la para por
+            // que `orderBy('sort_order')` sozinho nao bastava.
+            ->inContestOrder()
             ->get()
             ->values()
             ->map(fn (Problem $problem, int $index) => [
