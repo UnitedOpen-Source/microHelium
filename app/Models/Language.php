@@ -353,7 +353,41 @@ class Language extends Model
             // A etapa de COMPILACAO nao precisa da flag e por isso nao a
             // tem: `compile_max_file_kb` e 256 MiB, acima dos 64 MiB que a
             // BEAM estica -- e `erlc` nao aceita `+flags` de qualquer forma.
-            ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => true, 'category' => 'compiled'],
+            // Issue #339 -- DESATIVADAS ate o upstream publicar a correcao.
+            //
+            // A BEAM nao sobe de forma intermitente no juiz:
+            // `sys_signal_stack.c:101:sys_sigaltstack(): Internal error:
+            // Failed to set alternate signal stack`. A causa e estrutural e
+            // nao e nossa: a ERTS dimensiona a pilha alternativa de sinal com
+            // o `SIGSTKSZ` ESTATICO da musl (8192 em x86_64), e em CPU cujo
+            // kernel reporta `AT_MINSIGSTKSZ` maior -- AVX-512, AMX -- o
+            // `sigaltstack()` devolve ENOMEM e a ERTS aborta. Quem decide e a
+            // CPU do host, o que explica a intermitencia sem apelar para
+            // carga: um runner passa 20 partidas seguidas e o seguinte
+            // derruba quatro testes.
+            //
+            // Medido: em aarch64 a BEAM subiu 150 vezes sem falha, e o binario
+            // dali nem contem as strings do defeito (o arquivo so e compilado
+            // em build BEAMASM). No x86_64 do CI ela ja derrubou quatro testes
+            // em execucoes distintas -- inclusive bloqueando o PR da correcao
+            // de seguranca da #311, que nao tem relacao nenhuma com ela.
+            //
+            // Subir a versao NAO resolve, e isto foi medido e nao suposto: o
+            // Alpine 3.24 publica `erlang27` e `erlang28`, e
+            // `ss.ss_size = SIGSTKSZ` continua em OTP-27.3.4.17, OTP-28.5.0.6,
+            // OTP-28.6 e OTP-29.0. A correcao (`sysconf(_SC_MINSIGSTKSZ)`,
+            // erlang/otp#11376) existe SO no `master` do upstream -- nao ha
+            // release que a carregue.
+            //
+            // Desativar e reversivel; deixar ligado nao e. Linguagem
+            // intermitente e pior que linguagem ausente: ausente, a equipe nao
+            // a escolhe; intermitente, ela submete e recebe veredito de erro
+            // que nao e dela, com diagnostico que nao da para contestar. Os
+            // comandos ficam prontos -- basta virar `true` quando houver
+            // release com a correcao, e o
+            // `test_a_beam_sobe_vinte_vezes_seguidas_dentro_do_sandbox` (#345)
+            // e quem diz se ja da.
+            ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => false, 'category' => 'compiled'],
 
             // Issue #305 -- `elixirc` EXECUTA o codigo de nivel superior.
             // Medido: a "compilacao" do a+b morreu em
@@ -371,7 +405,7 @@ class Language extends Model
             // `ulimit -f` da etapa de execucao. Medido aqui tambem, com o
             // a+b: `ulimit -f 1024` sem a flag -> rc=153 e saida vazia; com
             // a flag -> imprime 8.
-            ['name' => 'Elixir 1.19', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixir -e \'Code.string_to_quoted!(File.read!("{source}"))\'', 'run_command' => 'elixir --erl \'+JMsingle true\' {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'Elixir 1.19', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixir -e \'Code.string_to_quoted!(File.read!("{source}"))\'', 'run_command' => 'elixir --erl \'+JMsingle true\' {source}', 'is_active' => false, 'category' => 'interpreted'],
             // Issue #305, Lote D -- Julia fica INATIVA, e o motivo e uma
             // medicao e nao uma suspeita.
             //
