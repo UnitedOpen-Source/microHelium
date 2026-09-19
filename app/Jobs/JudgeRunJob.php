@@ -42,8 +42,32 @@ class JudgeRunJob implements ShouldQueue, ShouldBeUnique
 
     public function handle(AutoJudgeService $judgeService, SandboxPreflight $preflight): void
     {
-        // Skip if already judged
-        if ($this->run->status === 'judged') {
+        // Issue #314 -- so `pending` e julgavel por aqui.
+        //
+        // Era `status === 'judged'`, e a guarda funcionava: o que estava
+        // incompleto era o conjunto de estados que ela reconhecia. Uma run
+        // em `judging` JA FOI REIVINDICADA -- por um judgehost remoto
+        // (`JudgeWorkQueue::claimNext()`) ou pelo daemon local
+        // (`claimNextLocally()`, #126), nos dois casos sob lock de linha --
+        // e passava reto por aqui para ser julgada uma segunda vez, em
+        // paralelo com a primeira. O `ShouldBeUnique` nao cobre isso: ele e
+        // por dispatch NA FILA, e nenhum dos dois caminhos de reivindicacao
+        // passa pela fila.
+        //
+        // Os dois julgamentos nem sempre concordam (#302 mediu imagens com
+        // conjuntos de linguagens diferentes; TLE discorda por disputa de
+        // CPU), e quem gravasse por ultimo ganhava -- sem nada no log
+        // dizendo que houve duas apuracoes.
+        //
+        // Isto estreita a janela, nao a fecha: a run pode mudar de estado
+        // DURANTE o julgamento. Quem fecha essa parte e a guarda de saida
+        // do `AutoJudgeService::recordVerdict()`, sob `lockForUpdate`.
+        //
+        // O watchdog do #45 continua recuperando run perdida: ele devolve a
+        // reivindicacao morta para `pending` ANTES de redespachar
+        // (`ReconcileStuckRunsCommand::releaseDeadClaim()`), que e a mesma
+        // coisa que `expireStaleLeases()` faz com a lease vencida.
+        if ($this->run->status !== 'pending') {
             return;
         }
 

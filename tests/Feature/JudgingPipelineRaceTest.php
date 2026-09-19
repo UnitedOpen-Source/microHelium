@@ -23,24 +23,26 @@ use Tests\TestCase;
 /**
  * As janelas do pipeline de julgamento: issues #312, #313 e #314.
  *
- * TODO TESTE AQUI PASSA DE PROPOSITO, E ISSO NAO E O MESMO QUE "esta
- * certo". Cada `test_janela_*` FIXA uma sequencia de estados que hoje e
- * alcancavel e que nao deveria ser. Quando a guarda correspondente
- * existir, e para ele FALHAR -- a falha e o sinal de que a issue fechou, e
- * a hora de inverter a asercao. Nao "conserte" um destes testes sem fechar
- * a issue que ele cita.
+ * ESTES TESTES FORAM INVERTIDOS. Ate o PR que fechou as tres issues, cada
+ * `test_janela_*` FIXAVA uma sequencia de estados alcancavel e errada, e o
+ * docblock mandava inverte-lo quando a guarda existisse. A guarda existe:
+ * cada teste agora afirma o OPOSTO do que afirmava, e e a guarda que ele
+ * mede. Quebrar uma delas faz o teste correspondente falhar -- foi assim
+ * que cada uma foi verificada, removendo a correcao e conferindo a falha.
  *
- * Cada janela vem acompanhada do seu CONTROLE POSITIVO: a mesma pergunta
- * feita a um componente que responde certo. Sem ele um teste verde nao
- * distingue "o mecanismo deixou passar" de "o teste nao estava medindo
- * nada" -- que e o modo de falha que este repositorio ja pagou caro.
+ * A regra continua valendo ao contrario: nao "conserte" um destes testes
+ * sem reabrir a issue que ele cita. Um deles ficar verde de novo com a
+ * guarda removida significa que ele parou de medir alguma coisa.
+ *
+ * Cada guarda vem acompanhada do seu CONTROLE POSITIVO, e agora eles sao de
+ * dois tipos: o que mostra que a guarda dispara e o que mostra que ela NAO
+ * come o caminho legitimo -- run pendente continua sendo julgada, e run
+ * genuinamente abandonada continua sendo recuperada pelo watchdog do #45.
+ * Uma guarda que so recusa nao seria correcao nenhuma.
  *
  * Nada aqui depende do sandbox: sao estados de linha e ordem de chamadas,
  * entao a suite mede o mesmo numa maquina sem bwrap e dentro do
  * Dockerfile.judge. Nenhum destes testes pula.
- *
- * As mutacoes que provam cada um estao escritas na issue correspondente,
- * na secao "Medicao".
  */
 class JudgingPipelineRaceTest extends TestCase
 {
@@ -68,21 +70,26 @@ class JudgingPipelineRaceTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // Issue #314 -- o caminho local nao olha para a reivindicacao
+    // Issue #314 -- o caminho local olha para a reivindicacao
     // ------------------------------------------------------------------
 
     /**
-     * Issue #314, guarda de ENTRADA.
+     * Issue #314, guarda de ENTRADA. INVERTIDO: antes media que o job da
+     * fila julgava de novo uma run ja reivindicada.
      *
-     * `JudgeRunJob::handle()` so recusa `status === 'judged'`. Um run em
-     * `judging` -- ja reivindicado, sob lock de linha, por um judgehost
-     * remoto (`JudgeWorkQueue::claimNext()`) ou pelo daemon local
-     * (`claimNextLocally()`, #126) -- passa reto e e julgado de novo.
+     * `JudgeRunJob::handle()` recusava apenas `status === 'judged'`, entao
+     * uma run em `judging` -- ja reivindicada, sob lock de linha, por um
+     * judgehost remoto (`JudgeWorkQueue::claimNext()`) ou pelo daemon local
+     * (`claimNextLocally()`, #126) -- passava reto e era julgada em
+     * paralelo com quem a segurava. O `ShouldBeUnique` do job nao cobre
+     * isto: ele e por dispatch na fila, e nenhum dos dois caminhos de
+     * reivindicacao passa pela fila.
      *
-     * O `ShouldBeUnique` do job nao cobre isto: ele e por dispatch na
-     * fila, e nenhum dos dois caminhos de reivindicacao passa pela fila.
+     * A guarda passou a ser `status !== 'pending'`. E a reivindicacao
+     * sobrevive ao job: a run continua `judging`, continua com o mesmo
+     * judgehost, e quem a esta julgando nao foi atrapalhado.
      */
-    public function test_janela_job_da_fila_julga_run_ja_reivindicado_por_judgehost(): void
+    public function test_job_da_fila_recusa_run_ja_reivindicada_por_judgehost(): void
     {
         [$host] = Judgehost::issue('judge-01');
         $run = $this->pendingRun();
@@ -96,15 +103,16 @@ class JudgingPipelineRaceTest extends TestCase
 
         (new JudgeRunJob($run->fresh()))->handle($julgados['service'], $this->permissivePreflight());
 
-        $this->assertSame(1, $julgados['calls']->count, 'o job da fila julgou um run que ja estava reivindicado');
+        $this->assertSame(0, $julgados['calls']->count, 'o job da fila julgou um run que ja estava reivindicado');
+
+        $run->refresh();
+        $this->assertSame('judging', $run->status, 'a reivindicacao de quem segura a run tem de sobreviver ao job');
+        $this->assertSame($host->id, (int) $run->judgehost_id);
     }
 
     /**
-     * CONTROLE POSITIVO do teste acima: a guarda existe e dispara.
-     *
-     * E o que torna o resultado conclusivo -- nao e o job que esta
-     * quebrado, e o conjunto de estados que ele reconhece que esta
-     * incompleto.
+     * CONTROLE POSITIVO da guarda acima: ela dispara, e ja disparava, para
+     * a run ja julgada.
      */
     public function test_controle_positivo_job_da_fila_recusa_run_ja_julgado(): void
     {
@@ -118,24 +126,44 @@ class JudgingPipelineRaceTest extends TestCase
         $this->assertSame(0, $julgados['calls']->count, 'a guarda de "ja julgado" existe e funciona');
     }
 
+    /**
+     * CONTROLE POSITIVO do outro lado, e o que impede a guarda de virar
+     * "nunca julga": a run PENDENTE -- o unico estado de onde o job tem de
+     * julgar -- continua sendo julgada.
+     */
+    public function test_controle_positivo_job_da_fila_julga_run_pendente(): void
+    {
+        $run = $this->pendingRun();
+
+        $julgados = $this->countingJudge();
+
+        (new JudgeRunJob($run->fresh()))->handle($julgados['service'], $this->permissivePreflight());
+
+        $this->assertSame(1, $julgados['calls']->count, 'a guarda nao pode recusar o caminho normal');
+    }
+
     // ------------------------------------------------------------------
-    // Issue #312 -- o watchdog nao olha para a lease
+    // Issue #312 -- o watchdog olha para a reivindicacao
     // ------------------------------------------------------------------
 
     /**
-     * Issue #312.
+     * Issue #312. INVERTIDO: antes media que o watchdog gastava a tentativa
+     * de uma run que um judgehost estava julgando naquele instante.
      *
-     * `Run::isOverdue()` mede `created_at -> now()` e nunca le
-     * `claimed_at`, entao um run que um judgehost esta julgando AGORA,
-     * com a lease renovada pelo heartbeat (#124), entra no escopo do
-     * watchdog e gasta a tentativa.
+     * `Run::isOverdue()` media `created_at -> now()` e nunca lia
+     * `claimed_at`, entao uma run reivindicada AGORA, com a lease renovada
+     * pelo heartbeat (#124), entrava no escopo do watchdog so por ter sido
+     * enviada ha muito tempo -- que e o caso normal de fila represada
+     * (#199).
      *
-     * CONTROLE POSITIVO embutido: `expireStaleLeases()` devolve 0 sobre a
-     * MESMA linha, no mesmo instante. A informacao que distingue "maquina
-     * morta" de "maquina trabalhando" esta na linha e ja e lida
-     * corretamente por outro componente.
+     * Agora `Run::waitingSince()` mede, em `judging`, desde a
+     * reivindicacao. CONTROLE POSITIVO embutido, o mesmo de sempre:
+     * `expireStaleLeases()` devolve 0 sobre a MESMA linha, no mesmo
+     * instante -- a informacao que distingue "maquina morta" de "maquina
+     * trabalhando" esta na linha e ja era lida corretamente por outro
+     * componente. Agora os dois concordam.
      */
-    public function test_janela_watchdog_redespacha_run_com_lease_viva(): void
+    public function test_watchdog_nao_toca_run_com_lease_viva(): void
     {
         Bus::fake();
 
@@ -152,20 +180,61 @@ class JudgingPipelineRaceTest extends TestCase
 
         $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
 
-        Bus::assertDispatched(JudgeRunJob::class, fn ($job) => $job->run->is($run));
-        $this->assertSame(1, $run->fresh()->reconcile_attempts);
+        Bus::assertNotDispatched(JudgeRunJob::class);
+
+        $run->refresh();
+        $this->assertSame(0, $run->reconcile_attempts, 'a tentativa unica do #45 nao pode ser gasta com julgamento vivo');
+        $this->assertSame('judging', $run->status);
+        $this->assertSame($host->id, (int) $run->judgehost_id);
+        $this->assertNotNull($run->claim_token);
     }
 
     /**
-     * Issue #312, a consequencia: a equipe recebe `CS` num envio que foi
-     * julgado corretamente.
+     * CONTROLE POSITIVO do #312, e o teste que impede a correcao de virar
+     * "o watchdog desiste de desistir".
      *
-     * Percorre o caminho inteiro por HTTP -- o judgehost busca trabalho,
-     * o watchdog desiste, o veredito real chega. O 409 no fim e o segundo
-     * CONTROLE POSITIVO: ele prova que o host tinha um claim valido e um
-     * veredito para entregar, e que o servidor o recusou.
+     * A MESMA run, com a MESMA idade de envio, mas reivindicada ha 1000 s e
+     * sem nenhum sinal desde entao: e isso que "maquina que sumiu" quer
+     * dizer, porque o heartbeat (#124) renova `claimed_at` enquanto a
+     * maquina vive. O watchdog continua recuperando -- e devolve a
+     * reivindicacao morta para `pending` antes de redespachar, senao a
+     * guarda de entrada do #314 receberia a run em `judging` e o
+     * redespacho seria um no-op.
      */
-    public function test_janela_watchdog_marca_cs_julgamento_vivo_e_descarta_o_veredito_real(): void
+    public function test_controle_positivo_watchdog_ainda_recupera_run_abandonada(): void
+    {
+        Bus::fake();
+
+        [$host] = Judgehost::issue('judge-01');
+        $run = $this->pendingRun();
+        $run->forceFill(['created_at' => now()->subSeconds(1000)])->save();
+
+        app(JudgeWorkQueue::class)->claimNext($host);
+        $run->forceFill(['claimed_at' => now()->subSeconds(1000)])->save();
+
+        $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
+
+        Bus::assertDispatched(JudgeRunJob::class, fn ($job) => $job->run->is($run));
+
+        $run->refresh();
+        $this->assertSame(1, $run->reconcile_attempts);
+        $this->assertSame('pending', $run->status, 'a reivindicacao morta tem de ser devolvida antes do redespacho');
+        $this->assertNull($run->judgehost_id);
+        $this->assertNull($run->claimed_at);
+        $this->assertNull($run->claim_token);
+    }
+
+    /**
+     * Issue #312, a consequencia. INVERTIDO: antes media que a equipe
+     * recebia `CS` num envio julgado corretamente e que o veredito real era
+     * recusado com 409.
+     *
+     * Percorre o caminho inteiro por HTTP -- o judgehost busca trabalho, o
+     * watchdog roda, o veredito chega. Agora o watchdog nao encerra nada, e
+     * o 200 no fim e o controle positivo pelo avesso: o host tinha um claim
+     * valido e um veredito para entregar, e o veredito ENTRA.
+     */
+    public function test_watchdog_nao_marca_cs_em_julgamento_vivo_e_o_veredito_real_e_aceito(): void
     {
         [$host, $token] = Judgehost::issue('judge-01');
         $run = $this->pendingRun();
@@ -180,38 +249,44 @@ class JudgingPipelineRaceTest extends TestCase
         $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
 
         $run->refresh();
-        $this->assertSame('judged', $run->status);
-        $this->assertSame('CS', $run->answer->short_name);
+        $this->assertSame('judging', $run->status, 'o watchdog encerrou um julgamento vivo');
+        $this->assertNull($run->answer_id);
 
-        // O veredito de verdade chega logo depois e e recusado.
+        // O veredito de verdade chega logo depois e e aceito.
         $this->postJson("/api/remote-judges/v1/runs/{$run->id}/result", ['verdict' => 'AC'], [
             'Authorization' => 'Bearer '.$token,
             'X-Claim-Token' => $payload['claim_token'],
-        ])->assertStatus(409);
+        ])->assertOk();
 
-        $this->assertSame('CS', $run->fresh()->answer->short_name);
+        $this->assertSame('AC', $run->fresh()->answer->short_name);
     }
 
     // ------------------------------------------------------------------
-    // Issue #313 -- a tentativa e contada, nao executada
+    // Issue #313 -- a tentativa so e gasta quando acontece
     // ------------------------------------------------------------------
 
     /**
-     * Issue #313.
+     * Issue #313. INVERTIDO: antes media que a tentativa era contada com o
+     * dispatch engolido pelo lock de unicidade.
      *
-     * O watchdog incrementa `reconcile_attempts` e chama
+     * O watchdog incrementava `reconcile_attempts` e chamava
      * `JudgeRunJob::dispatch()` sem nunca verificar se alguma coisa foi
-     * enfileirada. Com o lock de unicidade tomado -- worker morto por
-     * SIGKILL antes de `CallQueuedHandler` libera-lo, ou a segunda
-     * passada caindo dentro dos 300 s do `uniqueFor` -- o Laravel
-     * descarta o dispatch em silencio, e cinco minutos depois o
-     * `giveUp()` encerra o run como `CS`.
+     * enfileirada. Com o lock tomado -- worker morto por SIGKILL antes de o
+     * `CallQueuedHandler` libera-lo, ou a segunda passada caindo dentro dos
+     * 300 s do `uniqueFor` -- o Laravel descarta o dispatch em silencio, e
+     * cinco minutos depois o `giveUp()` encerrava a run como `CS`. A
+     * recuperacao prometida pelo #45 era contada, nao executada.
      *
-     * O lock e tomado aqui com a chave real, `UniqueLock::getKey()`, e
-     * nao com uma string escrita a mao: uma chave errada faria este teste
+     * O dispatch continua sendo engolido: isso e o Laravel, e esta certo. O
+     * que mudou e que o comando agora SABE, escutando `UniqueJobSkipped`, e
+     * nao gasta a tentativa. Lock tomado quer dizer que existe um job desta
+     * run em algum lugar -- argumento para esperar, nao para desistir.
+     *
+     * O lock e tomado aqui com a chave real, `UniqueLock::getKey()`, e nao
+     * com uma string escrita a mao: uma chave errada faria este teste
      * passar pelo motivo errado.
      */
-    public function test_janela_lock_orfao_engole_o_redespacho_do_watchdog(): void
+    public function test_lock_orfao_nao_gasta_a_tentativa_do_watchdog(): void
     {
         Bus::fake();
 
@@ -224,12 +299,22 @@ class JudgingPipelineRaceTest extends TestCase
         $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
 
         Bus::assertNotDispatched(JudgeRunJob::class);
-        $this->assertSame(1, $run->fresh()->reconcile_attempts);
+        $this->assertSame(0, $run->fresh()->reconcile_attempts, 'tentativa contada sem nada ter sido enfileirado');
+
+        // E a consequencia que a issue descreve nao acontece mais: a
+        // passada seguinte, com o lock ainda tomado, nao encerra a run como
+        // `CS` -- porque nenhuma tentativa chegou a ser gasta.
+        $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
+
+        $run->refresh();
+        $this->assertSame('pending', $run->status);
+        $this->assertNull($run->answer_id);
     }
 
     /**
      * CONTROLE POSITIVO do teste acima: a unica diferenca entre os dois
-     * cenarios e o lock. Sem ele, o mesmo run atrasado e redespachado.
+     * cenarios e o lock. Sem ele, a mesma run atrasada e redespachada e a
+     * tentativa e gasta -- que e o comportamento do #45 e continua inteiro.
      */
     public function test_controle_positivo_sem_lock_o_watchdog_redespacha(): void
     {
@@ -241,28 +326,30 @@ class JudgingPipelineRaceTest extends TestCase
         $this->artisan('runs:reconcile-stuck')->assertExitCode(0);
 
         Bus::assertDispatched(JudgeRunJob::class);
+        $this->assertSame(1, $run->fresh()->reconcile_attempts);
     }
 
     // ------------------------------------------------------------------
-    // Issue #314 -- o caminho local grava sem olhar o que ja esta la
+    // Issue #314 -- o caminho local olha o que ja esta la antes de gravar
     // ------------------------------------------------------------------
 
     /**
-     * Issue #314, guarda de SAIDA.
+     * Issue #314, guarda de SAIDA. INVERTIDO: antes media que o veredito
+     * automatico sobrescrevia o veredito manual da banca.
      *
-     * `AutoJudgeService::recordVerdict()` grava sem checar status, sem
-     * `lockForUpdate` e sem token de claim. Um julgamento que comecou
-     * antes sobrescreve o veredito que a banca deu a mao enquanto ele
-     * rodava -- e `verified_at`/`judge_id` sobrevivem, entao o run passa
-     * a exibir um veredito automatico assinado por quem nunca o viu.
+     * `AutoJudgeService::recordVerdict()` gravava sem checar status, sem
+     * `lockForUpdate` e sem token de claim. Um julgamento que comecou antes
+     * sobrescrevia o veredito que a banca deu a mao enquanto ele rodava --
+     * e `verified_at`/`judge_id` sobreviviam, entao a run passava a exibir
+     * um veredito automatico assinado por quem nunca o viu.
      *
-     * O CONTROLE POSITIVO deste esta no
-     * `test_janela_watchdog_marca_cs_...` acima: o MESMO relatorio
-     * atrasado, chegando pelo `ResultController`, e recusado com 409 sob
-     * lock de linha. A guarda existe, e a certa, e esta escrita no
-     * docblock daquele controller (#123). So que so no caminho HTTP.
+     * A guarda nao e nova: e a do `ResultController` (#123), que rele a
+     * linha sob lock e recusa o que nao esta mais em `judging`. Ela so nao
+     * estava no caminho local. Agora esta no ponto por onde todo julgamento
+     * passa (#87), e o relatorio atrasado -- local ou HTTP -- encontra a
+     * mesma recusa.
      */
-    public function test_janela_veredito_local_sobrescreve_veredito_manual_do_juri(): void
+    public function test_veredito_local_nao_sobrescreve_veredito_manual_do_juri(): void
     {
         $run = $this->pendingRun();
         app(JudgeWorkQueue::class)->claimNextLocally();
@@ -287,9 +374,85 @@ class JudgingPipelineRaceTest extends TestCase
         ]);
 
         $run->refresh();
-        $this->assertSame('AC', $run->answer->short_name);
+        $this->assertSame('WA', $run->answer->short_name, 'o veredito da banca foi sobrescrito por um julgamento automatico');
         $this->assertNotNull($run->verified_at);
         $this->assertSame($juri->user_id, $run->judge_id);
+        $this->assertSame($juri->user_id, $run->verified_by);
+    }
+
+    /**
+     * Issue #314, a guarda de SAIDA pelo outro caminho de escrita.
+     *
+     * `handleJudgingError()` grava `CS` quando o julgamento explode, e
+     * gravava com a mesma liberdade que o `recordVerdict()` tinha. A perda
+     * e identica -- e por um caminho que nem sequer apurou nada: o veredito
+     * da banca some e e trocado por "erro de julgamento".
+     *
+     * A interleaving e reproduzida no lugar exato em que ela acontece: a
+     * banca decide DURANTE o `executeJudging()`, e a falha da maquina chega
+     * depois. Nada aqui depende de temporizacao; e a ordem das chamadas.
+     */
+    public function test_erro_de_julgamento_nao_sobrescreve_veredito_manual_do_juri(): void
+    {
+        $run = $this->pendingRun();
+        app(JudgeWorkQueue::class)->claimNextLocally();
+        $run->refresh();
+        $this->assertSame('judging', $run->status);
+
+        $juri = User::factory()->create(['contest_id' => $this->contest->id, 'user_type' => 'judge']);
+        $wa = Answer::where('contest_id', $this->contest->id)->where('short_name', 'WA')->first();
+
+        $service = new class($juri, $wa) extends AutoJudgeService
+        {
+            public function __construct(private User $juri, private Answer $wa)
+            {
+                parent::__construct();
+            }
+
+            protected function executeJudging(Run $run): array
+            {
+                // A banca julga a mao enquanto este julgamento roda.
+                $run->update([
+                    'status' => 'judged',
+                    'answer_id' => $this->wa->id,
+                    'judge_id' => $this->juri->user_id,
+                    'judged_time' => 120,
+                    'verified_at' => now(),
+                    'verified_by' => $this->juri->user_id,
+                ]);
+
+                throw new \RuntimeException('a maquina de julgamento caiu no meio');
+            }
+        };
+
+        $service->judge($run);
+
+        $run->refresh();
+        $this->assertSame('WA', $run->answer->short_name, 'o veredito da banca virou CS por uma falha de infraestrutura');
+        $this->assertSame($juri->user_id, $run->judge_id);
+        $this->assertNotNull($run->verified_at);
+    }
+
+    /**
+     * CONTROLE POSITIVO da guarda de saida, e o que impede que ela vire
+     * "nunca grava": a run que AINDA esta em `judging` -- o estado em que
+     * todo julgamento legitimo termina -- recebe o veredito normalmente.
+     */
+    public function test_controle_positivo_veredito_local_grava_em_run_ainda_em_julgamento(): void
+    {
+        $run = $this->pendingRun();
+        app(JudgeWorkQueue::class)->claimNextLocally();
+        $run->refresh();
+        $this->assertSame('judging', $run->status);
+
+        app(AutoJudgeService::class)->recordVerdict($run, [
+            'verdict' => 'AC',
+            'message' => 'Accepted',
+        ]);
+
+        $run->refresh();
+        $this->assertSame('judged', $run->status);
+        $this->assertSame('AC', $run->answer->short_name);
     }
 
     // ------------------------------------------------------------------
