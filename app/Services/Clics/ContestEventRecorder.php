@@ -5,7 +5,6 @@ namespace App\Services\Clics;
 use App\Models\Contest;
 use App\Models\ContestEvent;
 use App\Models\Run;
-use App\Services\FrozenScoreboard;
 
 /**
  * Issue #219 -- escreve no log o que o event feed vai contar.
@@ -28,7 +27,7 @@ use App\Services\FrozenScoreboard;
  */
 class ContestEventRecorder
 {
-    public function __construct(private ClicsPresenter $presenter) {}
+    public function __construct(private ClicsPresenter $presenter, private FreezeWindow $freeze) {}
 
     /**
      * Um envio novo.
@@ -114,14 +113,24 @@ class ContestEventRecorder
         ]);
     }
 
+    /**
+     * Issue #319 -- o corte da SEDE do run, e nao o da prova.
+     *
+     * A decisao e gravada POR EVENTO, olhando o tempo de prova daquele run,
+     * e nao por instante absoluto -- esta linha ja era assim. O que faltava
+     * era ela perguntar a sede: uma sede de janela mais curta ja tinha
+     * congelado e via a ultima hora inteira dela saindo no feed enquanto
+     * ainda competia.
+     *
+     * Por isso este caminho NAO precisa de instante unico nenhum, e nem de
+     * `site_id` no evento: a pergunta e respondida na gravacao, com o run em
+     * maos, e a resposta vale para todo observador -- o congelamento esconde
+     * de TODOS, e o descongelamento e do contest inteiro
+     * (`contests.unfrozen_at`). Um `site_id` na linha de `contest_events`
+     * seria uma coluna sem leitor.
+     */
     private function isAfterFreeze(Contest $contest, Run $run): bool
     {
-        $freezeMinutes = (int) ($contest->getAttributes()['freeze_time'] ?? 0);
-
-        if ($freezeMinutes <= 0) {
-            return false;
-        }
-
-        return (int) $run->contest_time >= FrozenScoreboard::cutoffSeconds($contest);
+        return $this->freeze->covers($contest, $run);
     }
 }
