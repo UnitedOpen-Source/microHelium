@@ -1,0 +1,26 @@
+#!/bin/sh
+# Issue #305 -- a etapa de COMPILACAO de Clojure: le o programa inteiro sem
+# avaliar nada.
+#
+# O catalogo trazia `clojure -M --main clojure.main --eval "(compile 'main)"`,
+# que nunca foi exercitado e nao funciona por dois motivos medidos:
+# `compile` exige `*compile-path*` apontando para um diretorio existente no
+# classpath (sem isso: NullPointerException em clojure.main), e exige que o
+# arquivo declare um namespace chamado `main` -- coisa que uma submissao
+# solta de `a+b` nao tem.
+#
+# Pior que nao funcionar: `compile` AVALIA o codigo de nivel superior. Uma
+# etapa de compilacao que executa o programa consome a entrada e produz
+# saida, e o juiz compara a saida da EXECUCAO -- foi exatamente esse o
+# defeito que a #269 achou no console do Portugol Studio.
+#
+# `read` percorre todas as formas do arquivo e para na primeira que nao
+# fecha. E uma checagem de LEITOR, nao de tipos -- Clojure nao tem
+# verificacao estatica para oferecer -- e e o mesmo nivel do `bash -n`.
+exec java -cp /usr/share/clojure/clojure.jar clojure.main -e "
+(let [arquivo \"$1\"
+      leitor (clojure.lang.LineNumberingPushbackReader. (java.io.FileReader. arquivo))]
+  (loop []
+    (let [forma (read {:eof ::fim :read-cond :allow} leitor)]
+      (when-not (= forma ::fim) (recur)))))
+"

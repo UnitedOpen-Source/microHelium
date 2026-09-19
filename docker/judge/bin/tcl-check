@@ -1,0 +1,26 @@
+#!/bin/sh
+# Issue #305 -- a etapa de COMPILACAO de Tcl.
+#
+# O catalogo trazia `tclsh {source} 2>&1`, que EXECUTA o programa. Medido:
+# com o a+b de teste a "compilacao" morreu com
+#
+#   can't use empty string as operand of "+"
+#
+# porque rodou o programa sem entrada nenhuma. Uma etapa de compilacao que
+# executa o programa consome a entrada e produz saida -- o mesmo defeito
+# que a #269 achou no console do Portugol Studio, e que aqui transformaria
+# qualquer solucao correta em erro de compilacao.
+#
+# Tcl nao tem compilador para oferecer: tudo e resolvido em tempo de
+# execucao. O que da para checar sem executar e se o script esta COMPLETO
+# -- chaves, colchetes e aspas fechados --, que e o que `info complete`
+# responde, e e o mesmo nivel de garantia do `bash -n`.
+exec tclsh <<TCL
+set canal [open {$1} r]
+set codigo [read \$canal]
+close \$canal
+if {![info complete \$codigo]} {
+    puts stderr "erro de sintaxe: o script termina no meio de um comando (chave, colchete ou aspas sem fechar)"
+    exit 1
+}
+TCL

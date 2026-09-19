@@ -163,7 +163,70 @@ RUN apk add --no-cache \
     # Memory limiting
     util-linux \
     # Bash for scripts -- tambem a linguagem `sh` do catalogo (#305)
-    bash=5.3.9-r1
+    bash=5.3.9-r1 \
+    # -----------------------------------------------------------------
+    # Issue #305, Lote C -- linguagens cujo toolchain o Alpine publica.
+    #
+    # Tudo aqui foi COMPILADO E EXECUTADO num `a+b` dentro do sandbox
+    # antes de entrar, e o programa quebrado correspondente foi rodado
+    # para conferir que a etapa de compilacao falha (varios
+    # `compile_command` do catalogo executavam o programa em vez de
+    # analisa-lo -- ver os comentarios em Language::getDefaultLanguages).
+    # Versao fixada pelo criterio de sempre: isto compila e executa
+    # codigo de competidor.
+    #
+    # Custo em disco medido com `apk add --simulate` sobre a linha de
+    # base de 2380,6 MiB desta imagem, nesta arquitetura (aarch64).
+    #
+    # Interpretadores leves (+7 MiB). `lua5.4` instala `lua5.4`/
+    # `luac5.4`, sem link sem sufixo -- e por isso que o catalogo mudou
+    # de `lua` para `lua5.4`.
+    lua5.4=5.4.8-r0 \
+    gawk=5.3.2-r2 \
+    tcl=8.6.17-r1 \
+    # Clojure (+19 MiB). O pacote traz um clojure.jar completo; a CLI
+    # `clojure` nao serve porque resolve dependencia na rede a cada
+    # partida (ver docker/judge/bin/clojure-run).
+    clojure=1.12.5-r0 \
+    # R (+69 MiB)
+    R=4.6.0-r0 \
+    # BEAM (+86 MiB pelos dois)
+    elixir=1.19.6-r0 \
+    erlang27=27.3.4.17-r0 \
+    # Fortran e Ada (+201 MiB pelos dois; sao front-ends do mesmo GCC
+    # 15.2.0 ja instalado acima, e a versao acompanha a dele)
+    gfortran=15.2.0-r5 \
+    gcc-gnat=15.2.0-r5 \
+    # Lisp e Scheme (+292 MiB pelos quatro)
+    sbcl=2.6.5-r0 \
+    clisp=2.49.95_git250727-r1 \
+    guile=3.0.9-r2 \
+    racket=9.2-r0 \
+    # Sistemas modernos (+562 MiB pelos quatro; o grosso e o LLVM que
+    # ldc e crystal arrastam)
+    zig=0.16.0-r1 \
+    nim=2.2.0-r0 \
+    crystal=1.20.3-r0 \
+    ldc=1.42.0-r0 \
+    # OCaml (+160 MiB)
+    ocaml=4.14.3-r0 \
+    # Haskell (+1442 MiB) -- e o item mais caro do lote, sozinho maior
+    # que a imagem inteira antes dele, porque o GHC arrasta llvm16 e
+    # clang16 proprios. Fica porque Haskell e linguagem de maratona de
+    # verdade e a alternativa seria oferece-la sem poder julga-la; quem
+    # precisar de imagem menor tira esta linha e a entrada `hs`.
+    ghc=9.10.3-r2
+
+
+# Issue #305 -- os invocadores das linguagens cujo comando de compilacao
+# nao cabe numa linha de catalogo (Clojure, Racket, Tcl).
+#
+# Nomes proprios, e nao `java -cp ...`/`racket -e ...` escritos no
+# catalogo, pela mesma razao do `scratch-run` e do `portugol-studio`: o
+# roteamento por capacidade olha o PRIMEIRO TOKEN do comando, e um
+# comando comecando em `java` faria toda maquina com JDK anunciar que
+# sabe julgar Clojure.
+COPY --chmod=755 docker/judge/bin/ /usr/local/bin/
 
 # Issue #303 -- versao fixada tambem aqui.
 #
