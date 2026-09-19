@@ -25,6 +25,7 @@ class SimilarityLanguageMap
         'cpp14_gpp' => 'cpp',
         'cpp17_gpp' => 'cpp',
         'cpp_clang' => 'cpp',
+        'java25' => 'java',
         'java21' => 'java',
         'java17' => 'java',
         'py3' => 'python3',
