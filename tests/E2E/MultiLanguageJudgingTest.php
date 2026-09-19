@@ -55,6 +55,40 @@ class MultiLanguageJudgingTest extends TestCase
      */
     private const LIMITES_POR_LINGUAGEM = [
         'portugol_studio' => 30,
+
+        // Issue #305, Lote C -- o limite padrao do problema e 1 SEGUNDO DE
+        // CPU, e ele vale para a PARTIDA do runtime tambem, nao so para a
+        // conta. Sao duas as linguagens deste lote que nao cabem nele, e as
+        // duas gastam o tempo antes de ler a entrada. Medido nesta imagem,
+        // sob os mesmos limites da etapa de execucao (`ulimit -f 32768`),
+        // tres partidas cada:
+        //
+        //     clj   1,73 e 1,78 s de CPU    (JVM + carregar o clojure.jar)
+        //     r     1,03 / 0,99 / 0,91 s    (em cima do limite, as tres)
+        //
+        // O `r` e o caso que mostra por que isto nao e frouxidao: ele passa
+        // ou nao passa conforme a carga da maquina no segundo em que rodar,
+        // e um veredito que depende disso nao e um veredito.
+        //
+        // A BEAM NAO esta nesta lista, e isso foi medido e nao suposto. Uma
+        // versao anterior deste patch dava 10 s a `erl` e a `ex` alegando
+        // ate 6,2 s de parede; a parede era consequencia de um defeito, nao
+        // da linguagem. O que matava as duas era o `ulimit -f`, nao o
+        // tempo: a maquina virtual nem subia (ver o `+JMsingle true` no
+        // catalogo). Com aquilo corrigido, medido igual:
+        //
+        //     erl   0,29 s de CPU, 1,19 s de parede
+        //     ex    0,55 s de CPU, 0,33 s de parede
+        //
+        // ou seja, dentro de 1 s de CPU e muito abaixo do corte de
+        // seguranca de parede do juiz (limite + 5 s). Deixa-las aqui
+        // esconderia justamente a regressao que a flag evita: um `erl` que
+        // voltasse a nao subir passaria despercebido sob 10 s de folga.
+        //
+        // De novo `problem_language_limits`, e nao o limite do problema:
+        // afrouxar o problema daria mais tempo a TODAS as linguagens.
+        'clj' => 10,
+        'r' => 10,
     ];
 
     public static function activeLanguages(): array
@@ -114,6 +148,47 @@ class MultiLanguageJudgingTest extends TestCase
             // "verde contra mecanismo que nao pode funcionar" que este
             // repositorio ja conhece.
             'sed' => ['file' => 'solution.sed', 'source' => "s/3 5/8/\n"],
+
+            // Issue #305, Lote C -- linguagens cujo toolchain o Alpine
+            // publica. Cada uma destas fontes foi compilada e executada
+            // dentro do sandbox antes de a entrada virar `is_active`, e o
+            // programa quebrado equivalente foi rodado para conferir que a
+            // etapa de compilacao FALHA (varios `compile_command` do
+            // catalogo executavam o programa em vez de analisa-lo).
+            'lua' => ['file' => 'solution.lua', 'source' => "local a, b = io.read(\"n\", \"n\")\nprint(a + b)\n"],
+            'awk' => ['file' => 'solution.awk', 'source' => "{ print \$1 + \$2 }\n"],
+            'tcl' => ['file' => 'solution.tcl', 'source' => "lassign [split [string trim [gets stdin]]] a b\nputs [expr {\$a + \$b}]\n"],
+            'clj' => ['file' => 'solution.clj', 'source' => "(let [[a b] (map read-string (clojure.string/split (clojure.string/trim (read-line)) #\"\\s+\"))]\n  (println (+ a b)))\n"],
+            'r' => ['file' => 'solution.r', 'source' => "x <- scan(\"stdin\", n = 2, quiet = TRUE)\ncat(x[1] + x[2], \"\\n\", sep = \"\")\n"],
+            'ex' => ['file' => 'solution.ex', 'source' => "[a, b] = IO.read(:line) |> String.split() |> Enum.map(&String.to_integer/1)\nIO.puts(a + b)\n"],
+            // Erlang exige que o modulo tenha o nome do arquivo, e o
+            // `run_command` chama `{classname}:main/0` -- ou seja, esta
+            // fonte so funciona salva como `solution.erl`. E a mesma regra
+            // do `Main.java` acima, e esta no manual do organizador.
+            'erl' => ['file' => 'solution.erl', 'source' => "-module(solution).\n-export([main/0]).\nmain() ->\n    {ok, [A, B]} = io:fread(\"\", \"~d ~d\"),\n    io:format(\"~p~n\", [A + B]).\n"],
+            'f90' => ['file' => 'solution.f90', 'source' => "program solucao\n  integer :: a, b\n  read(*,*) a, b\n  write(*,'(I0)') a + b\nend program solucao\n"],
+            // Formato FIXO: as seis colunas em branco no inicio de cada
+            // linha nao sao estilo, sao o F77. E o que `-std=legacy`
+            // aceita e o gfortran moderno recusaria.
+            'f77' => ['file' => 'solution.f', 'source' => "      PROGRAM SOL\n      INTEGER A, B\n      READ(*,*) A, B\n      WRITE(*,'(I0)') A + B\n      END\n"],
+            // `procedure Solution` e nao `Main`: em Ada o nome da unidade
+            // tem de casar com o nome do arquivo.
+            'adb' => ['file' => 'solution.adb', 'source' => "with Ada.Text_IO; use Ada.Text_IO;\nwith Ada.Integer_Text_IO; use Ada.Integer_Text_IO;\nprocedure Solution is\n   A, B : Integer;\nbegin\n   Get (A);\n   Get (B);\n   Put (A + B, Width => 0);\n   New_Line;\nend Solution;\n"],
+            'lisp_sbcl' => ['file' => 'solution.lisp', 'source' => "(let ((a (read)) (b (read)))\n  (format t \"~a~%\" (+ a b)))\n"],
+            'lisp_clisp' => ['file' => 'solution.lisp', 'source' => "(let ((a (read)) (b (read)))\n  (format t \"~a~%\" (+ a b)))\n"],
+            'scm' => ['file' => 'solution.scm', 'source' => "(let* ((a (read)) (b (read)))\n  (display (+ a b))\n  (newline))\n"],
+            'rkt' => ['file' => 'solution.rkt', 'source' => "#lang racket\n(define a (read))\n(define b (read))\n(displayln (+ a b))\n"],
+            // Zig 0.16: `std.fs.File` e `std.io.getStdOut()` nao existem
+            // mais, e `std.posix` desta versao exporta `read` mas nao
+            // `write`. A saida sai pela interface nova `std.Io`, com um
+            // executor explicito -- medido nesta imagem, as duas tentativas
+            // anteriores nem compilaram.
+            'zig' => ['file' => 'solution.zig', 'source' => "const std = @import(\"std\");\npub fn main() !void {\n    var buf: [256]u8 = undefined;\n    const n = try std.posix.read(0, &buf);\n    var it = std.mem.tokenizeAny(u8, buf[0..n], \" \\t\\r\\n\");\n    const a = try std.fmt.parseInt(i64, it.next().?, 10);\n    const b = try std.fmt.parseInt(i64, it.next().?, 10);\n    var saida: [64]u8 = undefined;\n    const s = try std.fmt.bufPrint(&saida, \"{d}\\n\", .{a + b});\n    var io: std.Io.Threaded = .init_single_threaded;\n    defer io.deinit();\n    try std.Io.File.stdout().writeStreamingAll(io.io(), s);\n}\n"],
+            'nim' => ['file' => 'solution.nim', 'source' => "import std/strutils\nlet p = stdin.readLine().splitWhitespace()\necho parseInt(p[0]) + parseInt(p[1])\n"],
+            'cr' => ['file' => 'solution.cr', 'source' => "a, b = gets.not_nil!.split.map(&.to_i)\nputs a + b\n"],
+            'd_ldc' => ['file' => 'solution.d', 'source' => "import std.stdio;\nvoid main() {\n    int a, b;\n    readf(\" %d %d\", &a, &b);\n    writeln(a + b);\n}\n"],
+            'hs' => ['file' => 'solution.hs', 'source' => "main :: IO ()\nmain = do\n  l <- getLine\n  let [a, b] = map read (words l) :: [Integer]\n  print (a + b)\n"],
+            'ml' => ['file' => 'solution.ml', 'source' => "let () = Scanf.scanf \" %d %d\" (fun a b -> Printf.printf \"%d\\n\" (a + b))\n"],
             // Issue #268 -- o unico caso cuja fonte e BINARIA: um `.sb3` e
             // um ZIP. Montado por codigo em Tests\Support\ScratchProject
             // para o programa julgado ser legivel na revisao -- um blob de

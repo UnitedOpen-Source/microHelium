@@ -1,0 +1,26 @@
+#!/bin/sh
+# Issue #305 -- Clojure executado pelo JAR, e nao pela CLI `clojure`.
+#
+# A CLI do Alpine (`/usr/bin/clojure`) e o tools.deps: a cada partida ela
+# RESOLVE dependencias no Maven Central. Medido dentro do sandbox do juiz
+# (bwrap --unshare-all, ou seja sem rede e com HOME apontando para o
+# diretorio do run):
+#
+#   Error building classpath. Failed to read artifact descriptor for
+#   org.clojure:clojure:jar:1.12.5
+#
+# Nao adianta pre-aquecer o cache na construcao da imagem: ele mora em
+# $HOME/.m2 e $HOME/.clojure, e o sandbox troca o HOME por um diretorio
+# novo a cada submissao. E nao da para exportar CLJ_CACHE, porque o bwrap
+# roda com --clearenv.
+#
+# O pacote do Alpine ja traz `/usr/share/clojure/clojure.jar` COMPLETO
+# (contem spec.alpha e core.specs.alpha -- medido: 263 entradas), entao
+# chamar `clojure.main` direto resolve tudo isso e roda offline.
+#
+# Este invocador existe em vez de um `java -cp ...` no catalogo pelo mesmo
+# motivo do `scratch-run` e do `portugol-studio`: o roteamento por
+# capacidade (`MachineCapabilities::executableOf()`) olha o PRIMEIRO TOKEN
+# do comando, e um comando comecando em `java` anunciaria a capacidade
+# "java" -- toda maquina com JDK diria saber julgar Clojure.
+exec java -cp /usr/share/clojure/clojure.jar clojure.main "$@"
