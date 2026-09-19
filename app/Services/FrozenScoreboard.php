@@ -50,12 +50,15 @@ class FrozenScoreboard
         //
         // Memoizado por sede porque a pergunta e feita uma vez por run, e
         // sao milhares numa regional; a resposta so depende da sede.
+        // `runs.site_id` e NAO-NULO no banco (`foreignId('site_id')->constrained()`,
+        // sem `->nullable()`), entao todo run tem sede e nao ha ramo de
+        // ausencia a tratar aqui. A versao anterior testava `!== null` e caia
+        // num `?? 0`: codigo morto, e o PHPStan reprovou.
         $cutoffCache = [];
         $cutoffOf = function (Run $run) use ($contest, &$cutoffCache): int {
-            $siteId = $run->site_id !== null ? (int) $run->site_id : null;
-            $key = $siteId ?? 0;
+            $siteId = (int) $run->site_id;
 
-            return $cutoffCache[$key] ??= self::cutoffSeconds($contest, $siteId);
+            return $cutoffCache[$siteId] ??= self::cutoffSeconds($contest, $siteId);
         };
 
         // A MESMA porta que Score::recomputeFor() usa. Um veredito retido
