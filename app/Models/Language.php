@@ -166,7 +166,28 @@ class Language extends Model
             ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Scala 3', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala {classname}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Groovy 4', 'extension' => 'groovy', 'file_ext' => 'groovy', 'compile_command' => 'groovyc {source}', 'run_command' => 'groovy {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Clojure', 'extension' => 'clj', 'file_ext' => 'clj', 'compile_command' => 'clojure -M --main clojure.main --eval "(compile \'main)"', 'run_command' => 'clojure {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305, Lote C -- Clojure pelo JAR, e nao pela CLI.
+            //
+            // Os dois comandos anteriores nunca foram exercitados, e nenhum
+            // dos dois funciona. Medido dentro do sandbox:
+            //
+            //   `clojure -M ... (compile 'main)` -> NullPointerException:
+            //       `compile` exige `*compile-path*` num diretorio do
+            //       classpath e um namespace chamado `main`, que uma
+            //       submissao solta nao tem. E `compile` AVALIA o programa,
+            //       o que uma etapa de compilacao nao pode fazer.
+            //   `clojure {source}`               -> "Error building
+            //       classpath ... org.clojure:clojure:jar:1.12.5": a CLI e o
+            //       tools.deps, e resolve dependencia no Maven Central a
+            //       cada partida. O sandbox nao tem rede, e troca o HOME por
+            //       um diretorio novo, entao nenhum cache pre-aquecido
+            //       sobrevive.
+            //
+            // Os dois invocadores da imagem (docker/judge/bin/) chamam o
+            // `clojure.jar` que o proprio pacote do Alpine ja traz, que roda
+            // offline. Nomes proprios, e nao `java -cp ...`, porque o
+            // roteamento por capacidade olha o primeiro token do comando.
+            ['name' => 'Clojure 1.12', 'extension' => 'clj', 'file_ext' => 'clj', 'compile_command' => 'clojure-check {source}', 'run_command' => 'clojure-run {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // .NET Languages
             // `dotnet build`/`dotnet run` need a project, not a bare .cs
@@ -185,42 +206,152 @@ class Language extends Model
             ['name' => 'Rust (1.96)', 'extension' => 'rs', 'file_ext' => 'rs', 'compile_command' => 'rustc -O -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Go (1.26)', 'extension' => 'go', 'file_ext' => 'go', 'compile_command' => 'go build -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'D (DMD)', 'extension' => 'd_dmd', 'file_ext' => 'd', 'compile_command' => 'dmd -of={output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'D (LDC)', 'extension' => 'd_ldc', 'file_ext' => 'd', 'compile_command' => 'ldc2 -of={output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Nim', 'extension' => 'nim', 'file_ext' => 'nim', 'compile_command' => 'nim c -o:{output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Zig', 'extension' => 'zig', 'file_ext' => 'zig', 'compile_command' => 'zig build-exe {source} -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            ['name' => 'D (LDC 1.42)', 'extension' => 'd_ldc', 'file_ext' => 'd', 'compile_command' => 'ldc2 -of={output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Nim 2.2', 'extension' => 'nim', 'file_ext' => 'nim', 'compile_command' => 'nim c -o:{output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            // Issue #305 -- `-o` nao existe no `zig build-exe`. Medido:
+            // "error: unrecognized parameter: '-o'". Quem nomeia o binario e
+            // `-femit-bin=`; sem ele o Zig batiza a saida com o nome do
+            // arquivo raiz, o que por acidente daria certo neste pipeline e
+            // erraria em qualquer problema com script de compilacao proprio.
+            ['name' => 'Zig 0.16', 'extension' => 'zig', 'file_ext' => 'zig', 'compile_command' => 'zig build-exe -femit-bin={output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
             // Scripting Languages
             ['name' => 'PHP 8.3', 'extension' => 'php', 'file_ext' => 'php', 'compile_command' => 'php -l {source}', 'run_command' => 'php {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Ruby 3.4', 'extension' => 'rb', 'file_ext' => 'rb', 'compile_command' => 'ruby -c {source}', 'run_command' => 'ruby {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Perl 5', 'extension' => 'perl', 'file_ext' => 'pl', 'compile_command' => 'perl -c {source}', 'run_command' => 'perl {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'Lua 5.4', 'extension' => 'lua', 'file_ext' => 'lua', 'compile_command' => 'luac -p {source}', 'run_command' => 'lua {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305 -- `lua` e `luac` NAO existem no Alpine. O pacote
+            // `lua5.4` instala `/usr/bin/lua5.4` e `/usr/bin/luac5.4`, e nao
+            // ha link sem sufixo: os comandos anteriores dariam "command not
+            // found" na primeira submissao. O nome ja dizia 5.4 e continua
+            // verdadeiro (lua 5.4.8).
+            ['name' => 'Lua 5.4', 'extension' => 'lua', 'file_ext' => 'lua', 'compile_command' => 'luac5.4 -p {source}', 'run_command' => 'lua5.4 {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Bash', 'extension' => 'sh', 'file_ext' => 'sh', 'compile_command' => 'bash -n {source}', 'run_command' => 'bash {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'AWK (GAWK)', 'extension' => 'awk', 'file_ext' => 'awk', 'compile_command' => 'gawk --lint -f {source} /dev/null 2>&1', 'run_command' => 'gawk -f {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305 -- `-o/dev/null` e o que torna esta uma etapa de
+            // COMPILACAO. O comando anterior (`gawk --lint -f {source}
+            // /dev/null`) analisa o programa mas tambem o EXECUTA, com
+            // /dev/null no lugar da entrada: um BEGIN que imprimisse alguma
+            // coisa imprimiria ali. `-o` (--pretty-print) faz o gawk so
+            // analisar e despejar o programa formatado, sem rodar -- medido
+            // com um BEGIN que imprime, e ele nao imprimiu.
+            ['name' => 'AWK (GAWK 5.3)', 'extension' => 'awk', 'file_ext' => 'awk', 'compile_command' => 'gawk --lint -o/dev/null -f {source}', 'run_command' => 'gawk -f {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Sed', 'extension' => 'sed', 'file_ext' => 'sed', 'compile_command' => 'sed -n "q" {source}', 'run_command' => 'sed -f {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // Functional Languages
-            ['name' => 'Haskell (GHC)', 'extension' => 'hs', 'file_ext' => 'hs', 'compile_command' => 'ghc -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'OCaml', 'extension' => 'ml', 'file_ext' => 'ml', 'compile_command' => 'ocamlopt -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Erlang', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl -noshell -s main start -s init stop', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Elixir', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixirc {source}', 'run_command' => 'elixir {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'Haskell (GHC 9.10)', 'extension' => 'hs', 'file_ext' => 'hs', 'compile_command' => 'ghc -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'OCaml 4.14', 'extension' => 'ml', 'file_ext' => 'ml', 'compile_command' => 'ocamlopt -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+
+            // Issue #305 -- o run_command anterior nao podia funcionar para
+            // ninguem: `-s main start` manda a BEAM chamar `main:start()`,
+            // ou seja um modulo chamado LITERALMENTE `main`. O modulo de
+            // Erlang tem de ter o nome do arquivo, e o arquivo aqui e o que
+            // a equipe enviou -- `solution.erl` compila para o modulo
+            // `solution`, e `main:start()` nao existe.
+            //
+            // `{classname}` e o basename do arquivo enviado, o mesmo
+            // substituto que as entradas de Java usam, e `-pa .` poe o
+            // diretorio do run no caminho de codigo para achar o .beam que
+            // o `erlc` acabou de gerar. A convencao passa a ser `main/0`,
+            // como em quase todo juiz que aceita Erlang.
+            //
+            // Sem `-noinput`, de proposito: medido, com ele o `io:fread`
+            // fica bloqueado para sempre e o julgamento so termina no
+            // estouro do tempo.
+            //
+            // `+JMsingle true` e o irmao do `DOTNET_EnableWriteXorExecute 0`
+            // que o AutoJudgeService ja passa, e pela mesma razao. O JIT da
+            // BEAM (BeamAsm, OTP 25+) mapeia a memoria executavel DUAS vezes
+            // a partir de um memfd que ele estica para 64 MiB, e o
+            // `ulimit -f` vale para esse ftruncate. O limite de arquivo da
+            // etapa de execucao e `run_max_file_kb`, 32 MiB -- ou seja,
+            // metade. Medido nesta imagem, com o a+b abaixo:
+            //
+            //     ulimit -f 24576 .. 57344  ->  rc=153 (SIGXFSZ), saida vazia
+            //     ulimit -f 65536           ->  rc=0, imprime 8
+            //     +JMsingle true, -f 1024   ->  rc=0, imprime 8
+            //
+            // Sem isto a BEAM nao SOBE, e toda submissao de Erlang viraria
+            // "Runtime Error (output size limit exceeded)" -- um veredito
+            // sobre o tamanho da saida num programa que nunca imprimiu nada.
+            // `+JMsingle true` pede um mapeamento unico (rwx) em vez de
+            // dois; e a saida documentada para container, e o custo e so o
+            // endurecimento W^X do proprio JIT, que aqui ja esta dentro do
+            // bwrap.
+            //
+            // A etapa de COMPILACAO nao precisa da flag e por isso nao a
+            // tem: `compile_max_file_kb` e 256 MiB, acima dos 64 MiB que a
+            // BEAM estica -- e `erlc` nao aceita `+flags` de qualquer forma.
+            ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => true, 'category' => 'compiled'],
+
+            // Issue #305 -- `elixirc` EXECUTA o codigo de nivel superior.
+            // Medido: a "compilacao" do a+b morreu em
+            // `:binary.split(:eof, ...)`, porque rodou o programa sem
+            // entrada. Etapa de compilacao que executa o programa consome a
+            // entrada e produz saida -- o defeito que a #269 achou no
+            // console do Portugol Studio.
+            //
+            // `Code.string_to_quoted!/1` faz a analise sintatica e devolve a
+            // arvore, sem avaliar nada.
+            //
+            // `--erl '+JMsingle true'` e a mesma flag da entrada de Erlang
+            // acima (o Elixir e a mesma BEAM), repassada pelo `--erl`. Ver
+            // la a medicao: sem ela a maquina virtual nao sobe sob o
+            // `ulimit -f` da etapa de execucao. Medido aqui tambem, com o
+            // a+b: `ulimit -f 1024` sem a flag -> rc=153 e saida vazia; com
+            // a flag -> imprime 8.
+            ['name' => 'Elixir 1.19', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixir -e \'Code.string_to_quoted!(File.read!("{source}"))\'', 'run_command' => 'elixir --erl \'+JMsingle true\' {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Julia', 'extension' => 'jl', 'file_ext' => 'jl', 'compile_command' => 'julia --compile=min {source} 2>&1', 'run_command' => 'julia {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'R', 'extension' => 'r', 'file_ext' => 'r', 'compile_command' => 'Rscript --vanilla -e "parse(\'{source}\')"', 'run_command' => 'Rscript --vanilla {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'R 4.6', 'extension' => 'r', 'file_ext' => 'r', 'compile_command' => 'Rscript --vanilla -e "parse(\'{source}\')"', 'run_command' => 'Rscript --vanilla {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // Lisp Family
-            ['name' => 'Common Lisp (SBCL)', 'extension' => 'lisp_sbcl', 'file_ext' => 'lisp', 'compile_command' => 'sbcl --noinform --non-interactive --load {source}', 'run_command' => 'sbcl --script {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Common Lisp (CLISP)', 'extension' => 'lisp_clisp', 'file_ext' => 'lisp', 'compile_command' => 'clisp -c {source}', 'run_command' => 'clisp {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Scheme (Guile)', 'extension' => 'scm', 'file_ext' => 'scm', 'compile_command' => 'guild compile {source}', 'run_command' => 'guile {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Racket', 'extension' => 'rkt', 'file_ext' => 'rkt', 'compile_command' => 'raco make {source}', 'run_command' => 'racket {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305 -- `--load` CARREGA, ou seja executa. Medido: a
+            // "compilacao" do a+b morreu com END-OF-FILE lendo a entrada
+            // padrao -- prova direta de que a etapa de compilacao estava
+            // consumindo a entrada do problema.
+            //
+            // `compile-file` compila sem avaliar o corpo. E o `when f` nao e
+            // enfeite: medido, `compile-file` sai com codigo 0 mesmo depois
+            // de "caught ERROR: READ error during COMPILE-FILE". Sem olhar o
+            // terceiro valor de retorno (failure-p), um programa que nao
+            // compila passaria da compilacao e viraria WA.
+            ['name' => 'Common Lisp (SBCL 2.6)', 'extension' => 'lisp_sbcl', 'file_ext' => 'lisp', 'compile_command' => 'sbcl --noinform --non-interactive --eval \'(multiple-value-bind (o w f) (compile-file "{source}") (declare (ignore o w)) (when f (sb-ext:exit :code 1)))\'', 'run_command' => 'sbcl --script {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'Common Lisp (CLISP 2.49)', 'extension' => 'lisp_clisp', 'file_ext' => 'lisp', 'compile_command' => 'clisp -c {source}', 'run_command' => 'clisp {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'Scheme (Guile 3.0)', 'extension' => 'scm', 'file_ext' => 'scm', 'compile_command' => 'guild compile {source}', 'run_command' => 'guile {source}', 'is_active' => true, 'category' => 'interpreted'],
+            // Issue #305 -- `raco make` nao existe nesta imagem: mora em
+            // `compiler-lib`, que o Alpine nao empacota. Medido:
+            // "/usr/bin/raco: Unrecognized command: make". O invocador
+            // `racket-check` (docker/judge/bin/) expande o modulo, que pega
+            // erro de sintaxe e identificador nao ligado sem rodar o corpo.
+            ['name' => 'Racket 9.2', 'extension' => 'rkt', 'file_ext' => 'rkt', 'compile_command' => 'racket-check {source}', 'run_command' => 'racket {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // Pascal/Delphi
             ['name' => 'Pascal (FPC)', 'extension' => 'pas_fpc', 'file_ext' => 'pas', 'compile_command' => 'fpc -O2 -o{output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Pascal (GPC)', 'extension' => 'pas_gpc', 'file_ext' => 'pas', 'compile_command' => 'gpc -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
             // Fortran
-            ['name' => 'Fortran (GFortran)', 'extension' => 'f90', 'file_ext' => 'f90', 'compile_command' => 'gfortran -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Fortran 77', 'extension' => 'f77', 'file_ext' => 'f', 'compile_command' => 'gfortran -std=legacy -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            // Issue #305 -- as duas entradas sao o MESMO gfortran, e o que
+            // muda e o dialeto (`-std=legacy` aceita o formato fixo de
+            // coluna do F77). O nome passa a dizer a versao do compilador ao
+            // lado do padrao da linguagem: "77" e o padrao, "15" e o
+            // gfortran -- e e o segundo que o ToolchainVersionsMatchCatalog
+            // confere.
+            ['name' => 'Fortran (GFortran 15)', 'extension' => 'f90', 'file_ext' => 'f90', 'compile_command' => 'gfortran -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Fortran 77 (GFortran 15)', 'extension' => 'f77', 'file_ext' => 'f', 'compile_command' => 'gfortran -std=legacy -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
-            // Assembly
+            // Assembly -- issue #305: o `nasm` do Alpine INSTALA nesta
+            // maquina e mesmo assim as duas entradas ficam inativas, e isso
+            // e o exemplo mais limpo de "binario presente nao e
+            // capacidade" (#302).
+            //
+            // NASM e um montador de x86. Numa maquina aarch64 ele monta e o
+            // `ld` recusa, medido:
+            //
+            //   ld: unknown architecture of input file `solution.o' is
+            //       incompatible with aarch64 output
+            //
+            // E mesmo que ligasse, o binario x86 nao executaria aqui. Como o
+            // catalogo e um so para todas as maquinas de julgamento, liga-lo
+            // ofereceria a linguagem tambem onde ela nao pode rodar. Fica
+            // para quando o catalogo souber falar de arquitetura.
             ['name' => 'Assembly x64 (NASM)', 'extension' => 'asm64', 'file_ext' => 'asm', 'compile_command' => 'nasm -f elf64 {source} -o {output}.o && ld {output}.o -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Assembly x86 (NASM)', 'extension' => 'asm32', 'file_ext' => 'asm', 'compile_command' => 'nasm -f elf32 {source} -o {output}.o && ld -m elf_i386 {output}.o -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
@@ -230,14 +361,33 @@ class Language extends Model
 
             // Other Modern Languages
             ['name' => 'Dart', 'extension' => 'dart', 'file_ext' => 'dart', 'compile_command' => 'dart compile exe {source} -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Crystal', 'extension' => 'cr', 'file_ext' => 'cr', 'compile_command' => 'crystal build {source} -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            ['name' => 'Crystal 1.20', 'extension' => 'cr', 'file_ext' => 'cr', 'compile_command' => 'crystal build {source} -o {output}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'V', 'extension' => 'vlang', 'file_ext' => 'v', 'compile_command' => 'v -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
             // Logic/Prolog
             ['name' => 'Prolog (SWI)', 'extension' => 'prolog_swi', 'file_ext' => 'pl', 'compile_command' => 'swipl -g "halt" -l {source}', 'run_command' => 'swipl -g "main,halt" -l {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Prolog (GNU)', 'extension' => 'prolog_gnu', 'file_ext' => 'pro', 'compile_command' => 'gplc {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
-            // Database/Query
+            // Database/Query -- issue #305: o `sqlite3` cabe na imagem por
+            // menos de 1 MiB e mesmo assim esta entrada fica inativa, por
+            // duas medicoes.
+            //
+            // 1. O `run_command` abaixo nao pode funcionar como esta: o juiz
+            //    acrescenta ` < {arquivo de entrada}` ao comando, e um
+            //    segundo redirecionamento de entrada vence o primeiro. O
+            //    sqlite receberia a ENTRADA DO PROBLEMA como programa e
+            //    nunca leria o `.sql` enviado.
+            // 2. Pior, nao existe etapa de compilacao honesta: o sqlite nao
+            //    tem modo "so analise". `sqlite3 :memory: ".read {source}"`
+            //    EXECUTA o script -- medido, sai 0 tendo rodado tudo. Uma
+            //    compilacao que executa o programa consome a entrada e
+            //    produz saida, que e o defeito que a #269 achou no console
+            //    do Portugol Studio.
+            //
+            // Ha caminho (`-init {source}` com `.import /dev/stdin`, medido
+            // imprimindo 8), mas ele exige decidir COMO um problema entrega
+            // dados a uma submissao SQL -- decisao de formato de problema,
+            // nao de toolchain. Fica para uma issue propria.
             ['name' => 'SQL (SQLite)', 'extension' => 'sql', 'file_ext' => 'sql', 'compile_command' => 'sqlite3 :memory: ".read {source}" 2>&1', 'run_command' => 'sqlite3 :memory: < {source}', 'is_active' => false, 'category' => 'interpreted'],
 
             // Esoteric Languages
@@ -251,12 +401,27 @@ class Language extends Model
             ['name' => 'CoffeeScript', 'extension' => 'coffee', 'file_ext' => 'coffee', 'compile_command' => 'coffee -c {source}', 'run_command' => 'coffee {source}', 'is_active' => false, 'category' => 'interpreted'],
 
             // Other
-            ['name' => 'Ada (GNAT)', 'extension' => 'adb', 'file_ext' => 'adb', 'compile_command' => 'gnatmake -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            // Issue #305 -- Ada exige que o nome do arquivo case com o nome
+            // da unidade: `solution.adb` tem de conter `procedure
+            // Solution`. Nao e coisa do juiz, e da linguagem; esta anotado
+            // no manual do organizador ao lado da regra equivalente de Java.
+            ['name' => 'Ada (GNAT 15)', 'extension' => 'adb', 'file_ext' => 'adb', 'compile_command' => 'gnatmake -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'COBOL', 'extension' => 'cob', 'file_ext' => 'cob', 'compile_command' => 'cobc -x -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Icon', 'extension' => 'icn', 'file_ext' => 'icn', 'compile_command' => 'icont -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Pike', 'extension' => 'pike', 'file_ext' => 'pike', 'compile_command' => 'pike -e "compile_file(\"{source}\")"', 'run_command' => 'pike {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Smalltalk (GST)', 'extension' => 'st', 'file_ext' => 'st', 'compile_command' => 'gst --quiet {source} 2>&1', 'run_command' => 'gst {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Tcl', 'extension' => 'tcl', 'file_ext' => 'tcl', 'compile_command' => 'tclsh {source} 2>&1', 'run_command' => 'tclsh {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305 -- o `compile_command` anterior era o proprio
+            // interpretador: `tclsh {source}` EXECUTA o programa. Medido, a
+            // "compilacao" do a+b falhou com "can't use empty string as
+            // operand of +", porque rodou sem entrada -- toda solucao
+            // correta viraria erro de compilacao.
+            //
+            // Tcl nao tem compilador para oferecer; `tcl-check`
+            // (docker/judge/bin/) usa `info complete`, que responde se o
+            // script fecha chaves, colchetes e aspas. E o mesmo nivel de
+            // garantia do `bash -n` que a entrada `sh` ja usa, e o nome sem
+            // numero de versao e deliberado: nada aqui promete uma versao.
+            ['name' => 'Tcl', 'extension' => 'tcl', 'file_ext' => 'tcl', 'compile_command' => 'tcl-check {source}', 'run_command' => 'tclsh {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Forth (GForth)', 'extension' => 'forth', 'file_ext' => 'fs', 'compile_command' => 'gforth {source} -e bye', 'run_command' => 'gforth {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'BC', 'extension' => 'bc', 'file_ext' => 'bc', 'compile_command' => 'bc -l {source} < /dev/null', 'run_command' => 'bc -l {source}', 'is_active' => false, 'category' => 'interpreted'],
         ];

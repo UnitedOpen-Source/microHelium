@@ -65,6 +65,31 @@ RUN apk add --no-cache \
     rust=1.96.1-r0 \
     ruby=3.4.9-r0 \
     perl=5.42.2-r0 \
+    # Issue #305, Lote C -- o mesmo conjunto do Dockerfile.judge, onde
+    # cada um destes foi compilado e executado num `a+b` dentro do
+    # sandbox antes de ser ligado no catalogo. A lista das duas imagens
+    # tem de andar junta: esta serve o caminho de julgamento pela fila, e
+    # uma linguagem ativa que so existisse numa das duas falharia
+    # dependendo de qual worker pegasse a submissao (#302).
+    lua5.4=5.4.8-r0 \
+    gawk=5.3.2-r2 \
+    tcl=8.6.17-r1 \
+    clojure=1.12.5-r0 \
+    R=4.6.0-r0 \
+    elixir=1.19.6-r0 \
+    erlang27=27.3.4.17-r0 \
+    gfortran=15.2.0-r5 \
+    gcc-gnat=15.2.0-r5 \
+    sbcl=2.6.5-r0 \
+    clisp=2.49.95_git250727-r1 \
+    guile=3.0.9-r2 \
+    racket=9.2-r0 \
+    zig=0.16.0-r1 \
+    nim=2.2.0-r0 \
+    crystal=1.20.3-r0 \
+    ldc=1.42.0-r0 \
+    ocaml=4.14.3-r0 \
+    ghc=9.10.3-r2 \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
     bash=5.3.9-r1 \
@@ -73,6 +98,11 @@ RUN apk add --no-cache \
     # --no-new-privs; --reuid/--regid are util-linux's. Dockerfile.judge
     # installs this package for the same reason.
     util-linux
+
+# Issue #305 -- os invocadores de Clojure, Racket e Tcl, iguais aos do
+# Dockerfile.judge. Ver o comentario la para por que eles tem nome proprio
+# em vez de serem um `java -cp ...` escrito no catalogo.
+COPY --chmod=755 docker/judge/bin/ /usr/local/bin/
 
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
 ARG TYPESCRIPT_VERSION=7.0.2
