@@ -40,7 +40,23 @@ class FrozenScoreboard
      */
     public static function rows(Contest $contest): array
     {
-        $cutoff = self::cutoffSeconds($contest);
+        // Issue #319 -- o corte e uma funcao do run, e nao um numero.
+        //
+        // O #276 ligou duracao e congelamento proprios por sede e
+        // `ContestClock` passou a responder corretamente QUANDO cada sede
+        // congela. O corte, que decide O QUE o placar esconde, continuou
+        // global: uma sede com janela mais curta ja tinha congelado e tinha
+        // a ultima hora inteira dela no telao, enquanto ainda competia.
+        //
+        // Memoizado por sede porque a pergunta e feita uma vez por run, e
+        // sao milhares numa regional; a resposta so depende da sede.
+        $cutoffCache = [];
+        $cutoffOf = function (Run $run) use ($contest, &$cutoffCache): int {
+            $siteId = $run->site_id !== null ? (int) $run->site_id : null;
+            $key = $siteId ?? 0;
+
+            return $cutoffCache[$key] ??= self::cutoffSeconds($contest, $siteId);
+        };
 
         // A MESMA porta que Score::recomputeFor() usa. Um veredito retido
         // da equipe (#138) tambem nao pode ser contado para ela aqui.
@@ -52,7 +68,9 @@ class FrozenScoreboard
         // leaderboard, e aqui seriam duas.
         $runs = Run::query()
             ->where('contest_id', $contest->id)
-            ->with(['answer:id,is_accepted', 'problem:id,short_name'])
+            // `counts_as_attempt` no select da relacao nao e opcional:
+            // Run::countsTowardsScore() o exige (#321).
+            ->with(['answer:id,is_accepted,counts_as_attempt', 'problem:id,short_name'])
             ->orderBy('contest_time')
             ->orderBy('id')
             ->get()
@@ -68,7 +86,7 @@ class FrozenScoreboard
         $rows = [];
 
         foreach (ScoreboardTeams::forContest($contest) as $userId => $user) {
-            $rows[] = self::row($user, $runs->get($userId, collect()), $cutoff, $gated, $penalty, $secondsOf);
+            $rows[] = self::row($user, $runs->get($userId, collect()), $cutoffOf, $gated, $penalty, $secondsOf);
         }
 
         return ScoreboardRanking::apply(self::markFirstSolvers($rows));
@@ -80,26 +98,39 @@ class FrozenScoreboard
      * `freeze_time` na coluna e "minutos antes do fim" (o acessor do modelo
      * devolve o instante absoluto, que nao serve para comparar com
      * contest_time, que e em segundos desde o inicio).
+     *
+     * Issue #319 -- com sede, a janela DELA.
+     *
+     * `$siteId` e opcional e o `null` devolve exatamente o numero de antes
+     * (`ContestClock` cai no contest para os dois valores quando nao ha
+     * sede), o que mantem os tres chamadores CLICS funcionando como hoje.
+     * Eles decidem por instante absoluto ou por run sem saber de sede, e
+     * mudar isso e outra conversa -- registrada na issue; aqui o que se
+     * conserta e o placar, que e quem revela.
      */
-    public static function cutoffSeconds(Contest $contest): int
+    public static function cutoffSeconds(Contest $contest, ?int $siteId = null): int
     {
-        $freezeMinutes = (int) ($contest->getAttributes()['freeze_time'] ?? 0);
+        $clock = app(ContestClock::class);
 
-        return max(0, ((int) $contest->duration - $freezeMinutes) * 60);
+        $duration = $clock->durationMinutesFor($contest, $siteId);
+        $freezeMinutes = $clock->freezeMinutesFor($contest, $siteId);
+
+        return max(0, ($duration - $freezeMinutes) * 60);
     }
 
     /**
      * @param  Collection<int, Run>  $teamRuns
      * @return array<string, mixed>
      */
-    private static function row(User $user, Collection $teamRuns, int $cutoff, bool $gated, int $penalty, callable $secondsOf): array
+    private static function row(User $user, Collection $teamRuns, callable $cutoffOf, bool $gated, int $penalty, callable $secondsOf): array
     {
         $problems = [];
         $solved = 0;
         $totalTime = 0;
+        $lastSolvedTime = 0;
 
         foreach ($teamRuns->groupBy('problem_id') as $problemId => $attempts) {
-            $cell = self::cell($attempts, $cutoff, $gated, $penalty, $secondsOf);
+            $cell = self::cell($attempts, $cutoffOf, $gated, $penalty, $secondsOf);
 
             if ($cell['attempts'] === 0 && $cell['pending'] === 0) {
                 continue;
@@ -108,6 +139,12 @@ class FrozenScoreboard
             if ($cell['is_solved']) {
                 $solved++;
                 $totalTime += $cell['solved_time'] + $cell['penalty_time'];
+                // Issue #316 -- o terceiro criterio: o minuto do ultimo AC,
+                // sem penalidade. Calculado do que o congelamento MOSTRA,
+                // como todo o resto desta linha; um AC escondido nao pode
+                // desempatar o placar publico, ou o desempate seria a
+                // revelacao.
+                $lastSolvedTime = max($lastSolvedTime, (int) $cell['solved_time']);
             }
 
             $problems[] = ['problem_id' => (int) $problemId] + $cell;
@@ -116,17 +153,19 @@ class FrozenScoreboard
         return [
             'rank' => 0,
             'user' => $user,
+            'user_id' => (int) $user->user_id,
             'problems_solved' => $solved,
             'total_time' => $totalTime,
+            'last_solved_time' => $lastSolvedTime,
             'problems' => collect($problems),
         ];
     }
 
     /**
      * @param  Collection<int, Run>  $attempts
-     * @return array{short_name: ?string, attempts: int, is_solved: bool, is_first_solver: bool, solved_time: int, penalty_time: int, pending: int}
+     * @return array{short_name: ?string, attempts: int, is_solved: bool, is_first_solver: bool, solved_time: int, penalty_time: int, pending: int, first_solve_key: ?array{0: int, 1: int}}
      */
-    private static function cell(Collection $attempts, int $cutoff, bool $gated, int $penalty, callable $secondsOf): array
+    private static function cell(Collection $attempts, callable $cutoffOf, bool $gated, int $penalty, callable $secondsOf): array
     {
         // Issue #198 -- o corte e comparado em tempo AJUSTADO.
         //
@@ -135,14 +174,15 @@ class FrozenScoreboard
         // CONTA, e nao de relogio de parede. Comparar cru deixaria o
         // congelamento comecar cedo demais por exatamente o tanto que foi
         // removido.
+        // Issue #319 -- o corte da SEDE do run, e nao o da prova.
         $visible = $attempts->filter(
-            fn (Run $run) => $secondsOf($run) < $cutoff
+            fn (Run $run) => $secondsOf($run) < $cutoffOf($run)
         );
 
+        // Issue #321 -- a mesma regra do placar ao vivo, perguntada ao run
+        // em vez de ao banco. Estava reescrita por extenso aqui.
         $countable = $visible->filter(
-            fn (Run $run) => $run->status === 'judged'
-                && $run->answer_id !== null
-                && (! $gated || $run->verified_at !== null)
+            fn (Run $run) => $run->countsTowardsScore($gated)
         );
 
         $cell = Score::reduceCell($countable, $penalty, $secondsOf);
@@ -163,6 +203,15 @@ class FrozenScoreboard
             'solved_time' => $cell['solved_time'],
             'penalty_time' => $cell['penalty_time'],
             'pending' => $pending,
+            // Issue #317 -- a chave de comparacao do "primeiro a resolver",
+            // em SEGUNDOS. `solved_time` e minuto arredondado e nao serve:
+            // dois AC no mesmo minuto empatavam e o desempate caia no
+            // indice da linha, ou seja, na ordem da lista de equipes.
+            // Interna a este arquivo: markFirstSolvers() a consome e a
+            // remove antes de a celula sair daqui.
+            'first_solve_key' => $cell['is_solved']
+                ? Score::firstSolveKey($countable, $secondsOf)
+                : null,
         ];
     }
 
@@ -174,6 +223,13 @@ class FrozenScoreboard
      * mostra-la entregaria o solve que o congelamento esconde -- uma
      * medalha e um anuncio de veredito tanto quanto uma celula verde.
      *
+     * Issue #317 -- a comparacao e em SEGUNDOS, pela chave que
+     * `Score::firstSolveKey()` devolve. Era `[solved_time, indice da linha]`,
+     * e `solved_time` esta em minutos: duas equipes que resolvessem no mesmo
+     * minuto empatavam e a marca ia para quem aparecesse antes na lista de
+     * equipes. A equipe que chegou 40 segundos antes perdia a marca para a
+     * ordem de um `ORDER BY` que nao existe.
+     *
      * @param  list<array<string, mixed>>  $rows
      * @return list<array<string, mixed>>
      */
@@ -181,25 +237,28 @@ class FrozenScoreboard
     {
         $best = [];
 
-        foreach ($rows as $index => $row) {
+        foreach ($rows as $row) {
             foreach ($row['problems'] as $cell) {
-                if (! $cell['is_solved']) {
+                if ($cell['first_solve_key'] === null) {
                     continue;
                 }
 
                 $problemId = $cell['problem_id'];
-                $key = [$cell['solved_time'], $index];
 
-                if (! isset($best[$problemId]) || $key < $best[$problemId]) {
-                    $best[$problemId] = $key;
+                if (! isset($best[$problemId]) || $cell['first_solve_key'] < $best[$problemId]) {
+                    $best[$problemId] = $cell['first_solve_key'];
                 }
             }
         }
 
         foreach ($rows as $index => $row) {
-            $rows[$index]['problems'] = $row['problems']->map(function (array $cell) use ($best, $index) {
-                $cell['is_first_solver'] = $cell['is_solved']
-                    && ($best[$cell['problem_id']] ?? null) === [$cell['solved_time'], $index];
+            $rows[$index]['problems'] = $row['problems']->map(function (array $cell) use ($best) {
+                $cell['is_first_solver'] = $cell['first_solve_key'] !== null
+                    && ($best[$cell['problem_id']] ?? null) === $cell['first_solve_key'];
+
+                // Chave de trabalho, nao dado de placar: sai antes de a
+                // linha chegar a quem consome.
+                unset($cell['first_solve_key']);
 
                 return $cell;
             });

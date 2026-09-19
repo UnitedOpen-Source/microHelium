@@ -157,6 +157,41 @@ class Score extends Model
     }
 
     /**
+     * Issue #317 -- quem resolveu primeiro, como CHAVE e nao como coluna.
+     *
+     * Dado o mesmo conjunto de runs que a celula usa, na mesma ordem, a
+     * chave de comparacao da equipe neste problema: `[segundos ajustados do
+     * AC, id do run]`, ou `null` se ela nao resolveu. Entre duas equipes,
+     * ganha a marca a de menor chave.
+     *
+     * Em SEGUNDOS, de proposito. `solved_time` e minuto arredondado, e por
+     * isso nao serve como chave: dois AC no mesmo minuto empatariam, e os
+     * dois desempates que existiam no repositorio eram "quem gravou
+     * primeiro" (placar ao vivo) e "quem aparece antes na lista de equipes"
+     * (placar congelado) -- nenhum dos dois e uma regra.
+     *
+     * Escrita aqui, ao lado de reduceCell(), porque e a mesma pergunta sobre
+     * o mesmo conjunto: o AC que a celula encontrou. Os dois placares a
+     * chamam, e e isso que faz eles pararem de discordar -- ver o #211 e o
+     * #171, que ja documentam esta armadilha neste arquivo.
+     *
+     * @param  iterable<Run>  $countable  em ordem de contest_time, depois id
+     * @return array{0: int, 1: int}|null
+     */
+    public static function firstSolveKey(iterable $countable, ?callable $secondsOf = null): ?array
+    {
+        $secondsOf ??= fn (Run $run) => (int) $run->contest_time;
+
+        foreach ($countable as $candidate) {
+            if ($candidate->answer?->is_accepted) {
+                return [(int) $secondsOf($candidate), (int) $candidate->id];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Issue #198 -- quanto tempo de prova um envio vale para a SEDE dele.
      *
      * Resolvido aqui e nao dentro de reduceCell() para que a reducao
@@ -191,7 +226,7 @@ class Score extends Model
             ->where('user_id', $run->user_id)
             ->where('problem_id', $run->problem_id)
             ->countingTowardsScore($gated)
-            ->with('answer:id,is_accepted')
+            ->with('answer:id,is_accepted,counts_as_attempt')
             ->orderBy('contest_time')
             ->orderBy('id')
             ->get();
@@ -207,27 +242,29 @@ class Score extends Model
         $solvedTime = $cell['solved_time'];
         $penaltyTime = $cell['penalty_time'];
 
-        $isFirstSolver = (bool) $score->is_first_solver;
-
-        if (! $isSolved) {
-            // A rejudge (or an un-verify) that takes the AC away takes the
-            // first-solve claim with it, or the flag outlives the solve and
-            // blocks the next team from ever earning it.
-            $isFirstSolver = false;
-        } elseif (! $isFirstSolver) {
-            $isFirstSolver = ! self::where('contest_id', $run->contest_id)
-                ->where('problem_id', $run->problem_id)
-                ->where('is_first_solver', true)
-                ->where('id', '!=', $score->id)
-                ->exists();
-        }
-
         $score->attempts = $attempts;
         $score->is_solved = $isSolved;
         $score->solved_time = $solvedTime;
         $score->penalty_time = $penaltyTime;
-        $score->is_first_solver = $isFirstSolver;
         $score->save();
+
+        // Issues #317/#318 -- a marca de primeiro a resolver e recalculada
+        // para o PROBLEMA INTEIRO, depois de a celula estar gravada.
+        //
+        // Era incremental e por celula: "se ainda nao existe nenhum primeiro
+        // a resolver neste problema, sou eu". Nada naquela condicao olhava
+        // tempo nenhum, entao a marca ia para quem chegasse primeiro ao
+        // RECALCULO -- que e coisa diferente de quem submeteu primeiro
+        // sempre que houver rejulgamento, veredito retido (#138) ou mais de
+        // um judgehost (#53). E, do outro lado, quando um rejulgamento
+        // tirava o AC de quem tinha a marca, ela era limpa e ninguem a
+        // herdava: o problema ficava sem primeiro a resolver para o resto da
+        // prova, em silencio.
+        //
+        // Recalcular o problema inteiro resolve os dois de uma vez, sem caso
+        // especial para nenhum: a marca passa a ser uma funcao dos runs que
+        // contam, que e o que o placar congelado sempre fez.
+        self::recomputeFirstSolver($contest, (int) $run->contest_id, (int) $run->problem_id, $gated);
 
         // Update leaderboard
         Leaderboard::updateForUser($run->contest_id, $run->user_id);
@@ -242,6 +279,70 @@ class Score extends Model
             // a desk is the loudest verdict announcement there is, so it
             // must not leave before the verdict does.
             app(BalloonService::class)->awardFor($run);
+        }
+    }
+
+    /**
+     * Issues #317/#318 -- quem e o primeiro a resolver ESTE problema, de
+     * novo, a partir dos runs.
+     *
+     * Uma consulta por veredito, para o problema e nao para a celula. O
+     * preco e escrever em linhas de outras equipes durante o recalculo de
+     * uma -- e e exatamente esse o ponto: era a ausencia dessa escrita que
+     * deixava o problema sem primeiro a resolver quando um rejulgamento
+     * derrubava o AC de quem tinha a marca. A equipe que passava a ser a
+     * primeira nao era recalculada, porque o rejulgamento so toca as celulas
+     * dos runs que ele contem.
+     *
+     * A regra e `firstSolveKey()`, a mesma que o placar congelado usa. Nao
+     * ha um segundo `if` aqui decidindo empate: se houvesse, seria a
+     * terceira formulacao da regra neste repositorio, e as duas que existiam
+     * ja discordavam entre si na mesma requisicao.
+     */
+    private static function recomputeFirstSolver(?Contest $contest, int $contestId, int $problemId, bool $gated): void
+    {
+        $runs = Run::query()
+            ->where('contest_id', $contestId)
+            ->where('problem_id', $problemId)
+            ->countingTowardsScore($gated)
+            ->with('answer:id,is_accepted,counts_as_attempt')
+            ->orderBy('contest_time')
+            ->orderBy('id')
+            ->get();
+
+        $secondsOf = $contest ? self::adjustedSecondsResolver($contest) : null;
+
+        $best = null;
+        $winner = null;
+
+        foreach ($runs->groupBy('user_id') as $userId => $teamRuns) {
+            $key = self::firstSolveKey($teamRuns, $secondsOf);
+
+            if ($key === null) {
+                continue;
+            }
+
+            if ($best === null || $key < $best) {
+                $best = $key;
+                $winner = (int) $userId;
+            }
+        }
+
+        // Tira de quem nao e mais (inclusive de ninguem, quando o problema
+        // deixou de ter solucao) e da a quem e. As duas metades importam: a
+        // primeira sozinha era o #318, a segunda sozinha era o #317.
+        self::where('contest_id', $contestId)
+            ->where('problem_id', $problemId)
+            ->where('is_first_solver', true)
+            ->when($winner !== null, fn ($query) => $query->where('user_id', '!=', $winner))
+            ->update(['is_first_solver' => false]);
+
+        if ($winner !== null) {
+            self::where('contest_id', $contestId)
+                ->where('problem_id', $problemId)
+                ->where('user_id', $winner)
+                ->where('is_first_solver', false)
+                ->update(['is_first_solver' => true]);
         }
     }
 }
