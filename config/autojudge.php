@@ -56,8 +56,32 @@ return [
     |
     | Maximum time for compilation in seconds.
     |
+    | Issue #329 -- esta chave existia e NAO era lida por ninguem. O
+    | backstop da compilacao era `time_limit * 2` escrito no
+    | AutoJudgeService, entao mexer em AUTOJUDGE_COMPILE_TIMEOUT nao mudava
+    | nada. Agora e ela que vale.
+    |
+    | E TEMPO DE PAREDE, nao CPU: quando ele estoura, o julgamento termina
+    | em CS (erro de julgamento), que e um veredito sobre a nossa
+    | infraestrutura e nao sobre o programa da equipe. Numa maquina ociosa
+    | `kotlinc solution.kt -include-runtime` custa 4,51 s de parede aqui; o
+    | numero existe para o caso patologico, e sob concorrencia a folga
+    | encolhe. Uma sede que veja CS por compilacao sobe este valor.
     */
     'compile_timeout' => env('AUTOJUDGE_COMPILE_TIMEOUT', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Folga de relogio na execucao
+    |--------------------------------------------------------------------------
+    |
+    | Issue #329 -- o backstop de parede da execucao e `limite do problema +
+    | esta folga`. Quem mata o programa que gasta CPU demais e o `ulimit -t`
+    | do sandbox, e o veredito dele e TLE; este aqui so existe para o passo
+    | que trava sem gastar CPU, e o preco de ele disparar por carga e um CS.
+    |
+    */
+    'run_wall_grace_seconds' => (int) env('AUTOJUDGE_RUN_WALL_GRACE_SECONDS', 5),
 
     /*
     |--------------------------------------------------------------------------
