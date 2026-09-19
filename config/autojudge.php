@@ -289,7 +289,20 @@ return [
         'ex' => null,
         'erl' => null,
         'lisp_sbcl' => null,
-        'r' => 256,
+        // Issue #305 -- `r` era 256, medido em aarch64, e o CI de x86_64
+        // derrubou esse numero: o `test_sem_cgroup_a_barreira_de_espaco_de_enderecamento_nao_mata_linguagem_ativa@r`
+        // reprovou na primeira execucao la, com a mesma imagem e o mesmo
+        // programa que passam aqui.
+        //
+        // Passa a `null` pelo argumento que este arquivo ja usa para a JVM,
+        // o .NET e a BEAM logo abaixo: uma barreira que precisa ser calibrada
+        // por arquitetura nao limita nada de forma confiavel -- ela so escolhe
+        // em qual maquina a linguagem deixa de subir. O MLE continua saindo do
+        // pico de RSS medido, que e o mesmo nas duas.
+        //
+        // Nao foi possivel medir o piso de x86_64 aqui (a maquina e aarch64, e
+        // memoria sob emulacao nao vale como medida). O CI e a medicao.
+        'r' => null,
     ],
 
     /*
