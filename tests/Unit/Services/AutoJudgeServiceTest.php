@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Exceptions\JudgeWallClockTimeoutException;
 use App\Exceptions\SandboxUnavailableException;
 use App\Models\Answer;
 use App\Models\Contest;
@@ -160,6 +161,16 @@ class AutoJudgeServiceTest extends TestCase
         $run = Run::first();
         Answer::factory()->create(['short_name' => 'CS', 'contest_id' => $run->contest_id]);
 
+        // Issue #314 -- `judging` porque e de onde este metodo e alcancado.
+        //
+        // `handleJudgingError()` so roda a partir do `catch` de `judge()`, e
+        // `judge()` marca a run `judging` antes de tentar qualquer coisa.
+        // A guarda de saida nova rele a linha sob lock e recusa gravar `CS`
+        // sobre uma run que nao esta mais em julgamento -- um veredito
+        // manual da banca, por exemplo -- entao o estado inicial deste
+        // teste passou a importar. O que ele mede continua sendo o mesmo.
+        $run->update(['status' => 'judging']);
+
         $this->service->shouldReceive('cleanup');
         $this->service->handleJudgingError($run, new \Exception('Test Error'));
 
@@ -169,6 +180,106 @@ class AutoJudgeServiceTest extends TestCase
             'auto_judge_result' => 'Judging Error',
             'auto_judge_stderr' => 'Test Error',
         ]);
+    }
+
+    /**
+     * Issue #329 -- o backstop de PAREDE disparando, de verdade.
+     *
+     * O que chegava em `auto_judge_stderr` era a mensagem do Symfony com a
+     * linha de comando inteira do `bwrap` dentro; quem investigava um `CS`
+     * nao descobria dali que o que houve foi um estouro de relogio.
+     *
+     * Nao ha temporizacao fina aqui: sao 3 s de `sleep` contra 1 s de
+     * limite, e o que se mede e QUAL excecao sai e o que ela diz -- nao
+     * quando.
+     */
+    public function test_o_backstop_de_parede_da_compilacao_produz_mensagem_legivel()
+    {
+        config([
+            'autojudge.use_bwrap' => false,
+            'autojudge.compile_timeout' => 1,
+        ]);
+
+        $service = new class extends AutoJudgeService
+        {
+            public function compilaParaTeste(string $command, string $runDir): array
+            {
+                return $this->runCompileStep($command, $runDir, 'compile_teste_'.getmypid());
+            }
+        };
+
+        try {
+            $service->compilaParaTeste('sleep 3', sys_get_temp_dir());
+            $this->fail('o backstop de parede nao disparou');
+        } catch (JudgeWallClockTimeoutException $e) {
+            $this->assertStringContainsString('1 s de tempo de parede', $e->getMessage());
+            $this->assertStringContainsString('compilacao', $e->getMessage());
+            $this->assertStringNotContainsString('exceeded the timeout', $e->getMessage());
+            $this->assertSame(1, $e->wallSeconds);
+        }
+    }
+
+    /**
+     * Issue #329 -- e o limite da compilacao passou a sair de
+     * `autojudge.compile_timeout`.
+     *
+     * A chave existia, dizia "Maximum time for compilation in seconds", e
+     * nao era lida em lugar nenhum: o backstop era `time_limit * 2` escrito
+     * no codigo. Quem tentasse afrouxar o limite pelo .env nao mudava nada.
+     */
+    public function test_o_limite_da_compilacao_vem_da_configuracao()
+    {
+        config([
+            'autojudge.use_bwrap' => false,
+            'autojudge.time_limit' => 10,
+            'autojudge.compile_timeout' => 2,
+        ]);
+
+        $service = new class extends AutoJudgeService
+        {
+            public function compilaParaTeste(string $command, string $runDir): array
+            {
+                return $this->runCompileStep($command, $runDir, 'compile_teste_'.getmypid());
+            }
+        };
+
+        try {
+            $service->compilaParaTeste('sleep 6', sys_get_temp_dir());
+            $this->fail('o backstop de parede nao disparou');
+        } catch (JudgeWallClockTimeoutException $e) {
+            // 2 s, e nao os 20 s que `time_limit * 2` daria.
+            $this->assertSame(2, $e->wallSeconds);
+        }
+    }
+
+    /**
+     * Issue #329 -- o estouro de relogio continua sendo `CS`, e tem de
+     * continuar: o `ulimit -t` nao disparou, entao isto nao e uma afirmacao
+     * sobre o programa da equipe. O que muda e a mensagem que sobra para a
+     * organizacao.
+     */
+    public function test_o_estouro_de_parede_vira_cs_com_mensagem_propria()
+    {
+        Storage::fake('local');
+        $this->createTestData();
+        $run = Run::first();
+        Answer::factory()->create(['short_name' => 'CS', 'contest_id' => $run->contest_id]);
+
+        $service = new class extends AutoJudgeService
+        {
+            protected function executeJudging(Run $run): array
+            {
+                throw new JudgeWallClockTimeoutException('compilacao', 30);
+            }
+        };
+
+        $service->judge($run);
+
+        $run->refresh();
+        $this->assertSame('judged', $run->status);
+        $this->assertSame('CS', $run->answer->short_name);
+        $this->assertStringContainsString('30 s de tempo de parede', $run->auto_judge_result);
+        $this->assertStringNotContainsString('Judging Error', (string) $run->auto_judge_result);
     }
 
     /**

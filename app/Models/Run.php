@@ -265,7 +265,43 @@ class Run extends Model
 
         $waitLimit = $this->site->max_judge_wait_time ?? 900;
 
-        return $this->created_at->diffInSeconds(now()) > $waitLimit;
+        return $this->waitingSince()->diffInSeconds(now()) > $waitLimit;
+    }
+
+    /**
+     * Issue #312 -- DESDE QUANDO esta run espera, que nao e a mesma
+     * pergunta para cada estado.
+     *
+     * Em `pending` a resposta continua sendo `created_at`: ninguem pegou o
+     * envio, e o que se mede e ha quanto tempo a equipe espera.
+     *
+     * Em `judging` `created_at` para de responder qualquer coisa util.
+     * Alguem PEGOU a run, e o atraso que interessa e o do JULGAMENTO, nao
+     * o do envio. Medindo pelo envio, uma run que passou 900 s represada
+     * em fila -- exatamente o que o alerta `queue_backlog` (#199) existe
+     * para relatar -- ja nasce atrasada no instante em que um judgehost
+     * finalmente a reivindica, e o watchdog do #45 a encerra como `CS`
+     * enquanto a maquina a julga, com heartbeat renovando (#124), para
+     * depois recusar com 409 o veredito de verdade.
+     *
+     * `claimed_at` e a coluna que `JudgeWorkQueue::claimNext()` e
+     * `claimNextLocally()` gravam sob lock de linha, e e a mesma que
+     * `expireStaleLeases()` ja usa para distinguir "maquina morta" de
+     * "maquina trabalhando". O dado nao faltava; faltava consulta-lo.
+     *
+     * O fallback importa tanto quanto: um worker LOCAL alcancado direto
+     * pelo `JudgeRunJob` vira `judging` sem reivindicar nada (nao ha
+     * lease), e so tem `auto_judge_start`. Sem nenhum dos dois -- uma
+     * linha em `judging` que ninguem sabe explicar -- volta a valer
+     * `created_at`, e o watchdog continua sendo o backstop que era.
+     */
+    public function waitingSince(): \Carbon\CarbonInterface
+    {
+        if ($this->status === 'judging') {
+            return $this->claimed_at ?? $this->auto_judge_start ?? $this->created_at;
+        }
+
+        return $this->created_at;
     }
 
     public function getContestTimeFormatted(): string

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\JudgeWallClockTimeoutException;
 use App\Exceptions\SandboxUnavailableException;
 use App\Models\Answer;
 use App\Models\ContestLog;
@@ -11,8 +12,12 @@ use App\Models\Score;
 use App\Models\TestCase;
 use App\Services\Clics\ContestEventRecorder;
 use Illuminate\Contracts\Process\ProcessResult;
+use Illuminate\Process\Exceptions\ProcessTimedOutException as LaravelProcessTimedOutException;
+use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
+use Symfony\Component\Process\Exception\ProcessTimedOutException as SymfonyProcessTimedOutException;
 
 class AutoJudgeService
 {
@@ -69,6 +74,31 @@ class AutoJudgeService
 
     protected string $rssTimePath;
 
+    /**
+     * Issue #329 -- os dois backstops de tempo de PAREDE, agora legiveis e
+     * configuraveis.
+     *
+     * O da compilacao era `time_limit * 2` escrito na mao (20 s com o padrao
+     * de config), enquanto `autojudge.compile_timeout` -- a chave que diz
+     * "Maximum time for compilation in seconds", com `AUTOJUDGE_COMPILE_TIMEOUT`
+     * por tras -- nao era lida em lugar nenhum. Quem tentasse afrouxar o
+     * limite pelo .env nao mudava coisa alguma. Agora e essa chave que
+     * decide, e o padrao dela (30 s) e o que passa a valer.
+     *
+     * `time_limit` e o teto de CPU padrao de um PROBLEMA; derivar dele o
+     * relogio da compilacao misturava duas grandezas que nao tem relacao
+     * nenhuma -- `kotlinc` custa 4,51 s de parede numa maquina ociosa e
+     * `gcc` custa uma fracao disso, e nenhum dos dois tem a ver com quanto
+     * tempo de CPU o programa da equipe pode gastar depois.
+     */
+    protected int $compileWallSeconds;
+
+    /**
+     * A folga de relogio sobre o limite de CPU do problema, na execucao.
+     * Continua sendo 5 s; o que mudou e poder mexer nela sem editar codigo.
+     */
+    protected int $runWallGraceSeconds;
+
     protected ?bool $sandboxProbeFailed = null;
 
     /**
@@ -103,6 +133,36 @@ class AutoJudgeService
         $this->runMaxProcesses = (int) config('autojudge.run_max_processes', 256);
         $this->memoryGraceMb = config('autojudge.memory_grace_mb', ['default' => 64]);
         $this->rssTimePath = (string) config('autojudge.rss_time_path', '/usr/bin/time');
+        $this->compileWallSeconds = max(1, (int) config('autojudge.compile_timeout', 30));
+        $this->runWallGraceSeconds = max(1, (int) config('autojudge.run_wall_grace_seconds', 5));
+    }
+
+    /**
+     * Issue #329 -- rodar um passo do julgamento com backstop de parede, e
+     * dizer isso em portugues quando ele disparar.
+     *
+     * O `Process::run()` levanta `ProcessTimedOutException`, cuja mensagem e
+     * a linha de comando inteira -- com os `--ro-bind` do bwrap -- seguida
+     * de "exceeded the timeout of N seconds". Ela chegava crua a
+     * `auto_judge_stderr` e era indistinguivel de "o sandbox nao subiu".
+     *
+     * O veredito continua sendo `CS`, e de proposito: um estouro de relogio
+     * NAO e uma afirmacao sobre o programa da equipe (o `ulimit -t`, que e
+     * quem produz `TLE`, nao disparou). O que muda e que a organizacao passa
+     * a conseguir ler o que aconteceu.
+     */
+    protected function runWithWallBackstop(PendingProcess $process, string $command, string $etapa, int $wallSeconds): ProcessResult
+    {
+        try {
+            return $process->run($command);
+        } catch (LaravelProcessTimedOutException|SymfonyProcessTimedOutException) {
+            // As duas: `PendingProcess::run()` embrulha a do Symfony na sua
+            // propria (`Illuminate\Process\Exceptions\...`, que NAO e
+            // subclasse da outra), e a do Symfony ainda escapa por quem
+            // chama o componente direto. Pegar so uma delas deixaria
+            // metade dos estouros voltando a chegar crus.
+            throw new JudgeWallClockTimeoutException($etapa, $wallSeconds);
+        }
     }
 
     /**
@@ -756,10 +816,16 @@ class AutoJudgeService
         // the same name recurs, and the name carries the pid, so after a
         // worker is recycled it never does.
         try {
-            $result = Process::timeout($timeLimit + 5)
-                ->path($runDir)
-                ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
-                ->run($command);
+            $wallSeconds = $timeLimit + $this->runWallGraceSeconds;
+
+            $result = $this->runWithWallBackstop(
+                Process::timeout($wallSeconds)
+                    ->path($runDir)
+                    ->env(['HOME' => $runDir, 'TMPDIR' => $runDir]),
+                $command,
+                'execucao',
+                $wallSeconds
+            );
 
             $this->assertSandboxStarted($result);
         } finally {
@@ -1055,10 +1121,14 @@ class AutoJudgeService
         // assertSandboxStarted() throws when bwrap never started, and those
         // are the runs most likely to have left a process inside.
         try {
-            $result = Process::timeout($this->defaultTimeLimit * 2)
-                ->path($runDir)
-                ->env(['HOME' => $runDir, 'TMPDIR' => $runDir])
-                ->run($command);
+            $result = $this->runWithWallBackstop(
+                Process::timeout($this->compileWallSeconds)
+                    ->path($runDir)
+                    ->env(['HOME' => $runDir, 'TMPDIR' => $runDir]),
+                $command,
+                'compilacao',
+                $this->compileWallSeconds
+            );
 
             $this->assertSandboxStarted($result);
         } finally {
@@ -1121,6 +1191,74 @@ class AutoJudgeService
      */
     public function recordVerdict(Run $run, array $result): void
     {
+        // Issue #314 -- a guarda de SAIDA, releitura sob lock de linha.
+        //
+        // Ate aqui este metodo gravava por cima do que estivesse na linha,
+        // sem checar status e sem lock. Um julgamento que comecou antes
+        // sobrescrevia o que quer que tivesse sido decidido enquanto ele
+        // rodava -- inclusive um veredito dado A MAO pela banca, e inclusive
+        // mantendo `verified_at` e `judge_id`, de forma que a run passava a
+        // exibir um veredito automatico assinado por um jurado que nunca o
+        // viu. O #138 ja tinha decidido que uma assinatura dada sobre OUTRO
+        // julgamento nao pode viajar; aqui ela viajava.
+        //
+        // A guarda nao e nova: e exatamente a que o `ResultController`
+        // aplica desde o #123 ("Rejected unless the run is still
+        // `judging`"), e que so existia no caminho HTTP. Agora ela esta em
+        // "the one point every judging path converges on" (#87), entao o
+        // julgamento local, o rejulgamento e o relatorio remoto passam todos
+        // por ela.
+        //
+        // O `lockForUpdate` e o que a torna uma guarda e nao um palpite: sem
+        // ele, outra transacao pode gravar entre a leitura do status e a
+        // escrita. O `ResultController` ja chama este metodo dentro da
+        // propria transacao dele, e reentrar vira savepoint sobre a linha
+        // que ele ja segura.
+        DB::transaction(function () use ($run, $result) {
+            $fresh = Run::query()->lockForUpdate()->find($run->id);
+
+            if ($fresh === null || $fresh->status !== 'judging') {
+                $this->refuseLateVerdict($run, $fresh, (string) ($result['verdict'] ?? '?'));
+
+                return;
+            }
+
+            $this->writeVerdict($run, $result);
+        });
+    }
+
+    /**
+     * Issue #314 -- a recusa tem de DIZER que aconteceu.
+     *
+     * A issue nasceu de uma sobrescrita silenciosa; uma recusa silenciosa
+     * seria o mesmo defeito virado do avesso. Quem investigar precisa saber
+     * que houve duas apuracoes e qual delas foi descartada.
+     */
+    private function refuseLateVerdict(Run $run, ?Run $fresh, string $verdict): void
+    {
+        $estado = $fresh?->status ?? 'inexistente';
+
+        $mensagem = "Veredito automatico ({$verdict}) descartado para a run #{$run->run_number}: "
+            ."a run nao esta mais em julgamento (status: {$estado}).";
+
+        if ($run->contest_id !== null) {
+            ContestLog::warning((int) $run->contest_id, $mensagem, [
+                'run_id' => $run->id,
+                'verdict' => $verdict,
+                'status' => $estado,
+            ]);
+        }
+
+        Log::warning($mensagem, ['run_id' => $run->id, 'host' => gethostname()]);
+    }
+
+    /**
+     * O corpo que sempre existiu, agora atras da guarda acima.
+     *
+     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null, measured_wall_ms?: int|null, measured_cpu_ms?: int|null}  $result
+     */
+    private function writeVerdict(Run $run, array $result): void
+    {
         $answer = Answer::where('contest_id', $run->contest_id)
             ->where('short_name', $result['verdict'])
             ->first();
@@ -1172,6 +1310,22 @@ class AutoJudgeService
 
     protected function handleJudgingError(Run $run, \Exception $e): void
     {
+        // Issue #314 -- a mesma guarda de saida, pelo mesmo motivo.
+        //
+        // Um `CS` gravado por cima de um veredito manual e a MESMA perda, e
+        // por um caminho que nem sequer apurou nada. Se a run ja nao e
+        // nossa, a falha vira registro e nao escrita.
+        $ainda = DB::transaction(
+            fn () => Run::query()->lockForUpdate()->find($run->id)?->status === 'judging'
+        );
+
+        if (! $ainda) {
+            $this->refuseLateVerdict($run, $run->fresh(), 'CS');
+            $this->cleanup($run);
+
+            return;
+        }
+
         $answer = Answer::where('contest_id', $run->contest_id)
             ->where('short_name', 'CS')
             ->first();
@@ -1180,7 +1334,12 @@ class AutoJudgeService
             'status' => 'judged',
             'answer_id' => $answer?->id,
             'auto_judge_end' => now(),
-            'auto_judge_result' => 'Judging Error',
+            // Issue #329 -- o estouro de relogio tem mensagem propria.
+            // "Judging Error" com a linha de comando do bwrap embaixo nao
+            // deixava nem diagnosticar que o que houve foi um backstop.
+            'auto_judge_result' => $e instanceof JudgeWallClockTimeoutException
+                ? $e->getMessage()
+                : 'Judging Error',
             'auto_judge_stderr' => $e->getMessage(),
         ]);
 
