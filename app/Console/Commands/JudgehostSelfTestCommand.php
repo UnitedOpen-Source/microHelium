@@ -4,8 +4,8 @@ namespace App\Console\Commands;
 
 use App\Exceptions\SandboxUnavailableException;
 use App\Services\AutoJudgeService;
-use App\Services\Judgehost\SandboxPreflight;
 use App\Services\CgroupMemoryLimiter;
+use App\Services\Judgehost\SandboxPreflight;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
 
@@ -349,29 +349,239 @@ class JudgehostSelfTestCommand extends Command
     }
 
     /**
-     * Rede, recusada pelo namespace.
+     * Rede: o sandbox nao consegue TRAFEGAR.
      *
-     * Lendo /proc/net/dev, e nao tentando abrir um socket: uma tentativa de
-     * conexao falha igual numa maquina que so esta sem internet, o que
-     * provaria nada. Dentro de um namespace de rede novo so existe `lo`, e
-     * isso e uma afirmacao sobre o isolamento e nao sobre a rede da casa.
+     * A evidencia mudou de lugar de proposito (#335). A versao anterior lia
+     * `/proc/net/dev` e exigia que a lista de interfaces fosse exatamente
+     * `lo`. Isso nao e uma afirmacao sobre o confinamento: todo kernel com
+     * os modulos de tunel carregados (`ipip`, `sit`, `ip6_tunnel`,
+     * `ip6_gre`) registra um device de fallback em CADA namespace de rede
+     * novo. Medido nesta imagem, com `unshare -Un` puro, sem bwrap nenhum:
+     *
+     *     lo tunl0 gre0 gretap0 erspan0 ip_vti0 ip6_vti0 sit0 ip6tnl0 ip6gre0
+     *     rotas IPv4 = 0    enderecos = 0
+     *
+     * Ou seja: a maquina confinava e o comando mandava "NAO use esta maquina
+     * em prova". Falso vermelho no portao que decide se o judgehost entra na
+     * prova, e o efeito e o pior possivel -- tira do ar uma maquina que
+     * estava boa. Interface VISIVEL nao e interface UTILIZAVEL, e so a
+     * segunda diz alguma coisa.
+     *
+     * O que se mede agora e a segunda, e por duas evidencias, porque uma so
+     * mente -- a mesma regra do caso da bomba de forks:
+     *
+     * 1. TRAFEGO. O comando abre um ouvinte TCP AQUI FORA, num porto
+     *    efemero, e o sandbox tenta alcanca-lo por DOIS caminhos: o
+     *    `127.0.0.1` desta maquina e o endereco roteavel dela. Um alvo desta
+     *    propria maquina, e nao a internet: a sala da prova pode estar sem
+     *    saida para fora, e "nao conectou" por falta de internet provaria
+     *    nada. As duas pontas respondem -- o que o sandbox viu, e se alguma
+     *    conexao chegou no ouvinte, que e evidencia colhida onde o sandbox
+     *    nao toca.
+     *
+     *    O alvo de LOOPBACK e o que esta lista de interfaces nunca teve como
+     *    ver, e e a classe de vazamento que mais importa num judgehost: um
+     *    sandbox que compartilha o namespace de rede da maquina alcanca todo
+     *    servico preso ao loopback dela -- o banco do juiz, um Redis, a API
+     *    do placar. Medido: confinado, `127.0.0.1` do sandbox e um loopback
+     *    privado e o connect volta ECONNREFUSED; com `--share-net`, ABRE, e
+     *    a conexao chega no ouvinte. Nenhuma das duas pontas depende de a
+     *    maquina ter endereco roteavel.
+     *
+     * 2. ROTAS. `/proc/net/route` vazia. Um namespace de rede novo nao tem
+     *    rota nenhuma; um host de verdade sempre tem, mesmo sem internet.
+     *    Este lado nao consegue dar verde falso, e e ele que cobre o caso em
+     *    que um firewall da casa derruba o pacote antes de ele voltar.
+     *
+     * Medido nesta imagem, com o ouvinte no netns raiz do container e a
+     * mesma sonda dos dois lados da unica mutacao que da rede ao sandbox:
+     *
+     *     allow_net=false   rotas=0   127.0.0.1 ECONNREFUSED, roteavel
+     *                                 ENETUNREACH, ouvinte recebeu 0
+     *     allow_net=true    rotas=2   127.0.0.1 ABRIU, roteavel ABRIU,
+     *                                 ouvinte recebeu 2
+     *
+     * O que NAO entrou, e foi medido antes de nao entrar: `/proc/net/ipv6_route`
+     * (3 linhas dos dois lados -- nao distingue nada) e a contagem de
+     * enderecos por `/proc/net/fib_trie` ou `/proc/net/if_inet6` (o bwrap
+     * sobe o `lo`, entao ha endereco local dentro do sandbox confinado; uma
+     * regra "zero enderecos" seria outro falso vermelho).
+     *
+     * Os devices de tunel continuam no relatorio, como informacao: quem le
+     * precisa saber que eles sao decoracao do kernel e nao um vazamento.
      */
     private function network(AutoJudgeService $judge): array
     {
-        $out = $this->inSandbox($judge, "awk -F: 'NR>2 {gsub(/ /,\"\",\$1); print \$1}' /proc/net/dev");
+        $ouvinte = @stream_socket_server('tcp://0.0.0.0:0', $errno, $errstr);
 
-        $interfaces = array_values(array_filter(array_map('trim', explode("\n", $out['stdout']))));
-        $foreign = array_values(array_diff($interfaces, ['lo']));
+        if ($ouvinte === false) {
+            return $this->result(
+                'network',
+                'Abrir socket',
+                'recusado: sem rota e sem trafego dentro do sandbox',
+                false,
+                'Nao foi possivel abrir o ouvinte do lado de fora do sandbox: '.$this->firstLine((string) $errstr)
+            );
+        }
+
+        try {
+            $nome = (string) stream_socket_get_name($ouvinte, false);
+            $porta = (int) substr($nome, (int) strrpos($nome, ':') + 1);
+
+            $out = $this->inSandbox($judge, self::sondaDeRede($porta, self::enderecoRoteavelDestaMaquina()));
+
+            // A outra ponta: alguma conexao chegou? Sem espera -- se o
+            // sandbox conectou, ela ja esta na fila de aceite, porque a
+            // sonda so devolve o controle depois de tentar os dois alvos.
+            $chegaram = 0;
+            while (($c = @stream_socket_accept($ouvinte, 0)) !== false) {
+                $chegaram++;
+                fclose($c);
+            }
+        } finally {
+            fclose($ouvinte);
+        }
+
+        return $this->veredictoDeRede(self::lerEvidenciaDeRede($out['stdout']), $chegaram, $porta);
+    }
+
+    /**
+     * O trecho que colhe a evidencia DENTRO do sandbox.
+     *
+     * Metodo publico, e nao uma string enterrada no `network()`, porque o
+     * teste que prova que esta evidencia DISCRIMINA precisa rodar
+     * exatamente este trecho -- um teste que rodasse um parecido estaria
+     * provando o parecido.
+     *
+     * O loopback entra sempre; o endereco roteavel so quando existe.
+     */
+    public static function sondaDeRede(int $porta, ?string $roteavel = null): string
+    {
+        $alvos = '127.0.0.1'.($roteavel !== null && $roteavel !== '127.0.0.1' ? ' '.$roteavel : '');
+
+        // `timeout` porque um firewall que DERRUBA o pacote (em vez de
+        // recusar) deixaria o connect pendurado ate o backstop de parede, e
+        // o caso inteiro viraria saida vazia sem dizer por que.
+        return 'echo IFACES=$(awk -F: \'NR>2 {gsub(/ /,"",$1); print $1}\' /proc/net/dev | tr \'\n\' \' \'); '
+            .'echo ROTAS=$(awk \'NR>1\' /proc/net/route | wc -l); '
+            .'for alvo in '.$alvos.'; do '
+            .'if timeout 5 bash -c "exec 3<>/dev/tcp/$alvo/'.$porta.'" 2>/tmp/mh-sonda-rede; '
+            .'then echo "ALVO=$alvo abriu"; '
+            .'else echo "ALVO=$alvo recusado"; echo "MOTIVO=$alvo $(tail -1 /tmp/mh-sonda-rede)"; fi; done';
+    }
+
+    /**
+     * O endereco IPv4 roteavel desta maquina, ou null se nao houver.
+     *
+     * Um `connect()` UDP nao poe pacote nenhum na rede: ele so consulta a
+     * tabela de rotas e fixa o endereco de origem, que e exatamente o que
+     * se quer saber. O alvo e 192.0.2.1 (TEST-NET-1, RFC 5737), que nao
+     * existe em lugar nenhum de proposito.
+     */
+    public static function enderecoRoteavelDestaMaquina(): ?string
+    {
+        $s = @stream_socket_client('udp://192.0.2.1:9', $errno, $errstr, 1);
+
+        if ($s === false) {
+            return null;
+        }
+
+        $nome = (string) stream_socket_get_name($s, false);
+        fclose($s);
+
+        $corte = strrpos($nome, ':');
+        $ip = $corte === false ? $nome : substr($nome, 0, $corte);
+
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false ? null : $ip;
+    }
+
+    /**
+     * @return array{interfaces: list<string>, rotas: int|null, alvos: array<string, string>, motivos: array<string, string>}
+     */
+    public static function lerEvidenciaDeRede(string $stdout): array
+    {
+        $interfaces = [];
+        if (preg_match('/^IFACES=(.*)$/m', $stdout, $m)) {
+            $interfaces = array_values(array_filter(explode(' ', trim($m[1]))));
+        }
+
+        $alvos = [];
+        preg_match_all('/^ALVO=(\S+) (abriu|recusado)$/m', $stdout, $todos, PREG_SET_ORDER);
+        foreach ($todos as $linha) {
+            $alvos[$linha[1]] = $linha[2];
+        }
+
+        $motivos = [];
+        preg_match_all('/^MOTIVO=(\S+) (.*)$/m', $stdout, $todos, PREG_SET_ORDER);
+        foreach ($todos as $linha) {
+            $motivos[$linha[1]] = trim($linha[2]);
+        }
+
+        return [
+            'interfaces' => $interfaces,
+            // null, e nao 0: "nao consegui ler" e "li e estava vazia" sao
+            // respostas diferentes, e so a segunda e uma prova.
+            'rotas' => preg_match('/^ROTAS=(\d+)$/m', $stdout, $m) ? (int) $m[1] : null,
+            'alvos' => $alvos,
+            'motivos' => $motivos,
+        ];
+    }
+
+    /**
+     * A regra, num lugar so, porque o teste de E2E a aplica aos dois lados
+     * da mutacao `--share-net`.
+     *
+     * `$alvos === []` reprova de proposito: uma sonda que nao chegou a
+     * tentar alcancar nada nao mediu trafego, e um verde sobre meia medicao
+     * e o modo de falha que este repositorio ja conhece.
+     *
+     * @param  array{interfaces: list<string>, rotas: int|null, alvos: array<string, string>, motivos: array<string, string>}  $e
+     */
+    public static function redeEstaConfinada(array $e, int $chegaramNoOuvinte): bool
+    {
+        return $e['interfaces'] !== []
+            && $e['rotas'] === 0
+            && $e['alvos'] !== []
+            && ! in_array('abriu', $e['alvos'], true)
+            && $chegaramNoOuvinte === 0;
+    }
+
+    /**
+     * @param  array{interfaces: list<string>, rotas: int|null, alvos: array<string, string>, motivos: array<string, string>}  $e
+     */
+    private function veredictoDeRede(array $e, int $chegaramNoOuvinte, int $porta): array
+    {
+        // Contagem, e nao a lista inteira: o detalhe tem de caber numa
+        // linha de terminal, e o que quem le precisa saber e que estes
+        // devices sao decoracao do kernel -- nao quais sao.
+        $tuneis = count(array_diff($e['interfaces'], ['lo']));
+        $decoracao = $tuneis === 0
+            ? ''
+            : ' Os outros '.$tuneis.' devices sao fallback de tunel que o kernel registra em todo namespace novo, sem trafego.';
+
+        $abertos = array_keys(array_filter($e['alvos'], fn (string $r) => $r === 'abriu'));
+
+        $recusas = [];
+        foreach ($e['alvos'] as $alvo => $resultado) {
+            // `bash: line 1: /dev/tcp/1.2.3.4/9: Network unreachable` ->
+            // `Network unreachable`: o prefixo e ruido, o motivo e a prova.
+            $motivo = $e['motivos'][$alvo] ?? $resultado;
+            $corte = strrpos($motivo, ': ');
+            $recusas[] = $alvo.' '.($corte === false ? $motivo : substr($motivo, $corte + 2));
+        }
 
         return $this->result(
             'network',
             'Abrir socket',
-            'recusado: sem rede dentro do sandbox',
-            $interfaces !== [] && $foreign === [],
+            'recusado: sem rota e sem trafego dentro do sandbox',
+            self::redeEstaConfinada($e, $chegaramNoOuvinte),
             match (true) {
-                $interfaces === [] => 'Nao foi possivel ler /proc/net/dev dentro do sandbox.',
-                $foreign !== [] => 'O sandbox enxerga interface de rede alem de lo: '.implode(', ', $foreign),
-                default => 'Dentro do sandbox so existe lo.',
+                $e['interfaces'] === [] || $e['rotas'] === null => 'Nao foi possivel ler /proc/net dentro do sandbox.',
+                $abertos !== [] => 'O sandbox TRAFEGOU ate '.implode(' e ', $abertos).' no porto '.$porta.', que e um ouvinte desta propria maquina.',
+                $chegaramNoOuvinte > 0 => 'Chegaram '.$chegaramNoOuvinte.' conexao(oes) do sandbox no ouvinte desta maquina.',
+                $e['rotas'] > 0 => 'O sandbox tem '.((string) $e['rotas']).' rota(s) em /proc/net/route; um namespace de rede novo nao tem nenhuma.',
+                $e['alvos'] === [] => 'A sonda nao chegou a tentar alcancar o ouvinte: o trafego nao foi medido.',
+                default => 'Rotas: 0. Porto '.$porta.' desta maquina: '.implode('; ', $recusas).'.'.$decoracao,
             }
         );
     }

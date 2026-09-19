@@ -126,3 +126,24 @@ resolver reconectaria a cada 20 s rebaixando o feed inteiro.
 A conferência contínua contra a spec mora em
 `tests/Feature/Clics/ConformidadeClicsTest.php`, medida contra a cópia literal
 dos schemas do ICPC em `tests/Fixtures/clics/json-schema/`.
+
+## 6. O que mudou quando a #328 e a #330 fecharam (19/09/2026)
+
+As três respostas "não" da seção 5 viraram "sim", e é isto que destrava o
+passo 4:
+
+| pergunta | o que passou a valer | guarda |
+|---|---|---|
+| o feed fica aberto enquanto a prova acontece? | **sim** — `EventFeedStream` mantém a conexão, consulta o log a cada `clics.event_feed.poll_ms`, manda o newline de keep-alive e só sai no `end_of_updates`, na desconexão do cliente ou no teto (`null` em produção) | `EventFeedStreamingContractTest`, que cria um evento **depois** da primeira linha já entregue e exige que a mesma resposta aberta o entregue |
+| o resolver consegue retomar por `since_token`? | **sim** — a linha não traz mais `op`, então o `NDJSONFeedParser` entra no `parseNewFormat` e passa a ler `token` | `EventFeedTest::test_no_line_carries_the_op_property_that_2023_06_removed` |
+| um `since_token` inválido devolve 400? | **sim** — não numérico, além do fim do log, e também `since_id` (que não suportamos) | três testes em `EventFeedTest` |
+
+O que **continua** valendo do passo 4, e é o que mantém a #252 aberta: nenhum
+resolver de verdade rodou uma cerimônia inteira contra este feed, e o
+`X-Accel-Buffering: no` ainda não foi medido atravessando o nginx de produção.
+A diferença é que agora essa medição é possível — antes, o cliente de
+referência reconectava a cada 20 s e rebaixava o feed inteiro, então não havia
+o que homologar.
+
+Ao rodar, registre na #252 a versão do resolver e o `since_token` de onde ele
+retomou.

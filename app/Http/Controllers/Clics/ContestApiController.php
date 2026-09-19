@@ -5,10 +5,11 @@ namespace App\Http\Controllers\Clics;
 use App\Http\Controllers\Controller;
 use App\Models\Contest;
 use App\Models\Run;
-use App\Services\ContestClock;
 use App\Services\Clics\ClicsPresenter;
 use App\Services\Clics\EventFeedBuilder;
+use App\Services\Clics\EventFeedStream;
 use App\Services\Clics\TeamAffiliation;
+use App\Services\ContestClock;
 use App\Services\FrozenScoreboard;
 use App\Services\ScoreboardTeams;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +47,53 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ContestApiController extends Controller
 {
+    /**
+     * O que o `access` declara -- e, por isso, o que esta API PROMETE.
+     *
+     * Issue #332. A spec faz do `access` o mecanismo normativo de
+     * descoberta ("Types of endpoints"):
+     *
+     *   "The access endpoint specifies which other endpoints are offered by
+     *    the API. That is, any endpoints and their properties listed in
+     *    `access` must be provided (possibly with a `null` value when the
+     *    property is optional), and only these endpoints and properties."
+     *
+     * Ate aqui respondiamos `properties: []` nos onze endpoints -- lido ao
+     * pe da letra, "ofereco onze colecoes e nenhuma delas tem propriedade
+     * nenhuma" -- e nao declaravamos `state` nem `event-feed`, que estao em
+     * routes/clics.php e respondem 200. Um resolver que descobrisse as
+     * capacidades pelo `access` (que e o que a spec manda fazer) concluia
+     * que o microHelium NAO TEM event feed, justamente a parte que o ICPC
+     * Tools chama de "the only part of the Contest API that is strictly
+     * required".
+     *
+     * Esta lista nao pode ser decorativa, e a suite a compara com as chaves
+     * que cada endpoint REALMENTE devolve (ConformidadeClicsTest). Acrescentar
+     * um campo no presenter sem acrescentar aqui fica vermelho, e vice-versa.
+     *
+     * `minItems: 1` em `access.json` e o motivo de nao haver lista vazia.
+     *
+     * @var array<string, list<string>>
+     */
+    private const ENDPOINTS_OFERECIDOS = [
+        'contest' => ['id', 'name', 'formal_name', 'start_time', 'duration', 'scoreboard_freeze_duration', 'scoreboard_type', 'penalty_time'],
+        'problems' => ['id', 'label', 'name', 'ordinal', 'test_data_count', 'rgb', 'color'],
+        'teams' => ['id', 'name', 'display_name', 'group_ids', 'organization_id', 'icpc_id'],
+        'organizations' => ['id', 'icpc_id', 'name', 'formal_name', 'country'],
+        'groups' => ['id', 'icpc_id', 'name', 'type'],
+        'languages' => ['id', 'name', 'entry_point_required', 'extensions'],
+        'judgement-types' => ['id', 'name', 'penalty', 'solved'],
+        'submissions' => ['id', 'language_id', 'problem_id', 'team_id', 'time', 'contest_time', 'files'],
+        'judgements' => ['id', 'submission_id', 'judgement_type_id', 'start_time', 'start_contest_time', 'end_contest_time', 'end_time'],
+        'state' => ['started', 'ended', 'frozen', 'thawed', 'finalized', 'end_of_updates'],
+        'scoreboard' => ['time', 'contest_time', 'state', 'rows'],
+        'awards' => ['id', 'citation', 'team_ids'],
+        // As quatro propriedades da LINHA do feed, que e o objeto que este
+        // endpoint devolve: `event-feed.json` lista exatamente `type`, `id`,
+        // `data` e `token` (#330).
+        'event-feed' => ['type', 'id', 'data', 'token'],
+    ];
+
     public function __construct(private ClicsPresenter $presenter) {}
 
     /**
@@ -75,12 +123,16 @@ class ContestApiController extends Controller
         $staff = $this->isStaff($request);
 
         return response()->json([
+            // Vazio e a verdade: esta API e SOMENTE LEITURA. As capacidades
+            // do enum de `common.json#/capabilities` sao todas de escrita
+            // (`contest_start`, `team_submit`, `proxy_clar`, ...), e nenhuma
+            // delas existe aqui.
             'capabilities' => [],
-            'endpoints' => array_map(fn (string $type) => ['type' => $type, 'properties' => []], [
-                'contest', 'problems', 'teams', 'organizations', 'groups',
-                'languages', 'judgement-types', 'submissions', 'judgements',
-                'scoreboard', 'awards',
-            ]),
+            'endpoints' => array_map(
+                fn (string $type, array $properties) => ['type' => $type, 'properties' => $properties],
+                array_keys(self::ENDPOINTS_OFERECIDOS),
+                array_values(self::ENDPOINTS_OFERECIDOS)
+            ),
             // Nao e decoracao: o mesmo GET devolve conteudos diferentes para
             // um visitante e para a banca durante o congelamento, e sem isto
             // o cliente nao tem como saber qual dos dois recebeu.
@@ -253,30 +305,60 @@ class ContestApiController extends Controller
      * `since_token` retoma. Um cliente que caiu volta dizendo ate onde leu e
      * recebe exatamente o que veio depois -- e por isso a fotografia inicial
      * NAO e repetida: ele ja tem os objetos estaticos.
+     *
+     * Issue #328 -- e a conexao NAO FECHA. "The feed does not terminate
+     * under normal circumstances" (secao Event feed). O laco, o keep-alive e
+     * as tres saidas moram em EventFeedStream; aqui fica so o que e HTTP.
      */
-    public function eventFeed(Request $request, Contest $contest, EventFeedBuilder $feed): StreamedResponse
+    public function eventFeed(Request $request, Contest $contest, EventFeedBuilder $feed, EventFeedStream $stream): StreamedResponse|JsonResponse
     {
         $this->authorizeContestVisibility($contest);
 
         $unrestricted = $this->isStaff($request);
-        $sinceToken = $request->query('since_token');
-        $sinceToken = is_numeric($sinceToken) ? (int) $sinceToken : null;
 
-        return response()->stream(function () use ($contest, $feed, $sinceToken, $unrestricted) {
-            // A fotografia so quando o cliente esta comecando do zero.
-            if ($sinceToken === null) {
-                foreach ($feed->snapshot($contest) as $line) {
-                    $this->emit($line);
-                }
+        // Issue #330 -- `since_id` nao e suportado, e a spec diz o que
+        // responder: "If the token is invalid, the time passed is too large
+        // [...] or the server does not support this parameter, the request
+        // will fail with a 400 error" (secao Reconnection). O `check-api.sh`
+        // do proprio ICPC lista `400:event-feed?since_id=999999` entre os
+        // casos OBRIGATORIOS de falha.
+        //
+        // Responder 200 era pior do que parecia: o ICPC Tools so manda
+        // `since_id` quando nao conseguiu ler `token` -- e ele nao conseguia
+        // por causa do `op` (corrigido nesta mesma leva). Com 200, ele
+        // rebaixava o feed inteiro a cada reconexao, para sempre.
+        if ($request->query->has('since_id')) {
+            return $this->feedRecusada(
+                'since_id nao e suportado; use since_token, que vem no campo "token" de cada linha do feed.'
+            );
+        }
+
+        $sinceToken = null;
+
+        if ($request->query->has('since_token')) {
+            $bruto = $request->query('since_token');
+            $numerico = is_string($bruto) && preg_match('/^\d+$/', $bruto) === 1;
+
+            // "The client is guaranteed to either get a 400 error or
+            // receive at least all changes since the token." Um token
+            // adiante do fim do log nao tem "todas as mudancas desde" para
+            // entregar -- e respondiamos 200 com corpo VAZIO, que e o pior
+            // dos mundos: o resolver fica com o modelo que tinha e acha que
+            // esta em dia.
+            if (! $numerico || (int) $bruto > $feed->highestToken($contest)) {
+                return $this->feedRecusada('since_token invalido para esta prova: '.(string) $bruto);
             }
 
-            foreach ($feed->since($contest, $sinceToken, $unrestricted) as $line) {
-                $this->emit($line);
-            }
+            $sinceToken = (int) $bruto;
+        }
 
-            if (($end = $feed->endOfUpdates($contest)) !== null) {
-                $this->emit($end);
-            }
+        return response()->stream(function () use ($contest, $stream, $sinceToken, $unrestricted) {
+            $stream->run(
+                $contest,
+                $sinceToken,
+                $unrestricted,
+                fn (?array $line) => $line === null ? $this->emitKeepAlive() : $this->emit($line)
+            );
         }, 200, [
             // A spec pede NDJSON; `application/x-ndjson` e o tipo que os
             // consumidores esperam. `no-cache` porque um feed cacheado e um
@@ -310,12 +392,47 @@ class ContestApiController extends Controller
     }
 
     /**
+     * O keep-alive da spec: um NEWLINE, e nada mais.
+     *
+     * "to ensure keep alive a newline must be sent if there has been no
+     * event within 120 seconds" (secao Event feed). Tem de ser newline puro
+     * e nao um evento vazio -- o consumidor de NDJSON pula linha em branco,
+     * e um objeto JSON inventado seria uma mudanca que nao aconteceu.
+     */
+    private function emitKeepAlive(): void
+    {
+        echo "\n";
+
+        if (ob_get_level() > 0) {
+            @ob_flush();
+        }
+
+        @flush();
+    }
+
+    /**
+     * O 400 que a spec pede na retomada invalida (#330).
+     *
+     * Existe um caminho de recuperacao no ICPC Tools que depende EXATAMENTE
+     * deste codigo para disparar ("Contest has been reset! Throwing out
+     * cache and reconnecting"). Sem o 400 ele nunca roda, e um contest
+     * recriado deixa o cliente com um modelo incoerente e nenhum sinal.
+     */
+    private function feedRecusada(string $motivo): JsonResponse
+    {
+        return response()->json(['code' => 400, 'message' => $motivo], 400);
+    }
+
+    /**
      * @return Collection<int, Run>
      */
     private function runs(Contest $contest)
     {
         return Run::where('contest_id', $contest->id)
-            ->with('answer:id,short_name,is_accepted')
+            // `language` junto (#333): o `language_id` da Contest API agora e
+            // o identificador CLICS, que mora no slug da linguagem. Sem o
+            // eager load, /submissions viraria um N+1 por envio.
+            ->with(['answer:id,short_name,is_accepted', 'language:id,extension'])
             ->orderBy('contest_time')
             ->orderBy('id')
             ->get();

@@ -11,10 +11,26 @@ use App\Services\ScoreboardTeams;
  *
  * Separado do controller porque a montagem e testavel sem uma conexao HTTP
  * aberta, e um feed e justamente o tipo de coisa que ninguem testa se testar
- * exigir manter conexao.
+ * exigir manter conexao. Quem mantem a conexao e EventFeedStream (#328).
  */
 class EventFeedBuilder
 {
+    /**
+     * Os tipos que a spec trata como SINGLETON, e que por isso saem com
+     * `id: null`.
+     *
+     * Contest API 2023-06, "Notification format": «id -- ID ? -- The id of
+     * the object that changed, or null for the entire collection/singleton»
+     * e «If `type` is `contest`, then `id` must be null». A lista de
+     * singletons esta em "Types of endpoints": «Note that `api`, `access`,
+     * `account`, `state`, `scoreboard`, and `event-feed` are singular nouns
+     * and indeed contain only a single object».
+     *
+     * Issue #330 -- emitiamos o id do contest nos dois, e o schema oficial
+     * (`common.json#/identifierornull` com a regra acima) rejeita.
+     */
+    private const SINGLETONS = ['contest', 'state'];
+
     public function __construct(private ClicsPresenter $presenter) {}
 
     /**
@@ -38,7 +54,12 @@ class EventFeedBuilder
         $teams = ScoreboardTeams::forContest($contest);
 
         $lines = [];
-        $lines[] = $this->line('contests', (string) $contest->id, $this->presenter->contest($contest));
+
+        // `contest` no SINGULAR, e nao `contests` (#330): o enum de
+        // common.json#/endpointssingularcontest -- o mesmo que o schema do
+        // event feed referencia para `type` -- tem `contest`. O ICPC Tools
+        // tolera o plural por compatibilidade; o schema oficial nao.
+        $lines[] = $this->line('contest', (string) $contest->id, $this->presenter->contest($contest));
 
         foreach ($this->presenter->judgementTypes($contest) as $type) {
             $lines[] = $this->line('judgement-types', (string) $type['id'], $type);
@@ -70,32 +91,73 @@ class EventFeedBuilder
     }
 
     /**
-     * Os eventos registrados depois de `$sinceToken`.
+     * Um LOTE do log, para uma conexao que continua aberta (#328).
+     *
+     * Devolve tres coisas porque a conexao aberta precisa das tres:
+     *
+     * - `linhas`: o que emitir agora;
+     * - `cursor`: ate onde o log foi LIDO -- e nao ate onde foi emitido. A
+     *   diferenca e o que impede a conexao de reler para sempre um evento
+     *   que ela nao pode mostrar;
+     * - `retidos`: os ids que ficaram de fora pelo congelamento. Quem esta
+     *   conectado quando a prova descongela tem de receber aqueles eventos
+     *   SEM reconectar, e depois que o cursor passou por cima deles a unica
+     *   forma de reencontra-los e esta lista.
      *
      * `$unrestricted` e "esta pessoa pode ver o que o congelamento esconde".
-     * Para quem nao pode, os julgamentos da janela ficam de fora ATE o
-     * descongelamento -- e ai saem na ordem do token, que e a ordem em que
-     * aconteceram. E a parte que o REST nao precisava resolver: la basta
-     * filtrar uma lista, aqui um evento omitido some para sempre.
      *
-     * @return list<array<string, mixed>>
+     * @return array{linhas: list<array<string, mixed>>, cursor: int|null, retidos: list<int>}
      */
-    public function since(Contest $contest, ?int $sinceToken, bool $unrestricted): array
+    public function batch(Contest $contest, ?int $depois, bool $unrestricted): array
     {
-        $thawed = $contest->unfrozen_at !== null;
-
         $events = ContestEvent::where('contest_id', $contest->id)
-            ->when($sinceToken !== null, fn ($query) => $query->where('id', '>', $sinceToken))
-            ->visibleTo($unrestricted || $thawed)
+            ->when($depois !== null, fn ($query) => $query->where('id', '>', $depois))
             ->orderBy('id')
             ->get();
 
-        return $events->map(fn (ContestEvent $event) => $this->line(
-            $event->type,
-            $event->object_id,
-            $event->payload,
-            (string) $event->id
-        ))->all();
+        $linhas = [];
+        $retidos = [];
+        $cursor = $depois;
+
+        foreach ($events as $event) {
+            $cursor = (int) $event->id;
+
+            if (! $unrestricted && $event->after_freeze) {
+                $retidos[] = (int) $event->id;
+
+                continue;
+            }
+
+            $linhas[] = $this->line($event->type, $event->object_id, $event->payload, (string) $event->id);
+        }
+
+        return ['linhas' => $linhas, 'cursor' => $cursor, 'retidos' => $retidos];
+    }
+
+    /**
+     * Os eventos que o congelamento reteve, agora que ele acabou.
+     *
+     * Saem na ordem do token, que e a ordem em que aconteceram.
+     *
+     * @param  list<int>  $ids
+     * @return list<array<string, mixed>>
+     */
+    public function releases(Contest $contest, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return ContestEvent::where('contest_id', $contest->id)
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ContestEvent $event) => $this->line(
+                $event->type,
+                $event->object_id,
+                $event->payload,
+                (string) $event->id
+            ))->all();
     }
 
     /**
@@ -117,6 +179,19 @@ class EventFeedBuilder
     }
 
     /**
+     * O maior token que ESTE contest ja emitiu, sem filtro de visibilidade.
+     *
+     * Serve a uma pergunta so: o `since_token` que chegou existe? (#330). A
+     * spec manda responder 400 a token invalido, e o corte tem de ser o log
+     * inteiro -- usar o filtro do congelamento aqui faria um cliente da
+     * banca receber 400 por um token que ele mesmo acabou de receber.
+     */
+    public function highestToken(Contest $contest): int
+    {
+        return (int) (ContestEvent::where('contest_id', $contest->id)->max('id') ?? 0);
+    }
+
+    /**
      * A linha que fecha o feed quando a prova foi finalizada (#202).
      *
      * A spec usa isto para dizer "nao vem mais nada", e so depois de
@@ -131,24 +206,27 @@ class EventFeedBuilder
             return null;
         }
 
-        return [
-            'type' => 'state',
-            'id' => (string) $contest->id,
-            'op' => 'update',
-            'data' => $this->presenter->state($contest),
-        ];
+        return $this->line('state', (string) $contest->id, $this->presenter->state($contest));
     }
 
     /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function line(string $type, string $id, array $data, ?string $token = null): array
+    private function line(string $type, ?string $id, array $data, ?string $token = null): array
     {
         $line = [
             'type' => $type,
-            'id' => $id,
-            'op' => 'create',
+            // Issue #330 -- singleton sai com id null, e a normalizacao mora
+            // AQUI de proposito: o log grava o id do contest (que e o que
+            // identifica a linha no banco), e quem fala a spec e o feed.
+            'id' => in_array($type, self::SINGLETONS, true) ? null : $id,
+            // Sem `op` (#330). A propriedade existiu ate 2020-03 e foi
+            // removida; `event-feed.json` de 2023-06 lista exatamente
+            // `type`, `id`, `data` e `token`. E nao era decorativa: o
+            // NDJSONFeedParser do ICPC Tools BIFURCA pela presenca de `op`
+            // -- com ele, cai no parseOldFormat, que nunca le `token`, e a
+            // retomada por since_token vira codigo morto.
             'data' => $data,
         ];
 

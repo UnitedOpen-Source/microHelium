@@ -82,7 +82,16 @@ class Language extends Model
             ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => false, 'category' => 'compiled'],
 
             // Python
-            ['name' => 'Python 3.14', 'extension' => 'py3', 'file_ext' => 'py', 'compile_command' => 'python3 -m py_compile {source}', 'run_command' => 'python3 {source}', 'is_active' => true, 'category' => 'interpreted'],
+            // Issue #327 -- o `PYTHONPATH` poe
+            // `resources/judge-runtime/python/sitecustomize.py` no caminho,
+            // e o modulo `site` o importa na partida do processo do
+            // competidor: `sys.setrecursionlimit(200000)` no lugar dos 1000
+            // que sao o padrao do CPython. O comando continua sendo
+            // `python3 {source}`, entao o traceback continua apontando para
+            // o arquivo submetido. A medicao (e por que isto NAO troca o
+            // `RecursionError` por um segfault) esta no cabecalho daquele
+            // arquivo.
+            ['name' => 'Python 3.14', 'extension' => 'py3', 'file_ext' => 'py', 'compile_command' => 'python3 -m py_compile {source}', 'run_command' => 'PYTHONPATH={judge_runtime}/python python3 {source}', 'is_active' => true, 'category' => 'interpreted'],
             // PyPy has no musl/Alpine build (upstream only ships glibc
             // binaries), so it's left inactive rather than silently failing
             // every submission; CPython 3.12 above covers the language.
@@ -105,10 +114,18 @@ class Language extends Model
             // `nodejs`, sem prefixo por versao. Enquanto nao houver
             // instalacao paralela, estas continuam inativas -- agora pelo
             // motivo certo, e nao por um que a medicao derrubou.
-            ['name' => 'JavaScript (Node 24 LTS)', 'extension' => 'js_node24', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'JavaScript (Node 22)', 'extension' => 'js_node22', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'JavaScript (Node 20 LTS)', 'extension' => 'js_node20', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'TypeScript (Node 24)', 'extension' => 'ts', 'file_ext' => 'ts', 'compile_command' => 'npx tsc --strict --module commonjs {source}', 'run_command' => 'node --max-old-space-size={memory} {executable}.js', 'is_active' => true, 'category' => 'compiled'],
+            // Issue #327 -- o `node` passa por
+            // `resources/judge-runtime/node/run.sh`, que acrescenta um
+            // `--stack-size` DERIVADO do `ulimit -s` do host. Uma recursao
+            // de 10^4 niveis recebia `RE` aqui e passava em vinte outras
+            // linguagens; fixar o numero no catalogo seria a armadilha que a
+            // issue avisa (acima da pilha do sistema o V8 troca o
+            // `RangeError` por SIGSEGV). A medicao do penhasco esta no
+            // cabecalho do script.
+            ['name' => 'JavaScript (Node 24 LTS)', 'extension' => 'js_node24', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'bash {judge_runtime}/node/run.sh {memory} {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'JavaScript (Node 22)', 'extension' => 'js_node22', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'bash {judge_runtime}/node/run.sh {memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'JavaScript (Node 20 LTS)', 'extension' => 'js_node20', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'bash {judge_runtime}/node/run.sh {memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'TypeScript (Node 24)', 'extension' => 'ts', 'file_ext' => 'ts', 'compile_command' => 'npx tsc --strict --module commonjs {source}', 'run_command' => 'bash {judge_runtime}/node/run.sh {memory} {executable}.js', 'is_active' => true, 'category' => 'compiled'],
 
             // Issue #268 -- Scratch, julgado como qualquer outra linguagem.
             //
@@ -229,7 +246,29 @@ class Language extends Model
             ['name' => 'Zig 0.16', 'extension' => 'zig', 'file_ext' => 'zig', 'compile_command' => 'zig build-exe -femit-bin={output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
             // Scripting Languages
-            ['name' => 'PHP 8.3', 'extension' => 'php', 'file_ext' => 'php', 'compile_command' => 'php -l {source}', 'run_command' => 'php {source}', 'is_active' => true, 'category' => 'interpreted'],
+            // Issue #324 -- o limite de memoria do PROBLEMA passa a chegar ao
+            // PHP. Sem `-d memory_limit` valia o teto do proprio
+            // interpretador -- 128 MB, medido nesta imagem --, entao uma
+            // submissao PHP num problema de 256 MB morria na metade do
+            // orcamento que o enunciado prometeu, e morria como `RE`.
+            //
+            // O `{memory}` e o mesmo que o `-Xmx{memory}m` do Java ao lado
+            // usa, e a resposta aqui e a mesma que o repositorio ja deu para
+            // a JVM: o runtime recebe o limite do problema e o VEREDITO sai
+            // do juiz (cgroup, ou pico de RSS onde nao ha cgroup).
+            //
+            // Medido nesta imagem, o mesmo programa que aloca blocos de
+            // 8 MB sem parar, com `/usr/bin/time -f %M`:
+            //
+            //     php hog.php                      rc=255  pico 148.460 KB
+            //     php -d memory_limit=256M hog.php rc=255  pico 279.464 KB
+            //
+            // Com o limite de 256 MB do problema, 148 MB de pico nao passam
+            // do teto e o juiz cai no ramo do codigo de saida -> `RE`; os
+            // 279 MB passam, e o ramo do pico de RSS responde `MLE` antes.
+            // A correcao de orcamento e a correcao de veredito sao a mesma
+            // linha, e nao duas.
+            ['name' => 'PHP 8.3', 'extension' => 'php', 'file_ext' => 'php', 'compile_command' => 'php -l {source}', 'run_command' => 'php -d memory_limit={memory}M {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Ruby 3.4', 'extension' => 'rb', 'file_ext' => 'rb', 'compile_command' => 'ruby -c {source}', 'run_command' => 'ruby {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Perl 5', 'extension' => 'perl', 'file_ext' => 'pl', 'compile_command' => 'perl -c {source}', 'run_command' => 'perl {source}', 'is_active' => true, 'category' => 'interpreted'],
             // Issue #305 -- `lua` e `luac` NAO existem no Alpine. O pacote
@@ -247,7 +286,28 @@ class Language extends Model
             // analisar e despejar o programa formatado, sem rodar -- medido
             // com um BEGIN que imprime, e ele nao imprimiu.
             ['name' => 'AWK (GAWK 5.3)', 'extension' => 'awk', 'file_ext' => 'awk', 'compile_command' => 'gawk --lint -o/dev/null -f {source}', 'run_command' => 'gawk -f {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'Sed', 'extension' => 'sed', 'file_ext' => 'sed', 'compile_command' => 'sed -n "q" {source}', 'run_command' => 'sed -f {source}', 'is_active' => true, 'category' => 'interpreted'],
+            // Issue #323 -- a etapa de compilacao do `sed` passa a ANALISAR o
+            // script. O comando anterior era `sed -n "q" {source}`, em que
+            // `{source}` nao e o programa: e a ENTRADA. O script era o `"q"`
+            // ("le a primeira linha e sai"), o arquivo da equipe era lido
+            // como dados e descartado, e nenhum script era recusado --
+            // programa invalido virava `RE` sem diagnostico, em vez de `CE`
+            // com a mensagem do parser. Mesma familia do `-o/dev/null` do
+            // gawk logo acima e do que o Lote C corrigiu em cinco comandos
+            // que "compilavam" executando.
+            //
+            // `-f {source}` poe o arquivo no lugar de script; `-n` cala a
+            // impressao automatica e `< /dev/null` garante zero ciclos. As
+            // duas metades, medidas nesta imagem (BusyBox sed):
+            //
+            //     script `Z`          -> rc=1, "sed: unsupported command Z"
+            //     script `s/3 5/8/`   -> rc=0, stdout de comprimento 0
+            //
+            // O rc=0 COM stdout vazio e o que prova que a etapa analisa sem
+            // executar. Ressalva medida: o BusyBox recusa comando e regex
+            // invalidos no parse, mas aceita `b` para um rotulo inexistente
+            // (rc=0) -- um `CE` de linguagem compilada pegaria mais.
+            ['name' => 'Sed', 'extension' => 'sed', 'file_ext' => 'sed', 'compile_command' => 'sed -n -f {source} < /dev/null', 'run_command' => 'sed -f {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // Functional Languages
             ['name' => 'Haskell (GHC 9.10)', 'extension' => 'hs', 'file_ext' => 'hs', 'compile_command' => 'ghc -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
@@ -293,7 +353,41 @@ class Language extends Model
             // A etapa de COMPILACAO nao precisa da flag e por isso nao a
             // tem: `compile_max_file_kb` e 256 MiB, acima dos 64 MiB que a
             // BEAM estica -- e `erlc` nao aceita `+flags` de qualquer forma.
-            ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => true, 'category' => 'compiled'],
+            // Issue #339 -- DESATIVADAS ate o upstream publicar a correcao.
+            //
+            // A BEAM nao sobe de forma intermitente no juiz:
+            // `sys_signal_stack.c:101:sys_sigaltstack(): Internal error:
+            // Failed to set alternate signal stack`. A causa e estrutural e
+            // nao e nossa: a ERTS dimensiona a pilha alternativa de sinal com
+            // o `SIGSTKSZ` ESTATICO da musl (8192 em x86_64), e em CPU cujo
+            // kernel reporta `AT_MINSIGSTKSZ` maior -- AVX-512, AMX -- o
+            // `sigaltstack()` devolve ENOMEM e a ERTS aborta. Quem decide e a
+            // CPU do host, o que explica a intermitencia sem apelar para
+            // carga: um runner passa 20 partidas seguidas e o seguinte
+            // derruba quatro testes.
+            //
+            // Medido: em aarch64 a BEAM subiu 150 vezes sem falha, e o binario
+            // dali nem contem as strings do defeito (o arquivo so e compilado
+            // em build BEAMASM). No x86_64 do CI ela ja derrubou quatro testes
+            // em execucoes distintas -- inclusive bloqueando o PR da correcao
+            // de seguranca da #311, que nao tem relacao nenhuma com ela.
+            //
+            // Subir a versao NAO resolve, e isto foi medido e nao suposto: o
+            // Alpine 3.24 publica `erlang27` e `erlang28`, e
+            // `ss.ss_size = SIGSTKSZ` continua em OTP-27.3.4.17, OTP-28.5.0.6,
+            // OTP-28.6 e OTP-29.0. A correcao (`sysconf(_SC_MINSIGSTKSZ)`,
+            // erlang/otp#11376) existe SO no `master` do upstream -- nao ha
+            // release que a carregue.
+            //
+            // Desativar e reversivel; deixar ligado nao e. Linguagem
+            // intermitente e pior que linguagem ausente: ausente, a equipe nao
+            // a escolhe; intermitente, ela submete e recebe veredito de erro
+            // que nao e dela, com diagnostico que nao da para contestar. Os
+            // comandos ficam prontos -- basta virar `true` quando houver
+            // release com a correcao, e o
+            // `test_a_beam_sobe_vinte_vezes_seguidas_dentro_do_sandbox` (#345)
+            // e quem diz se ja da.
+            ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => false, 'category' => 'compiled'],
 
             // Issue #305 -- `elixirc` EXECUTA o codigo de nivel superior.
             // Medido: a "compilacao" do a+b morreu em
@@ -311,7 +405,7 @@ class Language extends Model
             // `ulimit -f` da etapa de execucao. Medido aqui tambem, com o
             // a+b: `ulimit -f 1024` sem a flag -> rc=153 e saida vazia; com
             // a flag -> imprime 8.
-            ['name' => 'Elixir 1.19', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixir -e \'Code.string_to_quoted!(File.read!("{source}"))\'', 'run_command' => 'elixir --erl \'+JMsingle true\' {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'Elixir 1.19', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixir -e \'Code.string_to_quoted!(File.read!("{source}"))\'', 'run_command' => 'elixir --erl \'+JMsingle true\' {source}', 'is_active' => false, 'category' => 'interpreted'],
             // Issue #305, Lote D -- Julia fica INATIVA, e o motivo e uma
             // medicao e nao uma suspeita.
             //
