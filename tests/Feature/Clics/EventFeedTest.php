@@ -156,7 +156,7 @@ class EventFeedTest extends TestCase
     {
         $tipos = array_column($this->feed(), 'type');
 
-        foreach (['contests', 'judgement-types', 'languages', 'groups', 'teams', 'problems', 'state'] as $esperado) {
+        foreach (['contest', 'judgement-types', 'languages', 'groups', 'teams', 'problems', 'state'] as $esperado) {
             $this->assertContains($esperado, $tipos, "a fotografia nao trouxe {$esperado}");
         }
     }
@@ -169,10 +169,123 @@ class EventFeedTest extends TestCase
     public function test_snapshot_lines_carry_no_token(): void
     {
         foreach ($this->feed() as $line) {
-            if (in_array($line['type'], ['contests', 'teams', 'problems', 'languages', 'groups', 'judgement-types'], true)) {
+            if (in_array($line['type'], ['contest', 'teams', 'problems', 'languages', 'groups', 'judgement-types'], true)) {
                 $this->assertArrayNotHasKey('token', $line, "{$line['type']} da fotografia veio com token");
             }
         }
+    }
+
+    // -- o formato de 2023-06, e nao o de 2020-03 (#330) ---------------------
+
+    /**
+     * Issue #330 -- nenhuma linha pode trazer `op`.
+     *
+     * Nao e purismo de schema. O NDJSONFeedParser do ICPC Tools BIFURCA
+     * pela presenca da propriedade:
+     *
+     *     String op = obj.getString("op");
+     *     if (op != null) parseOldFormat(...); else parseNewFormat(...);
+     *
+     * e o `parseOldFormat` nunca le `token`. Enquanto emitiamos `op` em
+     * todas as linhas, `getLastToken()` devolvia null para sempre e a
+     * retomada por `since_token` -- projetada, documentada e testada na
+     * #219 -- era codigo morto: nenhum cliente de verdade chegava a
+     * envia-la.
+     */
+    public function test_no_line_carries_the_op_property_that_2023_06_removed(): void
+    {
+        $this->judge($this->submitAt(10));
+
+        $linhas = $this->feed();
+
+        $this->assertNotEmpty($linhas);
+
+        foreach ($linhas as $linha) {
+            $this->assertArrayNotHasKey(
+                'op',
+                $linha,
+                "a linha de {$linha['type']} traz \"op\": o ICPC Tools cai no parser antigo e para de ler o token"
+            );
+        }
+    }
+
+    /**
+     * Issue #330 -- singleton sai com `id: null`.
+     *
+     * "The id of the object that changed, or null for the entire
+     * collection/singleton", e "If `type` is `contest`, then `id` must be
+     * null" (Notification format). `state` e singleton pela mesma secao
+     * ("`api`, `access`, `account`, `state`, `scoreboard`, and `event-feed`
+     * are singular nouns").
+     */
+    public function test_the_contest_and_state_lines_carry_a_null_id(): void
+    {
+        foreach ($this->feed() as $linha) {
+            if (in_array($linha['type'], ['contest', 'state'], true)) {
+                $this->assertArrayHasKey('id', $linha, "a linha de {$linha['type']} precisa TER a chave id");
+                $this->assertNull($linha['id'], "o singleton {$linha['type']} saiu com id nao-nulo");
+            }
+        }
+    }
+
+    /**
+     * E o resto continua com id: senao a assercao acima passaria num feed
+     * que perdeu todos os ids.
+     */
+    public function test_the_collections_still_carry_the_object_id(): void
+    {
+        $run = $this->submitAt(10);
+
+        $envios = array_values(array_filter($this->feed(), fn ($l) => $l['type'] === 'submissions'));
+
+        $this->assertNotEmpty($envios);
+        $this->assertSame((string) $run->id, $envios[0]['id']);
+    }
+
+    // -- a retomada invalida, que a spec manda recusar (#330) ---------------
+
+    /**
+     * "If the token is invalid, the time passed is too large [...] or the
+     * server does not support this parameter, the request will fail with a
+     * 400 error." (Reconnection)
+     *
+     * Os tres casos medidos na auditoria respondiam 200 -- e o
+     * `?since_token=999999` era o pior deles: corpo VAZIO e bem-sucedido. O
+     * resolver fica com o modelo que tinha e acha que esta em dia.
+     */
+    public function test_a_non_numeric_since_token_is_refused_with_400(): void
+    {
+        $this->get("/api/clics/contests/{$this->contest->id}/event-feed?since_token=abc")
+            ->assertStatus(400);
+    }
+
+    public function test_a_since_token_beyond_the_end_of_the_log_is_refused_with_400(): void
+    {
+        $this->judge($this->submitAt(10));
+
+        $ultimo = (int) ContestEvent::where('contest_id', $this->contest->id)->max('id');
+
+        $this->get("/api/clics/contests/{$this->contest->id}/event-feed?since_token=".($ultimo + 1))
+            ->assertStatus(400);
+
+        // O controle positivo: o ULTIMO token e valido. Sem esta metade, um
+        // endpoint que respondesse 400 a qualquer since_token passaria.
+        $this->get("/api/clics/contests/{$this->contest->id}/event-feed?since_token={$ultimo}")
+            ->assertStatus(200);
+    }
+
+    /**
+     * `since_id` e o parametro que o ICPC Tools manda quando nao conseguiu
+     * ler o token, e o valor e o id do OBJETO -- nao uma posicao no log.
+     * O `check-api.sh` do ICPC lista `400:event-feed?since_id=999999` entre
+     * os casos obrigatorios de falha.
+     */
+    public function test_the_legacy_since_id_parameter_is_refused_with_400(): void
+    {
+        $this->judge($this->submitAt(10));
+
+        $this->get("/api/clics/contests/{$this->contest->id}/event-feed?since_id=1")
+            ->assertStatus(400);
     }
 
     // -- retomada, que e o requisito duro -----------------------------------

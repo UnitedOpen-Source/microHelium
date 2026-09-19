@@ -11,6 +11,7 @@ use App\Models\Run;
 use App\Models\Score;
 use App\Models\Site;
 use App\Services\Clics\ContestEventRecorder;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
@@ -54,22 +55,20 @@ class ConformidadeClicsTest extends TestCase
      * @var array<string, string>
      */
     private const DIVERGENCIAS_CONHECIDAS = [
-        // Issue #330 -- a linha do feed ainda esta no formato anterior a
-        // 2020-03. `op` sumiu da spec em 2023-06, que e a versao que o nosso
-        // proprio endpoint `api` declara.
-        'event-feed: propriedade "op" nao existe na linha de evento' => '#330',
-        'event-feed: type "contests" fora do enum de common.json#/endpointssingularcontest' => '#330',
-        'event-feed: id nao-nulo no singleton "state"' => '#330',
-
-        // Issue #332 -- objetos obrigatorios que nao emitimos.
-        'languages[0]: falta "entry_point_required"' => '#332 (e #333)',
-        'judgements[0]: falta "start_time"' => '#332',
-        'submissions[0]: falta "files"' => '#332',
+        // Issue #332 -- `team.json` tem "required": ["id","name","label"], e
+        // a spec define `label` como "Label of the team, at WFs normally the
+        // team seat number".
+        //
+        // Continua aqui porque NAO E TRADUCAO. Nao existe coluna de rotulo
+        // nem de assento em `users`: as candidatas sao o autoincremento (que
+        // e o que ja sai em `id`, e emitir o mesmo numero duas vezes nao
+        // acrescenta nada), o `username` (que em instalacoes que usam e-mail
+        // como login poria dado pessoal na tela da cerimonia) e o `icpc_id`
+        // (que muitas equipes nao tem). Inventar um rotulo para satisfazer o
+        // schema seria exatamente o "verde contra mecanismo que nao pode
+        // funcionar" que esta suite existe para impedir. A decisao -- criar a
+        // coluna, e quem a preenche -- fica na #332.
         'teams[0]: falta "label"' => '#332',
-        'problems[0]: falta "test_data_count"' => '#332',
-        'problems[0]: "rgb" e null num campo nao-anulavel' => '#332',
-        'problems[0]: "color" e null num campo nao-anulavel' => '#332',
-        'contests[0]: falta "scoreboard_type"' => '#332',
     ];
 
     /** @var array<string, array<string, mixed>> */
@@ -125,6 +124,179 @@ class ConformidadeClicsTest extends TestCase
             "Apague a linha e feche a issue correspondente:\n  - ".
             implode("\n  - ", array_map(fn (string $v) => $v.'  ('.self::DIVERGENCIAS_CONHECIDAS[$v].')', $sumiram))
         );
+    }
+
+    /**
+     * O `access` e o mecanismo NORMATIVO de descoberta (#332).
+     *
+     * "The access endpoint specifies which other endpoints are offered by
+     * the API. That is, any endpoints and their properties listed in
+     * `access` must be provided (possibly with a `null` value when the
+     * property is optional), and only these endpoints and properties."
+     * (Types of endpoints)
+     *
+     * Tres perguntas, e as tres tinham resposta errada antes desta leva:
+     *
+     * 1. cada endpoint declarado tem propriedade? (`minItems: 1` em
+     *    `access.json`; declaravamos `[]` nos onze);
+     * 2. tudo o que SERVIMOS esta declarado? A lista de rotas e a fonte --
+     *    nao uma copia escrita aqui --, e `state` e `event-feed` respondiam
+     *    200 sem estar no `access`. Um resolver que descobre capacidades por
+     *    ele concluia que nao temos event feed;
+     * 3. o que esta declarado e o que sai? "and only these endpoints and
+     *    properties" corta dos dois lados.
+     */
+    public function test_o_access_declara_exatamente_o_que_esta_api_serve(): void
+    {
+        $this->semearProva();
+
+        $access = $this->getJson('/api/clics/access')->assertStatus(200)->json();
+
+        $minimo = $this->schemas['access.json']['properties']['endpoints']['items']['properties']['properties']['minItems'];
+        $tipos = $this->schemas['common.json']['endpointssingularcontest']['enum'];
+
+        $this->assertSame(1, $minimo, 'o minItems de access.json mudou: esta checagem estava medindo outra coisa');
+
+        $declarados = [];
+
+        foreach ($access['endpoints'] as $endpoint) {
+            $this->assertContains(
+                $endpoint['type'],
+                $tipos,
+                "o access declara \"{$endpoint['type']}\", que nao esta no enum de common.json#/endpointssingularcontest"
+            );
+
+            $this->assertGreaterThanOrEqual(
+                $minimo,
+                count($endpoint['properties']),
+                "o access declara {$endpoint['type']} sem propriedade nenhuma"
+            );
+
+            $declarados[$endpoint['type']] = $endpoint['properties'];
+        }
+
+        foreach ($this->tiposServidos() as $tipo) {
+            $this->assertArrayHasKey(
+                $tipo,
+                $declarados,
+                "servimos {$tipo} e o access nao declara: pela spec, um consumidor conclui que o endpoint nao existe"
+            );
+        }
+
+        foreach ($this->chavesObservadas() as $tipo => $observadas) {
+            $this->assertArrayHasKey($tipo, $declarados, "o access nao declara {$tipo}");
+
+            $esperadas = $declarados[$tipo];
+            sort($esperadas);
+            sort($observadas);
+
+            $this->assertSame(
+                $esperadas,
+                $observadas,
+                "o access de {$tipo} nao bate com o que o endpoint devolve -- a spec diz \"must be provided [...] and only these endpoints and properties\""
+            );
+        }
+    }
+
+    /**
+     * Os tipos que ESTA instalacao serve, lidos das rotas.
+     *
+     * Da tabela de rotas de proposito: uma lista escrita aqui seria uma
+     * terceira copia da mesma verdade (rotas, `access`, teste), e a proxima
+     * rota acrescentada sem declaracao passaria batida -- que foi
+     * exatamente o que aconteceu com `state` e `event-feed`.
+     *
+     * `api` e `access` ficam de fora porque sao metadados e nao estao no
+     * enum de tipos; `awards` esta nas rotas e e declarado, mas nao entra na
+     * comparacao de chaves porque so responde 200 depois de finalizar (#202).
+     *
+     * @return list<string>
+     */
+    private function tiposServidos(): array
+    {
+        $tipos = [];
+
+        foreach (Route::getRoutes() as $rota) {
+            if (! str_starts_with($rota->uri(), 'api/clics')) {
+                continue;
+            }
+
+            $ultimo = (string) last(explode('/', $rota->uri()));
+
+            $tipo = match ($ultimo) {
+                'clics', 'access' => null,
+                'contests', '{contest}' => 'contest',
+                default => $ultimo,
+            };
+
+            if ($tipo !== null) {
+                $tipos[$tipo] = true;
+            }
+        }
+
+        return array_keys($tipos);
+    }
+
+    /**
+     * As chaves que cada endpoint REALMENTE devolve.
+     *
+     * Uniao entre os objetos da colecao, e nao as chaves do primeiro: `rgb`
+     * e `color` saem so nos problemas que tem cor (a spec manda omitir em
+     * vez de emitir null), e olhar so o primeiro faria a comparacao com o
+     * `access` depender de qual problema veio antes.
+     *
+     * @return array<string, list<string>>
+     */
+    private function chavesObservadas(): array
+    {
+        $id = $this->contest->id;
+
+        $colecoes = [
+            'contest' => '/api/clics/contests',
+            'problems' => "/api/clics/contests/{$id}/problems",
+            'teams' => "/api/clics/contests/{$id}/teams",
+            'organizations' => "/api/clics/contests/{$id}/organizations",
+            'groups' => "/api/clics/contests/{$id}/groups",
+            'languages' => "/api/clics/contests/{$id}/languages",
+            'judgement-types' => "/api/clics/contests/{$id}/judgement-types",
+            'submissions' => "/api/clics/contests/{$id}/submissions",
+            'judgements' => "/api/clics/contests/{$id}/judgements",
+        ];
+
+        $observadas = [];
+
+        foreach ($colecoes as $tipo => $url) {
+            $itens = $this->getJson($url)->assertStatus(200)->json();
+
+            $this->assertNotEmpty($itens, "{$url} veio vazio: nao haveria chave para comparar com o access");
+
+            $chaves = [];
+
+            foreach ($itens as $item) {
+                $chaves = array_merge($chaves, array_keys($item));
+            }
+
+            $observadas[$tipo] = array_values(array_unique($chaves));
+        }
+
+        foreach (['state' => "/api/clics/contests/{$id}/state", 'scoreboard' => "/api/clics/contests/{$id}/scoreboard"] as $tipo => $url) {
+            $observadas[$tipo] = array_keys($this->getJson($url)->assertStatus(200)->json());
+        }
+
+        // O event feed: as chaves da LINHA, que e o objeto que ele devolve.
+        $corpo = $this->get("/api/clics/contests/{$id}/event-feed")->assertStatus(200)->streamedContent();
+
+        $chaves = [];
+
+        foreach (explode("\n", trim($corpo)) as $linha) {
+            if ($linha !== '') {
+                $chaves = array_merge($chaves, array_keys((array) json_decode($linha, true)));
+            }
+        }
+
+        $observadas['event-feed'] = array_values(array_unique($chaves));
+
+        return $observadas;
     }
 
     /**
@@ -289,6 +461,20 @@ class ConformidadeClicsTest extends TestCase
             'icpc_id' => 'INST-1',
         ]);
         $problema = Problem::factory()->create(['contest_id' => $this->contest->id, 'short_name' => 'A']);
+
+        // Um SEGUNDO problema, com cor.
+        //
+        // A spec manda omitir `rgb`/`color` quando nao ha cor, em vez de
+        // emitir null (#332), e um cenario so com problemas sem cor mediria
+        // metade da regra: o `access` declara as duas propriedades, e sem um
+        // problema colorido a comparacao "o declarado e o que sai" passaria
+        // por ausencia dos dois lados.
+        Problem::factory()->create([
+            'contest_id' => $this->contest->id,
+            'short_name' => 'B',
+            'color_hex' => '#EF4444',
+            'color_name' => 'vermelho',
+        ]);
         $linguagem = Language::factory()->create(['contest_id' => $this->contest->id, 'name' => 'C++', 'extension' => 'cpp']);
         $certo = Answer::factory()->create(['contest_id' => $this->contest->id, 'short_name' => 'YES', 'is_accepted' => true]);
 

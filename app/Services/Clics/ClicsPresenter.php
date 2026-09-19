@@ -91,6 +91,13 @@ class ClicsPresenter
             // segundos, e nao duracao ISO 8601.
             'duration' => $this->relTime((int) $contest->duration * 60),
             'scoreboard_freeze_duration' => $this->relTime($this->freezeMinutes($contest) * 60),
+            // Issue #332 -- `contest.json` de 2023-06 tem
+            // "required": ["id","name","duration","scoreboard_type"], e o
+            // enum e ["pass-fail","score"]. O nosso modelo de placar e
+            // pass-fail: um problema esta resolvido ou nao, e o desempate e
+            // por tempo com penalidade -- que e exatamente o ramo do schema
+            // que EXIGE `penalty_time` junto (allOf/if/then).
+            'scoreboard_type' => 'pass-fail',
             'penalty_time' => (int) $contest->penalty,
         ];
     }
@@ -134,20 +141,46 @@ class ClicsPresenter
     {
         return $contest->problems()
             ->where('is_fake', false)
+            // Issue #332 -- `test_data_count` e obrigatorio em
+            // `problem.json`, e a spec o define como "Number of test data
+            // sets". `withCount` e nao `->testCases()->count()` dentro do
+            // map: um problema por consulta transformaria a fotografia do
+            // event feed num N+1 no momento em que o resolver conecta.
+            ->withCount('testCases')
             // Issue #271 -- a ordem tem um nome, e mora em
             // Problem::scopeInContestOrder(). Ver o docblock de la para por
             // que `orderBy('sort_order')` sozinho nao bastava.
             ->inContestOrder()
             ->get()
             ->values()
-            ->map(fn (Problem $problem, int $index) => [
-                'id' => (string) $problem->id,
-                'label' => $problem->short_name,
-                'name' => $problem->name,
-                'ordinal' => $index,
-                'rgb' => $problem->color_hex,
-                'color' => $problem->color_name,
-            ])->all();
+            ->map(function (Problem $problem, int $index) {
+                $objeto = [
+                    'id' => (string) $problem->id,
+                    'label' => $problem->short_name,
+                    'name' => $problem->name,
+                    'ordinal' => $index,
+                    'test_data_count' => (int) $problem->test_cases_count,
+                ];
+
+                // Issue #332 -- OMITIR, e nao emitir null.
+                //
+                // `problem.json` tipa `rgb` e `color` como `string` sem
+                // `null`, e a spec e explicita nos dois lados: "Must only
+                // have null values if the type of the property is <type> ?"
+                // (Table column description) e "a property with value null
+                // may be left out by the server" (Extensibility). Um
+                // problema sem cor cadastrada nao tem cor -- e isso se diz
+                // nao dizendo, nao dizendo "null".
+                if ($problem->color_hex !== null && $problem->color_hex !== '') {
+                    $objeto['rgb'] = $problem->color_hex;
+                }
+
+                if ($problem->color_name !== null && $problem->color_name !== '') {
+                    $objeto['color'] = $problem->color_name;
+                }
+
+                return $objeto;
+            })->all();
     }
 
     /**
@@ -231,9 +264,28 @@ class ClicsPresenter
     public function languages(Contest $contest): array
     {
         return $contest->languages()->get()->map(fn ($language) => [
-            'id' => (string) $language->id,
+            // Issue #333 -- o identificador CLICS, e nao o autoincremento.
+            //
+            // "IDs are assigned by the person or system that is the source
+            // of the object, and must be maintained by downstream systems"
+            // (JSON property types). `languages.id` e `contest_id`-scoped:
+            // "3" era Java numa prova e Rust na seguinte, e nenhum consumidor
+            // conseguia comparar duas provas. Ver ClicsLanguageIdentifiers.
+            'id' => ClicsLanguageIdentifiers::para($language->extension),
             'name' => $language->name,
-            'extensions' => array_values(array_filter([$language->extension])),
+            // Issue #332/#333 -- obrigatorio em `language.json`. Hoje
+            // nenhuma linguagem do catalogo exige ponto de entrada
+            // declarado (o {classname} do Java sai do proprio fonte), entao
+            // `false` explicito e a verdade -- e o schema so pede
+            // `entry_point_name` no ramo `true`.
+            'entry_point_required' => false,
+            // Issue #333 -- a EXTENSAO do arquivo, e nao o slug interno.
+            //
+            // `languages.extension` e a chave interna ("cpp_gpp13"), e o
+            // proprio modelo tem getFileExtension() so por causa dessa
+            // confusao. Das 50 linguagens ativas do catalogo, 22 emitiam uma
+            // extensao que nao existe.
+            'extensions' => array_values(array_filter([$language->getFileExtension()])),
         ])->all();
     }
 
@@ -264,11 +316,28 @@ class ClicsPresenter
     {
         return $runs->values()->map(fn (Run $run) => [
             'id' => (string) $run->id,
-            'language_id' => (string) $run->language_id,
+            // Issue #333 -- o MESMO identificador que /languages emite.
+            //
+            // Trocar o id la e nao aqui seria pior que o defeito: o
+            // consumidor casa `submissions.language_id` com `languages.id`,
+            // e duas numeracoes diferentes deixariam todo envio apontando
+            // para uma linguagem que nao existe.
+            'language_id' => $run->language !== null
+                ? ClicsLanguageIdentifiers::para($run->language->extension)
+                : (string) $run->language_id,
             'problem_id' => (string) $run->problem_id,
             'team_id' => (string) $run->user_id,
             'time' => $contest->start_time?->copy()->addSeconds((int) $run->contest_time)->toIso8601String(),
             'contest_time' => $this->relTime((int) $run->contest_time),
+            // Issue #332 -- obrigatorio em `submission.json`
+            // (`common.json#/filerefs`, sem minItems).
+            //
+            // Vazio e a resposta HONESTA: a Contest API do microHelium e
+            // anonima, e publicar o fonte por href nela seria publicar o
+            // codigo de todas as equipes durante a prova. O que falta para
+            // preencher isto nao e traducao, e uma rota autenticada que
+            // sirva o zip -- decisao de produto, registrada na #332.
+            'files' => [],
         ])->all();
     }
 
@@ -286,6 +355,13 @@ class ClicsPresenter
             'id' => (string) $run->id,
             'submission_id' => (string) $run->id,
             'judgement_type_id' => self::verdictId($run->answer?->short_name),
+            // Issue #332 -- obrigatorio em `judgement.json`
+            // ("required": ["id","submission_id","start_time",
+            // "start_contest_time"]), e e a mesma conta que o `end_time`
+            // duas linhas abaixo ja fazia. O resolver ordena e anima os
+            // julgamentos por tempo ABSOLUTO; sem `start_time` o objeto e
+            // rejeitado por qualquer validador.
+            'start_time' => $contest->start_time?->copy()->addSeconds((int) $run->contest_time)->toIso8601String(),
             'start_contest_time' => $this->relTime((int) $run->contest_time),
             'end_contest_time' => $this->relTime((int) ($run->judged_time ?? $run->contest_time)),
             'end_time' => $contest->start_time?->copy()->addSeconds((int) ($run->judged_time ?? 0))->toIso8601String(),
