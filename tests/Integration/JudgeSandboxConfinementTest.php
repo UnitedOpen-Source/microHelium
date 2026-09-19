@@ -144,13 +144,31 @@ class JudgeSandboxConfinementTest extends TestCase
         $this->assertFileDoesNotExist('/tmp/sandbox_tmp_probe.txt');
     }
 
-    public function test_sandboxed_code_has_no_network_interface_beyond_loopback()
+    /**
+     * Issue #335 -- a evidencia e a TABELA DE ROTAS, e nao o NOME das
+     * interfaces.
+     *
+     * Este caso conferia que `eth0` nao aparecia em `/proc/net/dev`. Duas
+     * coisas estao erradas nisso, e as duas foram medidas. A lista de
+     * interfaces de um namespace de rede novo NAO e so `lo`: todo kernel
+     * com os modulos de tunel carregados (`ipip`, `sit`, `ip6_tunnel`,
+     * `ip6_gre`) registra um device de fallback em cada namespace novo --
+     * `tunl0 gre0 gretap0 erspan0 ip_vti0 ip6_vti0 sit0 ip6tnl0 ip6gre0`,
+     * com zero rotas e zero enderecos. E `eth0` e apenas o nome que o
+     * Docker da ao veth: um vazamento por um device com outro nome passava
+     * batido, e era verde sobre um mecanismo que nao media o que dizia.
+     *
+     * A tabela de rotas mede o que importa. Um namespace de rede novo nao
+     * tem rota nenhuma; um host de verdade sempre tem, mesmo sem internet.
+     * Medido nesta imagem: 0 rotas com `--unshare-all`, 2 com `--share-net`.
+     */
+    public function test_sandboxed_code_has_no_route_out_of_its_network_namespace()
     {
-        $result = $this->sandbox('cat /proc/net/dev');
+        $result = $this->sandbox("cat /proc/net/dev; echo ROTAS=$(awk 'NR>1' /proc/net/route | wc -l)");
 
         $this->assertSame(0, $result->exitCode(), $result->errorOutput());
         $this->assertStringContainsString('lo:', $result->output());
-        $this->assertStringNotContainsString('eth0', $result->output());
+        $this->assertStringContainsString('ROTAS=0', $result->output(), $result->output());
     }
 
     public function test_sandboxed_code_cannot_see_host_processes()
