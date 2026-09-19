@@ -15,12 +15,24 @@
 # semantica que uma etapa de compilacao precisa: pega erro de sintaxe e
 # identificador nao ligado sem executar o programa (sem consumir a entrada
 # nem imprimir nada).
+#
+# Issue #311 -- o caminho vem por AMBIENTE, e nao interpolado no fonte.
+#
+# A versao anterior colava `\"$1\"` duas vezes dentro do programa Racket
+# passado a `-e`. O `$1` e o nome do arquivo submetido, valor de
+# competidor: uma aspa nele fecharia a string e o resto seria lido como
+# CODIGO RACKET. `(getenv ...)` entrega o mesmo valor como dado, sem passar
+# pelo leitor.
+ARQUIVO_FONTE="$1"
+export ARQUIVO_FONTE
+
 exec racket -l racket/base \
     -e '(require syntax/modread)' \
-    -e "(void (parameterize ([current-namespace (make-base-namespace)])
-                (expand (with-module-reading-parameterization
-                          (lambda ()
-                            (call-with-input-file \"$1\"
-                              (lambda (porta)
-                                (port-count-lines! porta)
-                                (read-syntax \"$1\" porta))))))))"
+    -e '(let ([arquivo (getenv "ARQUIVO_FONTE")])
+          (void (parameterize ([current-namespace (make-base-namespace)])
+                  (expand (with-module-reading-parameterization
+                            (lambda ()
+                              (call-with-input-file arquivo
+                                (lambda (porta)
+                                  (port-count-lines! porta)
+                                  (read-syntax arquivo porta)))))))))'
