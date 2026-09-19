@@ -67,6 +67,37 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'cs_dotnet' => ['cs_dotnet', 'dotnet --version', '8.0', 'C# (.NET 8)'],
             'pas_fpc' => ['pas_fpc', 'fpc -iV', '3.2.2', 'Pascal (FPC)'],
             'perl' => ['perl', 'perl -e "print substr($^V,1)"', '5', 'Perl 5'],
+
+            // Issue #305, Lote C. Cada comando aqui foi rodado dentro da
+            // imagem antes de entrar, e o `promised` e o prefixo que o
+            // rotulo do catalogo anuncia.
+            'lua' => ['lua', 'lua5.4 -v', '5.4', 'Lua 5.4'],
+            'awk' => ['awk', 'gawk --version', '5.3', 'AWK (GAWK 5.3)'],
+            // O invocador, e nao `java -cp ...`: o mesmo binario que o
+            // catalogo chama e o que responde a versao, senao o teste
+            // confere uma coisa e a submissao roda outra.
+            'clj' => ['clj', 'clojure-run -e "(println (clojure-version))"', '1.12', 'Clojure 1.12'],
+            'r' => ['r', 'Rscript --vanilla -e "cat(R.version.string)"', '4.6', 'R 4.6'],
+            'ex' => ['ex', 'elixir -e "IO.puts(System.version())"', '1.19', 'Elixir 1.19'],
+            // O rotulo promete a OTP (que e o que uma equipe escolhe), e
+            // nao a versao do erts.
+            'erl' => ['erl', 'erl -noshell -eval "io:format(erlang:system_info(otp_release)), halt()."', '27', 'Erlang/OTP 27'],
+            // As duas entradas de Fortran sao o mesmo gfortran; o numero
+            // do rotulo e o do COMPILADOR, e o "77" ao lado e o padrao da
+            // linguagem.
+            'f90' => ['f90', 'gfortran -dumpversion', '15', 'Fortran (GFortran 15)'],
+            'f77' => ['f77', 'gfortran -dumpversion', '15', 'Fortran 77 (GFortran 15)'],
+            'adb' => ['adb', 'gnatmake --version', '15', 'Ada (GNAT 15)'],
+            'lisp_sbcl' => ['lisp_sbcl', 'sbcl --version', '2.6', 'Common Lisp (SBCL 2.6)'],
+            'lisp_clisp' => ['lisp_clisp', 'clisp --version', '2.49', 'Common Lisp (CLISP 2.49)'],
+            'scm' => ['scm', 'guile --version', '3.0', 'Scheme (Guile 3.0)'],
+            'rkt' => ['rkt', 'racket --version', '9.2', 'Racket 9.2'],
+            'zig' => ['zig', 'zig version', '0.16', 'Zig 0.16'],
+            'nim' => ['nim', 'nim --version', '2.2', 'Nim 2.2'],
+            'cr' => ['cr', 'crystal --version', '1.20', 'Crystal 1.20'],
+            'd_ldc' => ['d_ldc', 'ldc2 --version', '1.42', 'D (LDC 1.42)'],
+            'hs' => ['hs', 'ghc --numeric-version', '9.10', 'Haskell (GHC 9.10)'],
+            'ml' => ['ml', 'ocamlopt -version', '4.14', 'OCaml 4.14'],
         ];
     }
 
