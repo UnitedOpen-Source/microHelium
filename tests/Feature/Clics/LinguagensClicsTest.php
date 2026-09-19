@@ -63,17 +63,28 @@ class LinguagensClicsTest extends TestCase
     }
 
     /**
-     * Controle positivo: o catalogo existe e e do tamanho que esta issue
-     * descreve. Sem isto, tudo abaixo passaria sobre uma lista vazia.
+     * Controle positivo: o catalogo existe e nao e trivial. Sem isto, tudo
+     * abaixo passaria sobre uma lista vazia.
+     *
+     * O piso NAO e o numero exato de linguagens ativas, e isso e deliberado.
+     * Ele era 50 e virou catraca: desativar uma linguagem por motivo medido e
+     * legitimo, e a #339 fez exatamente isso -- `erl` e `ex` sairam porque a
+     * BEAM nao sobe de forma confiavel em x86_64 (`sigaltstack` com o
+     * `SIGSTKSZ` estatico da musl), e nenhuma release do OTP carrega a
+     * correcao. Um piso colado no numero do dia reprovaria essa decisao sem
+     * ter opiniao sobre ela.
+     *
+     * O que este controle precisa garantir e so que a medicao abaixo nao esta
+     * rodando sobre um punhado de linguagens -- dai um piso folgado.
      */
     public function test_o_catalogo_ativo_nao_encolheu(): void
     {
         $ativas = $this->catalogoAtivo();
 
         $this->assertGreaterThanOrEqual(
-            50,
+            40,
             count($ativas),
-            'o catalogo de linguagens ativas encolheu: confira se esta medicao ainda e sobre o mesmo catalogo'
+            'o catalogo de linguagens ativas encolheu MUITO: confira se esta medicao ainda e sobre o mesmo catalogo'
         );
 
         $trocadas = array_filter($ativas, fn (array $l) => $l['extension'] !== $l['file_ext']);
