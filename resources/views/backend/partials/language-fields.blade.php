@@ -7,7 +7,7 @@
 <div class="p-6 space-y-4">
     <div>
         <label for="{{ $idPrefix }}_name" class="block text-sm font-medium text-foreground mb-1">Nome da linguagem</label>
-        <input id="{{ $idPrefix }}_name" type="text" name="name" value="{{ $value('name', $language->name ?? '') }}" maxlength="50" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: C++ (G++ 13)" required>
+        <input id="{{ $idPrefix }}_name" type="text" name="name" value="{{ $value('name', $language->name ?? '') }}" maxlength="50" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Ex: C++ (G++ 15)" required>
         <p class="text-sm text-muted-foreground mt-1">É o nome que a equipe vê na tela de envio. Único dentro desta competição.</p>
     </div>
     <div>

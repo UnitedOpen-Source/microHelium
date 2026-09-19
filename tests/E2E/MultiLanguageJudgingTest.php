@@ -64,6 +64,13 @@ class MultiLanguageJudgingTest extends TestCase
             'cpp_gpp13' => ['file' => 'solution.cpp', 'source' => "#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<std::endl;return 0;}\n"],
             'cpp17_gpp' => ['file' => 'solution.cpp', 'source' => "#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<std::endl;return 0;}\n"],
             'java21' => ['file' => 'Main.java', 'source' => "import java.util.Scanner;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    System.out.println(sc.nextInt() + sc.nextInt());\n  }\n}\n"],
+            // Issue #305 -- a MESMA fonte para as duas LTS de Java. E de
+            // proposito: o que distingue as duas entradas nao e o programa,
+            // e o caminho absoluto do JDK que cada uma invoca. Se as duas
+            // passarem com fontes iguais, o que foi provado e que existem
+            // dois JDKs de verdade -- ver ToolchainVersionsMatchCatalogTest,
+            // que e quem confere QUAL versao cada uma rodou.
+            'java25' => ['file' => 'Main.java', 'source' => "import java.util.Scanner;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    System.out.println(sc.nextInt() + sc.nextInt());\n  }\n}\n"],
             'py3' => ['file' => 'solution.py', 'source' => "a, b = map(int, input().split())\nprint(a + b)\n"],
             'js_node24' => ['file' => 'solution.js', 'source' => "const data = require('fs').readFileSync(0, 'utf8').trim().split(/\\s+/).map(Number);\nconsole.log(data[0] + data[1]);\n"],
             // `declare function require` avoids needing @types/node (not
@@ -76,6 +83,37 @@ class MultiLanguageJudgingTest extends TestCase
             'php' => ['file' => 'solution.php', 'source' => "<?php\nfscanf(STDIN, \"%d %d\", \$a, \$b);\necho \$a + \$b, PHP_EOL;\n"],
             'rb' => ['file' => 'solution.rb', 'source' => "a, b = gets.split.map(&:to_i)\nputs a + b\n"],
             'pas_fpc' => ['file' => 'solution.pas', 'source' => "program Solution;\nvar a, b: integer;\nbegin\n  readln(a, b);\n  writeln(a + b);\nend.\n"],
+
+            // Issue #305, Lote B -- linguagens cujo toolchain JA estava na
+            // imagem, ativadas a custo zero de disco.
+            //
+            // As quatro primeiras reusam a fonte de C/C++ de proposito: o
+            // que muda entre elas e a flag `-std` ou o compilador, nao o
+            // programa.
+            'c99_gcc' => ['file' => 'solution.c', 'source' => "#include <stdio.h>\nint main(){int a,b;scanf(\"%d %d\",&a,&b);printf(\"%d\\n\",a+b);return 0;}\n"],
+            'cpp14_gpp' => ['file' => 'solution.cpp', 'source' => "#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<std::endl;return 0;}\n"],
+            'c_clang17' => ['file' => 'solution.c', 'source' => "#include <stdio.h>\nint main(){int a,b;scanf(\"%d %d\",&a,&b);printf(\"%d\\n\",a+b);return 0;}\n"],
+            'cpp_clang' => ['file' => 'solution.cpp', 'source' => "#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<std::endl;return 0;}\n"],
+            // `\$p` escapado: a fonte esta numa string PHP de aspas duplas,
+            // e sem a barra o PHP interpola `$p` -- o Perl recebia
+            // `print  + , "\n"` e dava CE. Aconteceu, e foi assim que se
+            // descobriu.
+            'perl' => ['file' => 'solution.pl', 'source' => "my @p = split ' ', <STDIN>;\nprint \$p[0] + \$p[1], \"\\n\";\n"],
+            'sh' => ['file' => 'solution.sh', 'source' => "read a b\necho $((a + b))\n"],
+
+            // `sed` nao tem aritmetica -- nenhum programa sed soma dois
+            // numeros lidos da entrada. A fonte abaixo e uma substituicao
+            // literal, e e o melhor que a linguagem permite para este
+            // problema.
+            //
+            // Fica registrado o que este caso prova e o que NAO prova: prova
+            // que o `sed -n \"q\"` da compilacao aceita o arquivo, que o
+            // `sed -f` roda e que a saida chega ao comparador. Nao prova
+            // nenhuma capacidade de calculo, porque nao ha nenhuma para
+            // provar. Um teste que se dissesse mais do que isso seria o
+            // "verde contra mecanismo que nao pode funcionar" que este
+            // repositorio ja conhece.
+            'sed' => ['file' => 'solution.sed', 'source' => "s/3 5/8/\n"],
             // Issue #268 -- o unico caso cuja fonte e BINARIA: um `.sb3` e
             // um ZIP. Montado por codigo em Tests\Support\ScratchProject
             // para o programa julgado ser legivel na revisao -- um blob de

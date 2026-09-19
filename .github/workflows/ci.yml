@@ -171,7 +171,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      # The image carries the fourteen language toolchains and bubblewrap.
+      # The image carries every toolchain the catalog marks is_active, plus
+      # bubblewrap. The count is deliberately not written here any more: it
+      # said "fourteen" while the catalog had sixteen entries, which is the
+      # same drift issue #303 is about. The authority is
+      # Language::getDefaultLanguages(), and
+      # MultiLanguageJudgingTest::test_every_active_language_has_a_solution_fixture_covering_it
+      # is what keeps the image and the catalog honest with each other.
       # Cached against the layer cache, so a run that doesn't touch
       # Dockerfile.judge doesn't pay for the Kotlin and Free Pascal
       # downloads again.

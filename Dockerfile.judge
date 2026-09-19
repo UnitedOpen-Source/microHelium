@@ -106,42 +106,72 @@ RUN apk add --no-cache \
     libxml2-dev \
     postgresql-dev \
     linux-headers \
-    bubblewrap \
+    bubblewrap=0.12.0-r0 \
     $PHPIZE_DEPS \
-    # C/C++ compilers
-    gcc \
-    g++ \
+    # C/C++ compilers -- issue #303: versao FIXADA.
+    #
+    # Tudo que compila ou executa codigo de competidor esta fixado a partir
+    # daqui, e tudo que so constroi a imagem (git, curl, os -dev) nao esta.
+    # O criterio e esse: o veredito de uma equipe nao pode depender do dia em
+    # que a imagem foi construida. `bubblewrap` entra na lista fixada por
+    # outro motivo -- e o confinamento, e uma troca silenciosa dele muda o
+    # que o codigo submetido alcanca.
+    gcc=15.2.0-r5 \
+    g++=15.2.0-r5 \
+    # Clang, EXPLICITO e nao por tabela -- issue #305.
+    #
+    # Ele ja estava na imagem como dependencia transitiva do `rust`, e as
+    # entradas `c_clang17`/`cpp_clang` passam a ser ativas nesta mudanca. Uma
+    # linguagem oferecida a equipes nao pode depender de continuar sendo
+    # efeito colateral da arvore de dependencia de outra.
+    clang22=22.1.3-r2 \
     make \
     musl-dev \
     libc-dev \
     libstdc++ \
-    # Java (for Java, Kotlin)
-    openjdk21-jdk \
+    # Java -- issue #305: as DUAS LTS, lado a lado.
+    #
+    # Cada JDK do Alpine vive no seu proprio prefixo
+    # (`/usr/lib/jvm/java-NN-openjdk`), e as entradas do catalogo apontam
+    # para o caminho absoluto de cada um. Sem isso, "manter a versao antiga"
+    # e so um rotulo: `javac` resolve para uma JVM so. O `kotlinc` e o
+    # Portugol Studio seguem usando o `default-jvm`, que continua sendo o 21.
+    openjdk21-jdk=21.0.12_p8-r0 \
+    openjdk25-jdk=25.0.4_p7-r0 \
     # Python 3
-    python3 \
+    python3=3.14.7-r1 \
     py3-pip \
     # Node.js / TypeScript -- a single real runtime, not nvm: see
     # Dockerfile.dev's comment on why multiple Node majors aren't installed
-    nodejs \
-    npm \
+    nodejs=24.18.1-r0 \
+    npm=11.12.1-r0 \
     # .NET / C#
-    dotnet8-sdk \
+    dotnet8-sdk=8.0.131-r0 \
     # Go
-    go \
+    go=1.26.8-r0 \
     # Rust
-    rust \
+    rust=1.96.1-r0 \
     # Ruby
-    ruby \
+    ruby=3.4.9-r0 \
+    # Perl -- issue #305, mesma razao do clang: ja estava presente como
+    # dependencia do git, e a entrada `perl` passa a ser ativa.
+    perl=5.42.2-r0 \
     # Process management
     procps \
     # Time limiting
     coreutils \
     # Memory limiting
     util-linux \
-    # Bash for scripts
-    bash
+    # Bash for scripts -- tambem a linguagem `sh` do catalogo (#305)
+    bash=5.3.9-r1
 
-RUN npm install -g typescript
+# Issue #303 -- versao fixada tambem aqui.
+#
+# `npm install -g typescript` sem versao resolve para a ultima do registro a
+# cada build. Medido antes desta mudanca: a imagem trazia tsc 7.0.2, sem que
+# nenhum commit tivesse pedido isso.
+ARG TYPESCRIPT_VERSION=7.0.2
+RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
 
 # Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
 # zip (pure JVM + a launcher script, arch-independent given the JDK above).

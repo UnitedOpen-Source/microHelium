@@ -45,20 +45,44 @@ class Language extends Model
     {
         return [
             // C/C++ Languages
-            ['name' => 'C (GCC 13)', 'extension' => 'c_gcc13', 'file_ext' => 'c', 'compile_command' => 'gcc -static -O2 -std=c17 -o {output} {source} -lm', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'C (Clang 17)', 'extension' => 'c_clang17', 'file_ext' => 'c', 'compile_command' => 'clang -static -O2 -std=c17 -o {output} {source} -lm', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'C99 (GCC 13)', 'extension' => 'c99_gcc', 'file_ext' => 'c', 'compile_command' => 'gcc -static -O2 -std=c99 -o {output} {source} -lm', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'C++ (G++ 13)', 'extension' => 'cpp_gpp13', 'file_ext' => 'cpp', 'compile_command' => 'g++ -static -O2 -std=c++20 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'C++14 (G++ 13)', 'extension' => 'cpp14_gpp', 'file_ext' => 'cpp', 'compile_command' => 'g++ -static -O2 -std=c++14 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'C++17 (G++ 13)', 'extension' => 'cpp17_gpp', 'file_ext' => 'cpp', 'compile_command' => 'g++ -static -O2 -std=c++17 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'C++ (Clang 17)', 'extension' => 'cpp_clang', 'file_ext' => 'cpp', 'compile_command' => 'clang++ -static -O2 -std=c++20 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            ['name' => 'C (GCC 15)', 'extension' => 'c_gcc13', 'file_ext' => 'c', 'compile_command' => 'gcc -static -O2 -std=c17 -o {output} {source} -lm', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C (Clang 22)', 'extension' => 'c_clang17', 'file_ext' => 'c', 'compile_command' => 'clang -static -O2 -std=c17 -o {output} {source} -lm', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C99 (GCC 15)', 'extension' => 'c99_gcc', 'file_ext' => 'c', 'compile_command' => 'gcc -static -O2 -std=c99 -o {output} {source} -lm', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C++ (G++ 15)', 'extension' => 'cpp_gpp13', 'file_ext' => 'cpp', 'compile_command' => 'g++ -static -O2 -std=c++20 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C++14 (G++ 15)', 'extension' => 'cpp14_gpp', 'file_ext' => 'cpp', 'compile_command' => 'g++ -static -O2 -std=c++14 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C++17 (G++ 15)', 'extension' => 'cpp17_gpp', 'file_ext' => 'cpp', 'compile_command' => 'g++ -static -O2 -std=c++17 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C++ (Clang 22)', 'extension' => 'cpp_clang', 'file_ext' => 'cpp', 'compile_command' => 'clang++ -static -O2 -std=c++20 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
-            // Java
-            ['name' => 'Java (OpenJDK 21)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => 'javac {source}', 'run_command' => 'java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'Java (OpenJDK 17)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => 'javac {source}', 'run_command' => 'java -Xmx{memory}m {classname}', 'is_active' => false, 'category' => 'compiled'],
+            // Java -- issues #303 e #305: CAMINHO ABSOLUTO, e nao `javac`.
+            //
+            // Ate aqui as tres entradas de Java diziam `javac`/`java`, que
+            // resolvem pelo PATH para o `default-jvm` -- ou seja, para uma
+            // unica JVM. Medido antes da mudanca: ativar `java17` rodava
+            // `javac 21.0.12`. O comentario do catalogo dizia que entradas
+            // assim "would silently fail"; elas nao falhavam, rodavam a
+            // VERSAO ERRADA em silencio, que e pior -- a equipe escolhe uma
+            // versao, recebe outra, e nada registra a diferenca.
+            //
+            // O Alpine instala cada JDK no seu proprio prefixo
+            // (`/usr/lib/jvm/java-NN-openjdk`), entao o caminho absoluto e o
+            // que torna "manter a versao antiga ao lado da nova" verdadeiro.
+            // Medido na imagem: java-21 -> javac 21.0.12, java-25 -> javac
+            // 25.0.4.
+            //
+            // De quebra isso conserta o roteamento: `MachineCapabilities`
+            // sonda o PRIMEIRO TOKEN do comando e ja trata caminho absoluto
+            // diretamente, entao um host com apenas o JDK 21 deixa de
+            // anunciar `java25` -- coisa que com `javac` era impossivel
+            // distinguir.
+            //
+            // `java17` segue INATIVA porque o `openjdk17-jdk` nao esta
+            // instalado; a diferenca e que agora ela falha em vez de mentir.
+            ['name' => 'Java (OpenJDK 25 LTS)', 'extension' => 'java25', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-25-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-25-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Java (OpenJDK 21 LTS)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-21-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => false, 'category' => 'compiled'],
 
             // Python
-            ['name' => 'Python 3.12', 'extension' => 'py3', 'file_ext' => 'py', 'compile_command' => 'python3 -m py_compile {source}', 'run_command' => 'python3 {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'Python 3.14', 'extension' => 'py3', 'file_ext' => 'py', 'compile_command' => 'python3 -m py_compile {source}', 'run_command' => 'python3 {source}', 'is_active' => true, 'category' => 'interpreted'],
             // PyPy has no musl/Alpine build (upstream only ships glibc
             // binaries), so it's left inactive rather than silently failing
             // every submission; CPython 3.12 above covers the language.
@@ -68,8 +92,19 @@ class Language extends Model
             // JavaScript / Node.js -- the container only installs a single
             // Node runtime (the current LTS, via Alpine's `nodejs` package),
             // so only one Node entry is real; the others are kept in the
-            // catalog for a future multi-version (nvm-based) setup but left
-            // inactive since selecting them today would silently fail.
+            // catalog for a future multi-version (nvm-based) setup.
+            //
+            // Issue #303 -- a razao escrita aqui antes estava ERRADA, e a
+            // medicao a desmentiu. Dizia que seleciona-las hoje "would
+            // silently fail". Nao falha: `node` resolve pelo PATH, entao
+            // `js_node20` rodaria `node v24.18.1` -- a versao errada, em
+            // silencio. Isso e pior do que falhar, e e exatamente o motivo
+            // de as entradas de Java acima terem passado a caminho absoluto.
+            //
+            // Node nao tem a mesma saida: o Alpine publica um unico pacote
+            // `nodejs`, sem prefixo por versao. Enquanto nao houver
+            // instalacao paralela, estas continuam inativas -- agora pelo
+            // motivo certo, e nao por um que a medicao derrubou.
             ['name' => 'JavaScript (Node 24 LTS)', 'extension' => 'js_node24', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'JavaScript (Node 22)', 'extension' => 'js_node22', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'JavaScript (Node 20 LTS)', 'extension' => 'js_node20', 'file_ext' => 'js', 'compile_command' => 'node --check {source}', 'run_command' => 'node --max-old-space-size={memory} {source}', 'is_active' => false, 'category' => 'interpreted'],
@@ -147,8 +182,8 @@ class Language extends Model
             ['name' => 'Visual Basic (.NET 8)', 'extension' => 'vb', 'file_ext' => 'vb', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],
 
             // Systems Languages
-            ['name' => 'Rust (1.75)', 'extension' => 'rs', 'file_ext' => 'rs', 'compile_command' => 'rustc -O -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'Go (1.22)', 'extension' => 'go', 'file_ext' => 'go', 'compile_command' => 'go build -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Rust (1.96)', 'extension' => 'rs', 'file_ext' => 'rs', 'compile_command' => 'rustc -O -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Go (1.26)', 'extension' => 'go', 'file_ext' => 'go', 'compile_command' => 'go build -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'D (DMD)', 'extension' => 'd_dmd', 'file_ext' => 'd', 'compile_command' => 'dmd -of={output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'D (LDC)', 'extension' => 'd_ldc', 'file_ext' => 'd', 'compile_command' => 'ldc2 -of={output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Nim', 'extension' => 'nim', 'file_ext' => 'nim', 'compile_command' => 'nim c -o:{output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
@@ -156,12 +191,12 @@ class Language extends Model
 
             // Scripting Languages
             ['name' => 'PHP 8.3', 'extension' => 'php', 'file_ext' => 'php', 'compile_command' => 'php -l {source}', 'run_command' => 'php {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'Ruby 3.3', 'extension' => 'rb', 'file_ext' => 'rb', 'compile_command' => 'ruby -c {source}', 'run_command' => 'ruby {source}', 'is_active' => true, 'category' => 'interpreted'],
-            ['name' => 'Perl 5', 'extension' => 'perl', 'file_ext' => 'pl', 'compile_command' => 'perl -c {source}', 'run_command' => 'perl {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'Ruby 3.4', 'extension' => 'rb', 'file_ext' => 'rb', 'compile_command' => 'ruby -c {source}', 'run_command' => 'ruby {source}', 'is_active' => true, 'category' => 'interpreted'],
+            ['name' => 'Perl 5', 'extension' => 'perl', 'file_ext' => 'pl', 'compile_command' => 'perl -c {source}', 'run_command' => 'perl {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Lua 5.4', 'extension' => 'lua', 'file_ext' => 'lua', 'compile_command' => 'luac -p {source}', 'run_command' => 'lua {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Bash', 'extension' => 'sh', 'file_ext' => 'sh', 'compile_command' => 'bash -n {source}', 'run_command' => 'bash {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'Bash', 'extension' => 'sh', 'file_ext' => 'sh', 'compile_command' => 'bash -n {source}', 'run_command' => 'bash {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'AWK (GAWK)', 'extension' => 'awk', 'file_ext' => 'awk', 'compile_command' => 'gawk --lint -f {source} /dev/null 2>&1', 'run_command' => 'gawk -f {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Sed', 'extension' => 'sed', 'file_ext' => 'sed', 'compile_command' => 'sed -n "q" {source}', 'run_command' => 'sed -f {source}', 'is_active' => false, 'category' => 'interpreted'],
+            ['name' => 'Sed', 'extension' => 'sed', 'file_ext' => 'sed', 'compile_command' => 'sed -n "q" {source}', 'run_command' => 'sed -f {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // Functional Languages
             ['name' => 'Haskell (GHC)', 'extension' => 'hs', 'file_ext' => 'hs', 'compile_command' => 'ghc -O2 -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],

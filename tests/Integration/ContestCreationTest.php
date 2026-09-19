@@ -2,11 +2,13 @@
 
 namespace Tests\Integration;
 
-use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
+use App\Models\Contest;
 use App\Models\Language;
 use App\Models\ProblemBank;
+use Helium\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
 
 class ContestCreationTest extends TestCase
 {
@@ -32,9 +34,9 @@ class ContestCreationTest extends TestCase
     /**
      * Helper to create a user
      */
-    protected function createUser(array $attributes = []): \Helium\User
+    protected function createUser(array $attributes = []): User
     {
-        return \Helium\User::create(array_merge([
+        return User::create(array_merge([
             'fullname' => 'Test User',
             'username' => 'testuser',
             'email' => 'test@example.com',
@@ -195,7 +197,7 @@ class ContestCreationTest extends TestCase
         // wizard validating against that table -- which meant a contest
         // created by the API or the importer did NOT block a duplicate
         // name, since it has no legacy row.
-        \App\Models\Contest::factory()->create(['name' => 'Existing Contest']);
+        Contest::factory()->create(['name' => 'Existing Contest']);
 
         $contestData = [
             'name' => 'Existing Contest', // Duplicate name
@@ -269,35 +271,35 @@ class ContestCreationTest extends TestCase
         // Verify selected languages are active
         $this->assertDatabaseHas('languages', [
             'contest_id' => $contest->id,
-            'name' => 'C (GCC 13)',
+            'name' => 'C (GCC 15)',
             'extension' => 'c_gcc13',
             'is_active' => true,
         ]);
 
         $this->assertDatabaseHas('languages', [
             'contest_id' => $contest->id,
-            'name' => 'C++ (G++ 13)',
+            'name' => 'C++ (G++ 15)',
             'extension' => 'cpp_gpp13',
             'is_active' => true,
         ]);
 
         $this->assertDatabaseHas('languages', [
             'contest_id' => $contest->id,
-            'name' => 'Python 3.12',
+            'name' => 'Python 3.14',
             'extension' => 'py3',
             'is_active' => true,
         ]);
 
         $this->assertDatabaseHas('languages', [
             'contest_id' => $contest->id,
-            'name' => 'Java (OpenJDK 21)',
+            'name' => 'Java (OpenJDK 21 LTS)',
             'extension' => 'java21',
             'is_active' => true,
         ]);
 
         $this->assertDatabaseHas('languages', [
             'contest_id' => $contest->id,
-            'name' => 'Rust (1.75)',
+            'name' => 'Rust (1.96)',
             'extension' => 'rs',
             'is_active' => true,
         ]);
