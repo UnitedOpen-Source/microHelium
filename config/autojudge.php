@@ -231,7 +231,12 @@ return [
         // DOTNET_GCHeapHardLimit, wired up in #104 -- and the MLE verdict
         // comes from measured peak RSS either way, which is the whole
         // point of measuring rather than inferring.
+        // Issue #305 -- `java25` faltava nesta lista desde que a entrada
+        // foi ligada: sem ela a JVM 25 pegava a folga padrao de 64 MB e
+        // um host sem cgroup delegado nao conseguiria nem subi-la. Mesma
+        // medicao do `java21` ao lado.
         'java21' => null,
+        'java25' => null,
         'java17' => null,
         'kt' => null,
         'scala' => null,
@@ -241,6 +246,26 @@ return [
         'cs_mono' => null,
         'fs_dotnet' => null,
         'vb' => null,
+
+        // Issue #305, Lote C -- medido da mesma forma que os de cima: o
+        // menor `ulimit -v` sob o qual o runtime ainda SOBE e roda um
+        // a+b, com o limite de 256 MB do problema.
+        //
+        //     Elixir / Erlang    2048 MB   (a BEAM reserva o espaco das
+        //                                   areas de carry dos schedulers)
+        //     SBCL               2048 MB   (mapeia o dynamic space
+        //                                   inteiro na partida)
+        //
+        // Oito vezes o limite nao limita nada, entao vale aqui o mesmo
+        // que vale para a JVM: sem barreira, e o MLE sai do pico de RSS
+        // medido. As demais do lote (R, Racket, Guile, CLISP, Haskell,
+        // OCaml, Zig, Nim, Crystal, D, Fortran, Ada, Lua, AWK, Tcl)
+        // sobem dentro de limite+64 e por isso nao aparecem aqui --
+        // exceto o R, que precisa de mais um pouco.
+        'ex' => null,
+        'erl' => null,
+        'lisp_sbcl' => null,
+        'r' => 256,
     ],
 
     /*

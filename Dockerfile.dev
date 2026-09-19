@@ -9,6 +9,15 @@ LABEL description="MicroHelium Development Container"
 WORKDIR /var/www/html
 
 # Install system dependencies
+# Issue #303 -- os toolchains abaixo estao com VERSAO FIXADA.
+#
+# O criterio: tudo que compila ou executa codigo de competidor -- e o
+# `bubblewrap`, que o confina -- e fixado; o que so constroi a imagem (git,
+# curl, os -dev) nao e. Um veredito nao pode depender do dia em que a imagem
+# foi construida, ainda mais com julgamento distribuido (#53), em que a
+# imagem e construida tambem por parceiros.
+#
+# Esta lista tem de acompanhar a do Dockerfile.judge.
 RUN apk add --no-cache \
     git \
     curl \
@@ -25,7 +34,7 @@ RUN apk add --no-cache \
     libxml2-dev \
     postgresql-dev \
     linux-headers \
-    bubblewrap \
+    bubblewrap=0.12.0-r0 \
     # Issue #142: mysqldump for `backup:create`, plus the connector plugin
     # that lets MariaDB's client authenticate against MySQL 8's default
     # caching_sha2_password. Same reasoning as in Dockerfile.
@@ -36,28 +45,62 @@ RUN apk add --no-cache \
     # Language::getDefaultLanguages() marks is_active by default, or admins
     # can select a language in the Contest Wizard that the judge then can't
     # actually compile/run.
-    gcc \
-    g++ \
+    gcc=15.2.0-r5 \
+    clang22=22.1.3-r2 \
+    g++=15.2.0-r5 \
     make \
-    python3 \
-    openjdk21-jdk \
-    nodejs \
-    npm \
-    dotnet8-sdk \
-    go \
-    rust \
-    ruby \
+    python3=3.14.7-r1 \
+    openjdk21-jdk=21.0.12_p8-r0 \
+    openjdk25-jdk=25.0.4_p7-r0 \
+    nodejs=24.18.1-r0 \
+    npm=11.12.1-r0 \
+    dotnet8-sdk=8.0.131-r0 \
+    go=1.26.8-r0 \
+    rust=1.96.1-r0 \
+    ruby=3.4.9-r0 \
+    perl=5.42.2-r0 \
+    # Issue #305, Lote C -- o mesmo conjunto do Dockerfile.judge, onde
+    # cada um destes foi compilado e executado num `a+b` dentro do
+    # sandbox antes de ser ligado no catalogo. As tres listas andam
+    # juntas: o MultiLanguageJudgingTest roda nesta imagem no
+    # desenvolvimento e na imagem do juiz no CI, e uma linguagem ativa
+    # que existisse so numa delas passaria num lugar e falharia no outro.
+    lua5.4=5.4.8-r0 \
+    gawk=5.3.2-r2 \
+    tcl=8.6.17-r1 \
+    clojure=1.12.5-r0 \
+    R=4.6.0-r0 \
+    elixir=1.19.6-r0 \
+    erlang27=27.3.4.17-r0 \
+    gfortran=15.2.0-r5 \
+    gcc-gnat=15.2.0-r5 \
+    sbcl=2.6.5-r0 \
+    clisp=2.49.95_git250727-r1 \
+    guile=3.0.9-r2 \
+    racket=9.2-r0 \
+    zig=0.16.0-r1 \
+    nim=2.2.0-r0 \
+    crystal=1.20.3-r0 \
+    ldc=1.42.0-r0 \
+    ocaml=4.14.3-r0 \
+    ghc=9.10.3-r2 \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
-    bash \
+    bash=5.3.9-r1 \
     # setpriv, for docker/php/entrypoint.sh's privilege drop (issue #136).
     # Busybox ships a /bin/setpriv that only implements --inh-caps and
     # --no-new-privs; --reuid/--regid are util-linux's. Dockerfile.judge
     # installs this package for the same reason.
     util-linux
 
+# Issue #305 -- os invocadores de Clojure, Racket e Tcl, iguais aos do
+# Dockerfile.judge. Ver o comentario la para por que eles tem nome proprio
+# em vez de serem um `java -cp ...` escrito no catalogo.
+COPY --chmod=755 docker/judge/bin/ /usr/local/bin/
+
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
-RUN npm install -g typescript
+ARG TYPESCRIPT_VERSION=7.0.2
+RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
 
 # Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
 # zip. This is the same install method used by every other Kotlin judge

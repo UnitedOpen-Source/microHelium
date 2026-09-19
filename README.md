@@ -209,7 +209,7 @@ that isolation is **bubblewrap**, and since #86 a cgroup v2 memory cap.
 ```bash
 # Ubuntu/Debian
 sudo apt-get install bubblewrap util-linux \
-    gcc g++ openjdk-17-jdk python3
+    gcc g++ openjdk-21-jdk openjdk-25-jdk python3
 ```
 
 `bubblewrap` is what confines a submission; `util-linux` provides the

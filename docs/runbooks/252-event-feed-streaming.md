@@ -100,3 +100,29 @@ uma prova de ensaio, e registre na issue #252:
 **Enquanto os passos 3 e 4 não forem executados contra um deploy real, o
 resolver não deve ser anunciado como pronto.** Os passos 1 e 2 reduzem o risco;
 não o eliminam.
+
+## 5. O que a auditoria de conformidade respondeu sem deploy (19/09/2026)
+
+Os passos 3 e 4 continuam válidos, mas **encolheram**: três das perguntas que
+estavam esperando um deploy foram respondidas numa máquina de desenvolvimento,
+com `curl` e com os JSON Schemas publicados pelo ICPC.
+
+| pergunta | medida onde | resposta |
+|---|---|---|
+| o feed fica aberto enquanto a prova acontece? | `php artisan serve` + `curl --max-time 20` | **não** — 200 e EOF em 0,342 s (#328) |
+| o resolver consegue retomar por `since_token`? | código do `NDJSONFeedParser`/`RESTContestSource` do ICPC Tools | **não** — o nosso `op` o derruba no parser pré-2020-03, que nunca lê `token` (#330) |
+| um `since_token` inválido devolve 400? | `curl` | **não** — 200 com corpo vazio, ou 200 com a fotografia inteira (#330) |
+
+E a linha `TOTAL 0,785 s` da medição da seção 2 é, relida, a evidência da
+primeira: **um feed que não termina não tem total.** A medição estava certa
+sobre o mecanismo que examinou; a pergunta que faltava estava fora do
+enquadramento.
+
+O que **continua** precisando de deploy: o `X-Accel-Buffering: no` atravessando
+o nginx de produção, e a cerimônia inteira contra um resolver de verdade. Mas
+não adianta marcar esses dois antes de a #328 e a #330 fecharem — hoje o
+resolver reconectaria a cada 20 s rebaixando o feed inteiro.
+
+A conferência contínua contra a spec mora em
+`tests/Feature/Clics/ConformidadeClicsTest.php`, medida contra a cópia literal
+dos schemas do ICPC em `tests/Fixtures/clics/json-schema/`.

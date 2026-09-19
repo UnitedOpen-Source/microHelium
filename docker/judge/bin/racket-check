@@ -1,0 +1,26 @@
+#!/bin/sh
+# Issue #305 -- a etapa de COMPILACAO de Racket.
+#
+# O catalogo trazia `raco make {source}`, que nunca foi exercitado. Medido
+# no pacote `racket=9.2-r0` do Alpine:
+#
+#   /usr/bin/raco: Unrecognized command: make
+#
+# `raco make` mora em `compiler-lib`, que o Alpine nao empacota -- o `raco`
+# instalado so tem `setup`, `pkg` e `link`.
+#
+# O que existe e a expansao: ler o modulo com a parametrizacao de leitura
+# de modulo (que respeita o `#lang`) e EXPANDIR. A expansao roda o codigo
+# de tempo de compilacao e NAO o corpo do modulo, que e exatamente a
+# semantica que uma etapa de compilacao precisa: pega erro de sintaxe e
+# identificador nao ligado sem executar o programa (sem consumir a entrada
+# nem imprimir nada).
+exec racket -l racket/base \
+    -e '(require syntax/modread)' \
+    -e "(void (parameterize ([current-namespace (make-base-namespace)])
+                (expand (with-module-reading-parameterization
+                          (lambda ()
+                            (call-with-input-file \"$1\"
+                              (lambda (porta)
+                                (port-count-lines! porta)
+                                (read-syntax \"$1\" porta))))))))"
