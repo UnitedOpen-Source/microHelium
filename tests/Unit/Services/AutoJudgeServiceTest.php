@@ -399,8 +399,23 @@ class AutoJudgeServiceTest extends TestCase
         // run command already supports.
         $defaults = collect(Language::getDefaultLanguages())->keyBy('extension');
 
-        $this->assertStringContainsString('--max-old-space-size={memory}', $defaults['js_node24']['run_command']);
-        $this->assertStringContainsString('--max-old-space-size={memory}', $defaults['ts']['run_command']);
+        // Issue #327 -- Node e TypeScript passaram a ser invocados por
+        // `judge-runtime/node/run.sh`, que acrescenta um `--stack-size`
+        // derivado do `ulimit -s` do host (fixar o numero aqui trocaria o
+        // `RangeError` legivel por um SIGSEGV mudo onde a pilha fosse
+        // menor). O tratamento passa a ser o MESMO que o C# ao lado ja
+        // tinha: o comando entrega `{memory}` ao script, e o script poe a
+        // flag. O que esta linha guarda -- que o limite chega ao runtime
+        // pelo `{memory}`, e nao por um `ulimit -v` -- continua valendo,
+        // entao ela confere as duas metades: o placeholder no catalogo e a
+        // flag no script.
+        $this->assertStringContainsString('{memory}', $defaults['js_node24']['run_command']);
+        $this->assertStringContainsString('{memory}', $defaults['ts']['run_command']);
+        $this->assertStringContainsString(
+            '--max-old-space-size="$MEMORY_MB"',
+            (string) file_get_contents(base_path('resources/judge-runtime/node/run.sh')),
+            'o run.sh do Node parou de aplicar o limite de memoria que o catalogo lhe entrega'
+        );
         // The .NET knob is an environment variable in hex bytes, so it is
         // set inside run.sh from this argument rather than on the command.
         $this->assertStringContainsString('{memory}', $defaults['cs_dotnet']['run_command']);
