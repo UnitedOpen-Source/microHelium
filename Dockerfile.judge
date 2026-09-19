@@ -75,6 +75,91 @@ RUN npm install --no-audit --no-fund && npx webpack
 # O bundle e o unico artefato que sai daqui.
 RUN test -s /src/dist/index.js
 
+# ---------------------------------------------------------------------------
+# GNU Prolog (issue #305, Lote D) -- construido do fonte.
+#
+# Tambem nao existe no Alpine, e o upstream (gprolog.org / ftp.gnu.org) so
+# publica fonte para Linux. A ultima release e a 1.5.0, de 2021, e e ai que
+# mora a unica dificuldade: ela NAO COMPILA com o gcc 15 desta imagem com as
+# flags padrao. Medido, duas vezes o mesmo erro:
+#
+#   stacks_sigsegv.c:488: error: conflicting types for 'SIGSEGV_Handler'
+#   stacks_sigsegv.c:715: error: too many arguments to function
+#                                'pl_le_hook_message_box'
+#
+# Sao declaracoes K&R sem prototipo, que o C23 -- o padrao PADRAO do gcc 15
+# -- transformou de aviso em erro. `--with-c-flags` com `-std=gnu17` volta
+# o compilador ao dialeto em que o fonte foi escrito e o build passa inteiro.
+# Isto esta escrito aqui porque e exatamente o tipo de coisa que, sem
+# explicacao, alguem "limpa" num futuro bump e quebra a imagem.
+#
+# Custo medido depois disso: 27 s de `make`, 15,5 MB instalados.
+FROM php:8.3-cli-alpine AS gprolog-builder
+
+# Versao E hash. Tarball do ftp.gnu.org; o sha256 foi conferido contra o
+# download em 18/09/2026.
+ARG GPROLOG_VERSION=1.5.0
+ARG GPROLOG_SHA256=670642b43c0faa27ebd68961efb17ebe707688f91b6809566ddd606139512c01
+RUN set -eux; \
+    apk add --no-cache gcc make musl-dev libc-dev; \
+    wget -q "https://ftp.gnu.org/gnu/gprolog/gprolog-${GPROLOG_VERSION}.tar.gz" -O /tmp/gprolog.tar.gz; \
+    echo "${GPROLOG_SHA256}  /tmp/gprolog.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/gprolog-src; \
+    tar -xzf /tmp/gprolog.tar.gz -C /tmp/gprolog-src --strip-components=1; \
+    cd /tmp/gprolog-src/src; \
+    ./configure \
+        --prefix=/opt \
+        --with-install-dir=/opt/gprolog \
+        --without-links-dir \
+        --disable-gui-console \
+        --with-c-flags="-std=gnu17 -O2 -fno-strict-aliasing -fcommon -Wno-char-subscripts"; \
+    make; \
+    make install; \
+    test -x /opt/gprolog/bin/gplc; \
+    test -x /opt/gprolog/bin/pl2wam
+
+# ---------------------------------------------------------------------------
+# SWI-Prolog (issue #305, Lote D) -- construido do fonte.
+#
+# Nao ha o que baixar pronto: o Alpine 3.24 nao empacota SWI-Prolog
+# (`apk search -x swi-prolog` e `apk search prolog` -- so aparece o
+# scryer-prolog, que e outra linguagem), e o upstream publica binario apenas
+# para Debian/Ubuntu, macOS e Windows.
+#
+# Sobra o fonte, e ele sai de graca: MEDIDO em musl/aarch64, `ninja` leva
+# 24 s e o resultado instalado ocupa 7,8 MB. Nao houve patch, flag exotica
+# nem erro de compilacao.
+#
+# `-DSWIPL_PACKAGES=OFF` deixa de fora os pacotes opcionais (http, ssl,
+# odbc, jpl, xpce...). Nenhum deles serve a um programa de maratona, e eles
+# e que puxariam openssl, unixodbc e uma JVM para dentro da imagem.
+#
+# Estagio separado porque a arvore de build (cmake, samurai, g++ e os
+# objetos) nao tem por que viajar na imagem final -- daqui sai so
+# /opt/swipl.
+FROM php:8.3-cli-alpine AS swipl-builder
+
+# Versao E hash (issue #304). O `Dockerfile.judge` fixa COMMIT onde a origem
+# e um clone git, porque "tag se move, commit nao"; aqui a origem e um
+# arquivo servido por HTTP, e o sha256 dele e um pino mais forte do que
+# qualquer nome -- se o conteudo mudar, o build para.
+ARG SWIPL_VERSION=10.0.2
+ARG SWIPL_SHA256=e42cc098f7b8a6051c4f79a99b55162d467098aba60f69649bdc7583f0734b57
+RUN set -eux; \
+    apk add --no-cache cmake samurai gcc g++ musl-dev libc-dev gmp-dev ncurses-dev zlib-dev; \
+    wget -q "https://www.swi-prolog.org/download/stable/src/swipl-${SWIPL_VERSION}.tar.gz" -O /tmp/swipl.tar.gz; \
+    echo "${SWIPL_SHA256}  /tmp/swipl.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/swipl-src; \
+    tar -xzf /tmp/swipl.tar.gz -C /tmp/swipl-src --strip-components=1; \
+    cmake -S /tmp/swipl-src -B /tmp/swipl-build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/opt/swipl \
+        -DSWIPL_PACKAGES=OFF \
+        -DUSE_GMP=ON; \
+    ninja -C /tmp/swipl-build; \
+    ninja -C /tmp/swipl-build install; \
+    /opt/swipl/bin/swipl --version
+
 # MicroHelium Auto-Judge Dockerfile
 # Specialized container for code compilation and execution
 
@@ -156,6 +241,31 @@ RUN apk add --no-cache \
     # Perl -- issue #305, mesma razao do clang: ja estava presente como
     # dependencia do git, e a entrada `perl` passa a ser ativa.
     perl=5.42.2-r0 \
+    # COBOL -- issue #305, Lote D, e a suposicao que nao se confirmou.
+    #
+    # Esta entrada estava no lote das linguagens "que nao existem no Alpine e
+    # precisam vir de fora". Nao e o caso: `apk search -x gnucobol` devolve
+    # `gnucobol-3.2-r0`. Custou um `apk add`, nao um download.
+    gnucobol=3.2-r0 \
+    # Bibliotecas de EXECUCAO do SWI-Prolog construido no estagio acima --
+    # medido com `ldd /opt/swipl/bin/swipl`: libgmp, libncursesw e libz. O
+    # `gmp` entra na lista fixada porque e a aritmetica de precisao
+    # arbitraria do Prolog: trocar de versao muda conta de competidor.
+    gmp=6.3.0-r4 \
+    ncurses-libs=6.6_p20260516-r0 \
+    zlib=1.3.2-r0 \
+    # gcompat -- issue #305, Lote D: o shim de glibc de que o Dart precisa.
+    #
+    # Fica registrado que o comentario do scratch-run, mais abaixo, diz que
+    # o gcompat NAO resolveu para ele. As duas coisas sao verdade e foram
+    # medidas: o binario empacotado com `pkg` do scratch-run morre em
+    # `Error relocating: fcntl64`, e o `dart` do SDK oficial roda. O shim
+    # cobre parte da glibc, nao toda -- por isso nada aqui e ativado sem
+    # antes compilar e executar um programa de verdade.
+    #
+    # Fixado pelo mesmo criterio do bubblewrap: ele nao compila nada, mas
+    # esta no caminho de execucao do codigo submetido em Dart.
+    gcompat=1.1.0-r4 \
     # Process management
     procps \
     # Time limiting
@@ -181,6 +291,184 @@ RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VER
     && rm /tmp/kotlin.zip \
     && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc \
     && ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin
+
+# ---------------------------------------------------------------------------
+# Scala 3 (issue #305, Lote D).
+#
+# Sem pacote no Alpine, e sem precisar de um: Scala e JVM pura, e esta imagem
+# ja carrega dois JDKs. O que entra e o zip GENERICO da release -- o
+# `scala3-3.3.8.zip`, sem sufixo de plataforma -- e nao o
+# `scala3-3.3.8-aarch64-pc-linux.zip`, que traz um lancador nativo compilado
+# contra glibc e nao serviria aqui.
+#
+# 3.3.x e a linha LTS, e nao a ultima (3.9.0): a partir da 3.5 o comando
+# `scala` deixou de ser o executor classico e virou a interface do Scala CLI,
+# que resolve dependencia pela rede. Um juiz nao pode depender disso.
+#
+# VERSAO E HASH (issue #304), e o hash nao e "o que eu baixei": e o `digest`
+# que o proprio GitHub atesta para o asset
+# (GET /repos/scala/scala3/releases/tags/3.3.8), conferido em 18/09/2026 --
+# mesmo criterio do JPlag no Dockerfile.
+ARG SCALA_VERSION=3.3.8
+ARG SCALA_SHA256=777423024bb2b4c2b33e18f9c28da7cea117b39478b9bb6811baf7b1a1cf22a7
+RUN set -eux; \
+    wget -q "https://github.com/scala/scala3/releases/download/${SCALA_VERSION}/scala3-${SCALA_VERSION}.zip" -O /tmp/scala.zip; \
+    echo "${SCALA_SHA256}  /tmp/scala.zip" | sha256sum -c -; \
+    unzip -q /tmp/scala.zip -d /opt; \
+    mv "/opt/scala3-${SCALA_VERSION}" /opt/scala3; \
+    rm /tmp/scala.zip; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/scala3/bin/scalac "$@"\n' > /usr/local/bin/scalac; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/scala3/bin/scala "$@"\n' > /usr/local/bin/scala; \
+    chmod 755 /usr/local/bin/scalac /usr/local/bin/scala; \
+    mkdir -p /tmp/fumaca-scala; \
+    printf 'object Fumaca { def main(args: Array[String]): Unit = println("ok") }\n' > /tmp/fumaca-scala/Fumaca.scala; \
+    cd /tmp/fumaca-scala; \
+    scalac Fumaca.scala; \
+    test "$(scala Fumaca)" = "ok"; \
+    cd /; \
+    rm -rf /tmp/fumaca-scala
+
+# ---------------------------------------------------------------------------
+# Apache Groovy 4 (issue #305, Lote D).
+#
+# Mesma historia do Scala: sem pacote no Alpine, e JVM pura. O zip da
+# distribuicao binaria e independente de arquitetura.
+#
+# O sha256 abaixo e o que a propria Apache publica ao lado do arquivo
+# (`...zip.sha256` no archive.apache.org), conferido contra o download em
+# 18/09/2026.
+#
+# O `JAVA_HOME` explicito nos dois invocadores nao e zelo: o `startGroovy`
+# procura a JVM por JAVA_HOME antes do PATH, e amarrar isto ao JDK 21 e a
+# mesma decisao que as entradas de Java do catalogo tomaram na #303 -- a
+# versao que roda o codigo nao pode depender de qual JVM e a `default-jvm`
+# do dia.
+ARG GROOVY_VERSION=4.0.33
+ARG GROOVY_SHA256=395a69a81d5e9915d360d630663c1d98534c9dec134cb267798e49370855d93d
+RUN set -eux; \
+    wget -q "https://archive.apache.org/dist/groovy/${GROOVY_VERSION}/distribution/apache-groovy-binary-${GROOVY_VERSION}.zip" -O /tmp/groovy.zip; \
+    echo "${GROOVY_SHA256}  /tmp/groovy.zip" | sha256sum -c -; \
+    unzip -q /tmp/groovy.zip -d /opt; \
+    mv "/opt/groovy-${GROOVY_VERSION}" /opt/groovy; \
+    rm /tmp/groovy.zip; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/groovy/bin/groovyc "$@"\n' > /usr/local/bin/groovyc; \
+    printf '#!/bin/sh\nJAVA_HOME=/usr/lib/jvm/java-21-openjdk\nexport JAVA_HOME\nexec /opt/groovy/bin/groovy "$@"\n' > /usr/local/bin/groovy; \
+    chmod 755 /usr/local/bin/groovyc /usr/local/bin/groovy; \
+    mkdir -p /tmp/fumaca-groovy; \
+    printf 'println "ok"\n' > /tmp/fumaca-groovy/fumaca.groovy; \
+    cd /tmp/fumaca-groovy; \
+    groovyc fumaca.groovy; \
+    test "$(groovy fumaca.groovy)" = "ok"; \
+    cd /; \
+    rm -rf /tmp/fumaca-groovy
+
+# ---------------------------------------------------------------------------
+# Dart (issue #305, Lote D) -- o que se esperava que nao funcionasse.
+#
+# O SDK oficial e glibc e nao ha build musl. A previsao era o desfecho do
+# `scratch-run`: `not found` (rc=127) num arquivo que existe e e executavel.
+# Metade disso se confirmou -- sem `gcompat`, `dart --version` da exatamente
+# rc=127. Com o `gcompat` instalado na lista de pacotes acima, o SDK roda, e
+# nao so no `--version`: o smoke test no fim deste bloco COMPILA e EXECUTA um
+# programa que le stdin.
+#
+# A PODA nao e economia gratuita, e por isso ela vem acompanhada do smoke
+# test. O SDK descompactado ocupa 646 MB, dos quais o caminho
+# `dart compile exe` nao usa nada: o servidor de analise da IDE (102 MB), o
+# compilador para JavaScript (77 MB + 20 MB), o de WebAssembly (31 MB), o
+# DevTools (91 MB), os runtimes com sanitizer (33 MB) e as tabelas de
+# simbolos. Sobram ~265 MB. Se uma versao futura mover algo para dentro
+# dessa lista, o smoke test para o build em vez de a imagem sair com um
+# compilador quebrado.
+#
+# Versao E hash (issue #304): o sha256 e o que o proprio repositorio da
+# Google publica ao lado do zip (`.sha256sum`), por arquitetura.
+ARG DART_VERSION=3.13.4
+ARG DART_SHA256_AARCH64=1d545609bdf9da6fb5e68fbd96a599e2836e44ee64379991bd4493ee764d2fdb
+ARG DART_SHA256_X86_64=6487a10df5eab890d746d14a55f4c70bec3c1c0633f51804eb504cbc0fc395bb
+RUN set -eux; \
+    arch="$(apk --print-arch)"; \
+    case "$arch" in \
+        aarch64) dart_arch=arm64; dart_sha256="${DART_SHA256_AARCH64}" ;; \
+        x86_64)  dart_arch=x64;   dart_sha256="${DART_SHA256_X86_64}" ;; \
+        *) echo "Sem SDK do Dart para a arquitetura $arch" >&2; exit 1 ;; \
+    esac; \
+    wget -q "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-${dart_arch}-release.zip" -O /tmp/dart.zip; \
+    echo "${dart_sha256}  /tmp/dart.zip" | sha256sum -c -; \
+    unzip -q /tmp/dart.zip -d /opt; \
+    rm /tmp/dart.zip; \
+    rm -rf /opt/dart-sdk/bin/resources/devtools; \
+    rm -f /opt/dart-sdk/bin/dartaotruntime_asan \
+          /opt/dart-sdk/bin/dartaotruntime_msan \
+          /opt/dart-sdk/bin/dartaotruntime_tsan; \
+    find /opt/dart-sdk -name '*.sym' -delete; \
+    rm -f /opt/dart-sdk/bin/snapshots/analysis_server.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/analysis_server_aot.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dartdevc.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dartdevc_aot.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dart2js_aot.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/dart2wasm_product.snapshot \
+          /opt/dart-sdk/bin/snapshots/dart2bytecode.dart.snapshot \
+          /opt/dart-sdk/bin/snapshots/kernel_worker_aot.dart.snapshot \
+          /opt/dart-sdk/bin/utils/wasm-opt; \
+    printf '#!/bin/sh\nexec /opt/dart-sdk/bin/dart "$@"\n' > /usr/local/bin/dart; \
+    chmod 755 /usr/local/bin/dart; \
+    mkdir -p /tmp/fumaca-dart; \
+    printf 'import "dart:io";\nvoid main() { print(int.parse(stdin.readLineSync()!.trim()) + 1); }\n' > /tmp/fumaca-dart/fumaca.dart; \
+    cd /tmp/fumaca-dart; \
+    dart compile exe fumaca.dart -o fumaca; \
+    test "$(echo 7 | ./fumaca)" = "8"; \
+    cd /; \
+    rm -rf /tmp/fumaca-dart
+
+# ---------------------------------------------------------------------------
+# SWI-Prolog (issue #305, Lote D). O /opt/swipl vem do estagio de build no
+# topo deste arquivo; aqui entra so o invocador.
+#
+# `/opt` ja esta em config/autojudge.php -> sandbox_paths.
+#
+# O invocador existe pela regra que Scratch e Portugol Studio ja seguem:
+# `MachineCapabilities::executableOf()` olha o PRIMEIRO TOKEN do comando e o
+# sonda com `command -v`, entao o binario tem de se chamar `swipl` e estar no
+# PATH. Um link simbolico tambem resolveria o nome, mas o `exec` com caminho
+# absoluto e o que o resto do arquivo usa.
+COPY --from=swipl-builder /opt/swipl /opt/swipl
+RUN set -eux; \
+    printf '#!/bin/sh\nexec /opt/swipl/bin/swipl "$@"\n' > /usr/local/bin/swipl; \
+    chmod 755 /usr/local/bin/swipl; \
+    printf 'main :- write(ok), nl.\n' > /tmp/fumaca.pl; \
+    test "$(swipl --on-error=status -g main,halt -l /tmp/fumaca.pl < /dev/null)" = "ok"; \
+    rm -f /tmp/fumaca.pl
+
+# ---------------------------------------------------------------------------
+# GNU Prolog (issue #305, Lote D). O /opt/gprolog vem do estagio de build no
+# topo deste arquivo; aqui entram o invocador e o smoke test.
+#
+# O `PATH` dentro do invocador NAO e decoracao. Medido: com o `gplc`
+# chamado por caminho absoluto e sem o diretorio dele no PATH, a compilacao
+# morre com
+#
+#     error trying to execute pl2wam: No such file or directory
+#
+# -- o `gplc` e um motorista que chama `pl2wam`, `wam2ma`, `ma2asm` e o
+# `gcc` em sequencia, e procura os tres primeiros pelo PATH, nao pelo
+# diretorio de instalacao. O invocador e o lugar certo para resolver isso:
+# poe a casa do GNU Prolog na frente do PATH so para esse processo.
+#
+# `gcc` em tempo de execucao: o ultimo passo do `gplc` e montar e linkar. O
+# `gcc` da lista de pacotes acima ja cobre isso -- e e por isso que ele nao
+# pode sair da imagem "porque C ja compila estaticamente".
+COPY --from=gprolog-builder /opt/gprolog /opt/gprolog
+RUN set -eux; \
+    printf '#!/bin/sh\nPATH="/opt/gprolog/bin:$PATH"\nexport PATH\nexec /opt/gprolog/bin/gplc "$@"\n' > /usr/local/bin/gplc; \
+    chmod 755 /usr/local/bin/gplc; \
+    mkdir -p /tmp/fumaca-gprolog; \
+    printf 'main :- write(ok), nl.\n:- initialization(main).\n' > /tmp/fumaca-gprolog/fumaca.pro; \
+    cd /tmp/fumaca-gprolog; \
+    gplc --no-top-level -o fumaca fumaca.pro; \
+    test "$(./fumaca < /dev/null)" = "ok"; \
+    cd /; \
+    rm -rf /tmp/fumaca-gprolog
 
 # Scratch (issue #268). O bundle vem do estagio acima; aqui entra so o
 # arquivo e o invocador.

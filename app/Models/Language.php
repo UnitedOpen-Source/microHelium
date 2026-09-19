@@ -164,8 +164,21 @@ class Language extends Model
 
             // JVM Languages
             ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'Scala 3', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala {classname}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'Groovy 4', 'extension' => 'groovy', 'file_ext' => 'groovy', 'compile_command' => 'groovyc {source}', 'run_command' => 'groovy {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305, Lote D -- Scala e Groovy, as duas linguagens do
+            // lote que a imagem ja estava a um `unzip` de ter.
+            //
+            // Nenhuma das duas tem pacote no Alpine 3.24 (`apk search -x
+            // scala3 groovy` nao devolve nada), mas nenhuma das duas precisa
+            // de pacote: sao JVM puras, e a imagem ja carrega dois JDKs. O
+            // que entra e um zip oficial descompactado em /opt, como o
+            // Kotlin ja fazia -- com o sha256 conferido, que o Kotlin ainda
+            // nao faz (#304).
+            //
+            // O `{classname}` de Scala e o mesmo mecanismo do Java: o
+            // AutoJudgeService o substitui pelo nome do arquivo sem
+            // extensao, entao `Main.scala` tem de declarar `object Main`.
+            ['name' => 'Scala 3 (3.3 LTS)', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala {classname}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Groovy 4', 'extension' => 'groovy', 'file_ext' => 'groovy', 'compile_command' => 'groovyc {source}', 'run_command' => 'groovy {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Clojure', 'extension' => 'clj', 'file_ext' => 'clj', 'compile_command' => 'clojure -M --main clojure.main --eval "(compile \'main)"', 'run_command' => 'clojure {source}', 'is_active' => false, 'category' => 'interpreted'],
 
             // .NET Languages
@@ -203,6 +216,20 @@ class Language extends Model
             ['name' => 'OCaml', 'extension' => 'ml', 'file_ext' => 'ml', 'compile_command' => 'ocamlopt -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Erlang', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl -noshell -s main start -s init stop', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Elixir', 'extension' => 'ex', 'file_ext' => 'ex', 'compile_command' => 'elixirc {source}', 'run_command' => 'elixir {source}', 'is_active' => false, 'category' => 'interpreted'],
+            // Issue #305, Lote D -- Julia fica INATIVA, e o motivo e uma
+            // medicao e nao uma suspeita.
+            //
+            // O indice oficial de binarios do projeto
+            // (https://julialang-s3.julialang.org/bin/versions.json) lista,
+            // para a ultima estavel, so `aarch64-linux-gnu` em ARM. Varrendo
+            // TODAS as versoes do indice, o unico triplet musl que existe e
+            // `x86_64-linux-musl`: nao ha, e nunca houve, binario
+            // musl/aarch64. Sobraria compilar o Julia do fonte, que arrasta
+            // LLVM -- fora de qualquer orcamento de imagem deste projeto.
+            //
+            // Mesma regra do PyPy acima: inativo quer dizer toolchain
+            // ausente, e e mais honesto do que oferecer a linguagem e falhar
+            // toda submissao.
             ['name' => 'Julia', 'extension' => 'jl', 'file_ext' => 'jl', 'compile_command' => 'julia --compile=min {source} 2>&1', 'run_command' => 'julia {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'R', 'extension' => 'r', 'file_ext' => 'r', 'compile_command' => 'Rscript --vanilla -e "parse(\'{source}\')"', 'run_command' => 'Rscript --vanilla {source}', 'is_active' => false, 'category' => 'interpreted'],
 
@@ -225,17 +252,77 @@ class Language extends Model
             ['name' => 'Assembly x86 (NASM)', 'extension' => 'asm32', 'file_ext' => 'asm', 'compile_command' => 'nasm -f elf32 {source} -o {output}.o && ld -m elf_i386 {output}.o -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
             // Apple/Mobile
+            // Issue #305, Lote D -- Swift fica INATIVA.
+            //
+            // O indice oficial (https://www.swift.org/api/v1/install/
+            // releases.json) publica, para a 6.4.0, toolchain de Linux
+            // apenas para distribuicoes glibc -- Ubuntu 22.04/24.04/26.04,
+            // Debian 12/13, Fedora 41, Amazon Linux 2023, RHEL UBI 9/10.
+            // Nenhuma imagem musl.
+            //
+            // O artefato musl que existe chama-se "Static SDK" e NAO serve
+            // aqui: e um SDK de compilacao CRUZADA, que roda sobre uma
+            // toolchain Swift glibc e produz binarios musl. O juiz precisa
+            // do `swiftc` DENTRO da imagem, em tempo de submissao -- um SDK
+            // cruzado nao poe compilador nenhum no Alpine.
             ['name' => 'Swift', 'extension' => 'swift', 'file_ext' => 'swift', 'compile_command' => 'swiftc -O -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Objective-C', 'extension' => 'objc', 'file_ext' => 'm', 'compile_command' => 'clang -framework Foundation -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
             // Other Modern Languages
-            ['name' => 'Dart', 'extension' => 'dart', 'file_ext' => 'dart', 'compile_command' => 'dart compile exe {source} -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            // Issue #305, Lote D -- Dart, contra a expectativa.
+            //
+            // O SDK oficial e glibc, e a aposta era que ele repetisse o
+            // `scratch-run`: binario ELF glibc que em musl responde `not
+            // found`. Ele responde -- medido, rc=127 -- e ate aqui a
+            // historia e a mesma. O que muda e o desfecho: com `gcompat`
+            // instalado o `dart` roda. Foi medido o ciclo inteiro, nao so o
+            // `--version`: `dart compile exe` produz um executavel nativo,
+            // ele le stdin e imprime a soma, e um programa com erro de
+            // sintaxe sai com codigo != 0 (ou seja, da CE e nao WA).
+            //
+            // Por que o `gcompat` salva o Dart e nao salvou o scratch-run:
+            // la o binario era um empacotamento `pkg` de Node que morria em
+            // `Error relocating: fcntl64`; o `dart` nao chama os simbolos
+            // que faltam no shim.
+            ['name' => 'Dart 3.13', 'extension' => 'dart', 'file_ext' => 'dart', 'compile_command' => 'dart compile exe {source} -o {output}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Crystal', 'extension' => 'cr', 'file_ext' => 'cr', 'compile_command' => 'crystal build {source} -o {output}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'V', 'extension' => 'vlang', 'file_ext' => 'v', 'compile_command' => 'v -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
 
             // Logic/Prolog
-            ['name' => 'Prolog (SWI)', 'extension' => 'prolog_swi', 'file_ext' => 'pl', 'compile_command' => 'swipl -g "halt" -l {source}', 'run_command' => 'swipl -g "main,halt" -l {source}', 'is_active' => false, 'category' => 'interpreted'],
-            ['name' => 'Prolog (GNU)', 'extension' => 'prolog_gnu', 'file_ext' => 'pro', 'compile_command' => 'gplc {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            // Issue #305, Lote D -- SWI-Prolog, construido do fonte.
+            //
+            // `--on-error=status` NAO e enfeite, e o que faz o erro de
+            // sintaxe virar CE. Medido com o comando que estava escrito
+            // aqui (`swipl -g "halt" -l {source}`): um arquivo que nao e
+            // Prolog imprime `Syntax error` em stderr e SAI COM 0. Como o
+            // CE vem do codigo de saida da compilacao, o programa passaria
+            // da compilacao e viraria WA -- o mesmo defeito que a #269
+            // corrigiu no Portugol Studio. Com a opcao, o invalido sai 1 e
+            // o valido segue saindo 0.
+            //
+            // `--on-warning` fica de fora de proposito: em Prolog, aviso de
+            // variavel singleton e rotina, e trata-lo como erro daria CE em
+            // programa correto.
+            ['name' => 'Prolog (SWI-Prolog 10)', 'extension' => 'prolog_swi', 'file_ext' => 'pl', 'compile_command' => 'swipl --on-error=status -g "halt" -l {source}', 'run_command' => 'swipl --on-error=status -g "main,halt" -l {source}', 'is_active' => true, 'category' => 'interpreted'],
+            // Issue #305, Lote D -- GNU Prolog, e o `--no-top-level` que o
+            // comando nao tinha.
+            //
+            // Medido com o comando anterior (`gplc {source}`): o binario
+            // gerado roda o `main`, imprime a resposta CERTA e em seguida
+            // despeja na SAIDA PADRAO o cabecalho do interpretador
+            // interativo --
+            //
+            //     8
+            //     GNU Prolog 1.5.0 (64 bits)
+            //     Compiled ... with gcc
+            //     Copyright (C) 1999-2026 Daniel Diaz
+            //     | ?-
+            //
+            // -- e isso e o que ia para o comparador. Toda submissao correta
+            // receberia WA, com a resposta certa na primeira linha. Com
+            // `--no-top-level` a saida e exatamente `8\n` e o processo sai
+            // com 0: medido com `od -c`.
+            ['name' => 'Prolog (GNU Prolog 1.5)', 'extension' => 'prolog_gnu', 'file_ext' => 'pro', 'compile_command' => 'gplc --no-top-level -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
             // Database/Query
             ['name' => 'SQL (SQLite)', 'extension' => 'sql', 'file_ext' => 'sql', 'compile_command' => 'sqlite3 :memory: ".read {source}" 2>&1', 'run_command' => 'sqlite3 :memory: < {source}', 'is_active' => false, 'category' => 'interpreted'],
@@ -252,7 +339,15 @@ class Language extends Model
 
             // Other
             ['name' => 'Ada (GNAT)', 'extension' => 'adb', 'file_ext' => 'adb', 'compile_command' => 'gnatmake -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
-            ['name' => 'COBOL', 'extension' => 'cob', 'file_ext' => 'cob', 'compile_command' => 'cobc -x -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
+            // Issue #305, Lote D -- COBOL, e a suposicao que nao se
+            // confirmou.
+            //
+            // Esta entrada entrou no lote das linguagens "que nao existem no
+            // Alpine e precisam vir de fora". Nao e o caso: `apk search -x
+            // gnucobol` devolve `gnucobol-3.2-r0`. A entrada estava inativa
+            // por uma crenca sobre o repositorio, nao por uma medicao dele
+            // -- e sair de fora custou um `apk add`.
+            ['name' => 'COBOL (GnuCOBOL 3.2)', 'extension' => 'cob', 'file_ext' => 'cob', 'compile_command' => 'cobc -x -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Icon', 'extension' => 'icn', 'file_ext' => 'icn', 'compile_command' => 'icont -o {output} {source}', 'run_command' => './{executable}', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Pike', 'extension' => 'pike', 'file_ext' => 'pike', 'compile_command' => 'pike -e "compile_file(\"{source}\")"', 'run_command' => 'pike {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Smalltalk (GST)', 'extension' => 'st', 'file_ext' => 'st', 'compile_command' => 'gst --quiet {source} 2>&1', 'run_command' => 'gst {source}', 'is_active' => false, 'category' => 'interpreted'],
