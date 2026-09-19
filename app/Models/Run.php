@@ -222,13 +222,62 @@ class Run extends Model
      * $gated is passed in rather than read per run: every row this is asked
      * about belongs to one contest, so asking each of them would be a query
      * per attempt for an answer that cannot differ.
+     *
+     * Issues #321/#322 -- `answers.counts_as_attempt` entra aqui, e so aqui.
+     *
+     * Este e o unico lugar em que "este veredito nao conta para a equipe"
+     * pode ser verdade. A tentativa obvia -- pular o veredito dentro de
+     * `Score::reduceCell()` -- nao muda nada e nao derruba teste nenhum,
+     * porque os dois chamadores da reducao carregam a relacao como
+     * `answer:id,is_accepted`: a reducao literalmente nao enxerga QUAL
+     * veredito ela esta contando, so se ele aceita ou nao. A exclusao tem
+     * que mudar quais runs chegam ate ela.
+     *
+     * E foi por isso que a protecao do #45 e de
+     * `AutoJudgeService::handleJudgingError()` nunca funcionou: os dois
+     * gravavam o `CS` e deliberadamente NAO chamavam `Score::updateScore()`,
+     * o que so adiava a conta. Depois do #171 a celula e uma funcao pura dos
+     * runs que contam, entao o proximo veredito da mesma equipe no mesmo
+     * problema a recompunha e trazia o `CS` junto -- e a equipe pagava 20
+     * minutos por uma falha nossa, no momento em que ninguem estava mais
+     * olhando para o run antigo.
      */
     public function scopeCountingTowardsScore(Builder $query, bool $gated): Builder
     {
         return $query
             ->where('status', 'judged')
             ->whereNotNull('answer_id')
+            ->whereHas('answer', fn (Builder $q) => $q->where('counts_as_attempt', true))
             ->when($gated, fn (Builder $q) => $q->whereNotNull('verified_at'));
+    }
+
+    /**
+     * A MESMA regra do escopo acima, perguntada a um run ja carregado.
+     *
+     * Existe porque o placar congelado (#211) faz uma consulta so para o
+     * contest inteiro e filtra a colecao em memoria -- uma consulta por
+     * equipe seria centenas numa regional. Ate aqui ele reescrevia o
+     * predicado por extenso, e a chegada de `counts_as_attempt` mostrou o
+     * preco: o placar ao vivo teria parado de cobrar pelo `CS` e o
+     * congelado nao, na mesma requisicao.
+     *
+     * Um predicado de instancia com este nome ja existiu e foi removido por
+     * nao ter chamador nenhum (o docblock dele mentia dizendo que
+     * `Score::recomputeFor()` o usava). Este tem um, e e o unico: se algum
+     * dia ele ficar sem, some de novo.
+     *
+     * `$this->answer` e exigido e nao adivinhado de proposito. Se quem
+     * carregou os runs esquecer `counts_as_attempt` no `select` da relacao,
+     * a resposta vira "nao conta" e o placar zera ruidosamente, em vez de
+     * cobrar em silencio a penalidade que esta issue existe para tirar.
+     */
+    public function countsTowardsScore(bool $gated): bool
+    {
+        return $this->status === 'judged'
+            && $this->answer_id !== null
+            && $this->answer !== null
+            && (bool) $this->answer->counts_as_attempt
+            && (! $gated || $this->verified_at !== null);
     }
 
     public function getSourcePath(): string

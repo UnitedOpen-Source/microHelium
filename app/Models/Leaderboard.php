@@ -21,6 +21,7 @@ class Leaderboard extends Model
         'user_id',
         'problems_solved',
         'total_time',
+        'last_solved_time',
         'rank',
     ];
 
@@ -38,10 +39,16 @@ class Leaderboard extends Model
 
     public static function updateForUser(int $contestId, int $userId): void
     {
+        // Issue #316 -- `last_solved_time` sai da MESMA consulta.
+        //
+        // E o terceiro criterio de desempate da ICPC: "if need be, by the
+        // earliest time of submission of the last accepted run". O tempo de
+        // SUBMISSAO, sem penalidade -- por isso `MAX(solved_time)` e nao
+        // `MAX(solved_time + penalty_time)`.
         $stats = Score::where('contest_id', $contestId)
             ->where('user_id', $userId)
             ->where('is_solved', true)
-            ->selectRaw('COUNT(*) as solved, SUM(solved_time + penalty_time) as total_time')
+            ->selectRaw('COUNT(*) as solved, SUM(solved_time + penalty_time) as total_time, MAX(solved_time) as last_solved_time')
             ->first();
 
         self::updateOrCreate(
@@ -49,6 +56,7 @@ class Leaderboard extends Model
             [
                 'problems_solved' => $stats->solved ?? 0,
                 'total_time' => $stats->total_time ?? 0,
+                'last_solved_time' => $stats->last_solved_time ?? 0,
             ]
         );
 
@@ -71,8 +79,10 @@ class Leaderboard extends Model
         $ranked = ScoreboardRanking::apply(
             $entries->map(fn (self $entry) => [
                 'id' => $entry->id,
+                'user_id' => (int) $entry->user_id,
                 'problems_solved' => (int) $entry->problems_solved,
                 'total_time' => (int) $entry->total_time,
+                'last_solved_time' => (int) $entry->last_solved_time,
             ])->all()
         );
 
@@ -140,8 +150,15 @@ class Leaderboard extends Model
             $result[] = [
                 'rank' => 0,
                 'user' => $user,
+                // Issue #316 -- o desempate final determinístico precisa de
+                // uma identidade em toda linha, e nao do objeto User: as
+                // tres produtoras de linha (esta, o placar congelado e
+                // recalculateRanks()) nao tem o mesmo formato, e a unica
+                // coisa que as tres tem e a equipe.
+                'user_id' => (int) $userId,
                 'problems_solved' => (int) ($entry->problems_solved ?? 0),
                 'total_time' => (int) ($entry->total_time ?? 0),
+                'last_solved_time' => (int) ($entry->last_solved_time ?? 0),
                 'problems' => $scores->map(fn ($s) => [
                     'problem_id' => $s->problem_id,
                     'short_name' => $s->problem->short_name,

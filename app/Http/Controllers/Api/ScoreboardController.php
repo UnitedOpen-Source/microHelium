@@ -34,15 +34,7 @@ class ScoreboardController extends Controller
         // Issue #276 -- a janela da SEDE de quem pergunta, como na tela web.
         // Sem sede (anonimo, ou conta sem sede), a resposta conservadora:
         // congelado enquanto qualquer sede ainda esconder.
-        $viewer = auth()->user();
-        $siteId = $viewer?->site_id !== null ? (int) $viewer->site_id : null;
-        $clock = app(ContestClock::class);
-
-        $frozen = ! Run::viewerSeesWithheldVerdicts($viewer) && (
-            $siteId !== null
-                ? $clock->isFrozenFor($contest, $siteId)
-                : $clock->isFrozenForAnyone($contest)
-        );
+        $frozen = $this->isFrozenForViewer($contest);
 
         $scoreboard = Leaderboard::getScoreboard($contest->id, $frozen);
 
@@ -67,6 +59,30 @@ class ScoreboardController extends Controller
         ]);
     }
 
+    /**
+     * Issue #320 -- a decisao de congelamento, num lugar so.
+     *
+     * Ela estava escrita por extenso em index() e AUSENTE em userScore(),
+     * que e o formato exato da armadilha que este repositorio ja documenta
+     * em ScoreboardRanking, em Score::reduceCell() e em
+     * Run::scopeCountingTowardsScore(): uma regra com duas formulacoes, uma
+     * delas vazia. Metodo privado e nao servico porque os dois chamadores
+     * sao os dois metodos deste arquivo; se aparecer um terceiro fora dele,
+     * ai sim sobe.
+     */
+    private function isFrozenForViewer(Contest $contest): bool
+    {
+        $viewer = auth()->user();
+        $siteId = $viewer?->site_id !== null ? (int) $viewer->site_id : null;
+        $clock = app(ContestClock::class);
+
+        return ! Run::viewerSeesWithheldVerdicts($viewer) && (
+            $siteId !== null
+                ? $clock->isFrozenFor($contest, $siteId)
+                : $clock->isFrozenForAnyone($contest)
+        );
+    }
+
     public function userScore(Request $request, Contest $contest): JsonResponse
     {
         $this->authorizeContestVisibility($contest);
@@ -82,8 +98,46 @@ class ScoreboardController extends Controller
             ->where('user_id', $user->user_id)
             ->first();
 
+        // Issue #320 -- durante o congelamento, a posicao vem do placar
+        // CONGELADO.
+        //
+        // `leaderboard.rank` e reescrito por `recalculateRanks()` a cada
+        // veredito da prova inteira, inclusive os que o congelamento
+        // esconde, e esta rota o devolvia cru: uma equipe consultando
+        // /my-score em laco na ultima hora sabia, pelo proprio numero,
+        // quantas equipes passaram por ela e quando -- que e a informacao
+        // estrategica que o congelamento existe para negar. RN-007 e
+        // RF-F12-004 sao P0 no SRS.
+        //
+        // Devolver a posicao congelada em vez de `null`: ela e exatamente a
+        // que o telao, a pagina publica e o feed CLICS mostram no mesmo
+        // instante, entao nao ha o que vazar, e a equipe continua com uma
+        // resposta util. O custo e um calculo de placar por chamada, que e o
+        // custo que /scoreboard ja paga.
+        //
+        // Os numeros da PROPRIA equipe (`problems`, `attempts`,
+        // `solved_time`, `penalty_time`) continuam ao vivo de proposito: a
+        // ICPC congela o placar publico e nao os vereditos da propria
+        // equipe, e quem retem veredito dela e o portao do #138, que e outro
+        // mecanismo e ja esta aplicado. `is_first_solver` NAO e numero
+        // proprio -- perder a marca e saber que outra equipe resolveu antes
+        // --, entao ele vem do placar congelado junto com a posicao.
+        $frozen = $this->isFrozenForViewer($contest);
+        $frozenCells = collect();
+
+        if ($frozen) {
+            $frozenRow = collect(Leaderboard::getScoreboard($contest->id, true))
+                ->first(fn (array $row) => (int) $row['user']->user_id === (int) $user->user_id);
+
+            $rank = $frozenRow !== null ? (int) $frozenRow['rank'] : null;
+            $frozenCells = collect($frozenRow['problems'] ?? [])->keyBy('problem_id');
+        } else {
+            $rank = $leaderboardEntry?->rank;
+        }
+
         return response()->json([
-            'rank' => $leaderboardEntry?->rank,
+            'rank' => $rank,
+            'is_frozen' => $frozen,
             'problems_solved' => $leaderboardEntry?->problems_solved ?? 0,
             'total_time' => $leaderboardEntry?->total_time ?? 0,
             'problems' => $scores->map(fn ($s) => [
@@ -92,7 +146,9 @@ class ScoreboardController extends Controller
                 'name' => $s->problem->name,
                 'attempts' => $s->attempts,
                 'is_solved' => $s->is_solved,
-                'is_first_solver' => $s->is_first_solver,
+                'is_first_solver' => $frozen
+                    ? (bool) ($frozenCells[$s->problem_id]['is_first_solver'] ?? false)
+                    : $s->is_first_solver,
                 'solved_time' => $s->solved_time,
                 'penalty_time' => $s->penalty_time,
                 'total_time' => $s->getTotalTime(),
