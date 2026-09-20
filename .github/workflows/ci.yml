@@ -262,6 +262,227 @@ jobs:
             microhelium-judge:ci \
             php artisan judgehost:selftest
 
+  # -------------------------------------------------------------------------
+  # Issue #355 -- a imagem que julga PELA FILA passa a ser construida e
+  # exercitada aqui.
+  #
+  # O job acima constroi o Dockerfile.judge. Nenhum job construia o
+  # `Dockerfile` (aplicacao) nem o `Dockerfile.dev`, e os dois julgam:
+  # docker-compose.yml roda a imagem da aplicacao nos servicos `queue` e
+  # `scheduler`, e e la que JudgeRunJob -> AutoJudgeService::judge() compila
+  # e executa codigo submetido. Uma instalacao que nao sobe o servico
+  # `autojudge` -- e o compose de dev nao sobe (#282) -- julga TUDO por esse
+  # caminho.
+  #
+  # O preco de nao construi-la ja foi medido duas vezes: #302 (Scratch e
+  # Portugol Studio entraram so na imagem do juiz, e pela fila uma submissao
+  # CORRETA virava CE) e #352 (a correcao da #301, idem: erro de execucao
+  # continuava virando WA mudo, com a issue ja fechada). Nos dois casos a
+  # descoberta foi manual, porque o CI nunca executava a imagem quebrada.
+  # -------------------------------------------------------------------------
+  docker-changes:
+    # Por que um filtro de caminho, e nao uma construcao em todo PR: o job do
+    # juiz ja leva ~16 min so construindo, a imagem da aplicacao tem ~2,2 GB,
+    # e a classe de mudanca que causou a #302 e a #352 e estreita -- alguem
+    # mexeu num Dockerfile ou no que ele copia para dentro da imagem. E o
+    # caminho (2) da #355, o mais barato que ainda cobre os dois defeitos.
+    #
+    # O default na duvida e CONSTRUIR: sem commit base utilizavel (branch
+    # nova, historico raso), a saida e `true`. Um filtro que erra para menos
+    # reintroduz exatamente o silencio que esta issue documenta.
+    name: Que mudanças podem afetar as imagens
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      imagens: ${{ steps.filtro.outputs.imagens }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # O passo abaixo compara com o commit base; um clone raso nao tem
+          # com o que comparar.
+          fetch-depth: 0
+
+      - name: Comparar os caminhos tocados com o que entra nas imagens
+        id: filtro
+        run: |
+          base='${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}'
+
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "Sem commit base utilizavel; construindo por seguranca."
+            echo "imagens=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A base de um PR e a ponta do branch base, que pode ter andado
+          # desde o fork; sem o merge-base, commits de master entrariam no
+          # diff como mudanca deste PR.
+          base=$(git merge-base "$base" HEAD || echo "$base")
+
+          # Dockerfile e Dockerfile.dev sao as duas imagens que ninguem
+          # construia. Dockerfile.judge entra porque a paridade entre os tres
+          # e o que a #353 passou a exigir, e mexer em um sem mexer nos
+          # outros E a forma da #302. docker/ entra porque o entrypoint e os
+          # .ini vao para dentro da imagem e decidem como ela julga;
+          # resources/judge-runtime/ porque e o que os invocadores executam;
+          # e este proprio arquivo, para que uma mudanca no job seja testada
+          # pelo job.
+          tocados=$(git diff --name-only "$base" HEAD -- \
+            Dockerfile Dockerfile.dev Dockerfile.judge \
+            docker/ resources/judge-runtime/ .github/workflows/ci.yml)
+
+          if [ -n "$tocados" ]; then
+            echo "Caminhos que entram nas imagens foram tocados:"
+            echo "$tocados"
+            echo "imagens=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nenhum caminho que entra nas imagens foi tocado; a construcao abaixo nao roda."
+            echo "imagens=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  app-image:
+    name: Julgamento pela fila (imagem da aplicação)
+    needs: docker-changes
+    if: needs.docker-changes.outputs.imagens == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.3-
+
+      # Before composer install: its post-autoload-dump script runs
+      # `artisan package:discover`, which boots the framework.
+      - run: cp .env.example .env
+
+      # Com as dependencias de desenvolvimento: a imagem da aplicacao roda
+      # `composer install --no-dev`, entao o phpunit nao existe dentro dela.
+      # Quem o fornece e o workspace montado no passo final, que e tambem o
+      # que garante que o codigo sob teste seja o deste commit.
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - run: php artisan key:generate
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # `scope` explicito: sem ele os dois jobs que constroem imagem dividem
+      # o mesmo escopo de cache do GHA e um despeja o cache do outro a cada
+      # corrida, fazendo as duas construcoes pagarem o download de toda a
+      # cadeia de compiladores de novo.
+      - name: Build the application image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          tags: microhelium-app:ci
+          load: true
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
+
+      # Mesmo motivo do job do juiz: o runner do Ubuntu 24.04 vem com
+      # kernel.apparmor_restrict_unprivileged_userns=1, a politica vale no
+      # host e alcanca o processo dentro do container, e sem isso o bwrap nao
+      # cria namespace de usuario e todo teste de sandbox se pula. O `|| true`
+      # e porque os botoes nao existem em toda imagem de runner; quem decide
+      # se o sandbox subiu e o --fail-on-skipped, nao estas linhas.
+      - name: Allow unprivileged user namespaces for bubblewrap
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+
+      # A imagem roda como `www` (uid 1000) e o checkout pertence a outro uid.
+      - name: Let the app user write to the mounted workspace
+        run: |
+          chmod -R a+rwX storage bootstrap/cache
+          chmod a+rwX .
+
+      # O ESCOPO, e o que fica de fora.
+      #
+      # Roda o criterio de regressao que a #355 escreve: a suite
+      # multi-linguagem contra a imagem da aplicacao. Sao os dois arquivos que
+      # distinguiriam os dois defeitos -- MultiLanguageJudgingTest (a
+      # submissao correta que virava CE, #302) e LanguageVerdictFidelityTest
+      # (que compara VEREDITO, e nao presenca de arquivo: e ele que pega o WA
+      # mudo da #352). Nao e a suite inteira de proposito: o que esta imagem
+      # acrescenta ao que o job do backend ja cobre e o julgamento, e cada
+      # corrida daqui paga uma construcao de ~2,2 GB.
+      #
+      # DOIS TESTES FICAM DE FORA, nomeados no --exclude-filter:
+      #
+      #   LanguageVerdictFidelityTest::test_o_limite_de_memoria_do_problema_chega_ao_php
+      #   LanguageVerdictFidelityTest::test_php_que_estoura_a_memoria_recebe_mle_e_nao_re
+      #
+      # Eles nao estao fora por serem chatos: estao fora porque ESTE job
+      # nasceria vermelho com eles, e a causa e a issue #356, que nao e coisa
+      # que um arquivo de CI conserte. Medido com estas mesmas flags, neste
+      # commit: 69 testes, 2 falhas, 0 pulados -- e as duas falhas sao estas.
+      # docker/php/entrypoint.sh nao delega subtree de cgroup v2 (o
+      # docker/judge/entrypoint.sh delega), o teto de memoria cai no
+      # `ulimit -v` e um programa PHP DENTRO do orcamento do problema recebe
+      # RE. Sem elas: 67 testes, 245 assercoes, 0 pulados, ~50 s.
+      #
+      # Fechar a #356 e o que falta para trazer os dois de volta; o passo
+      # informativo logo abaixo avisa no dia em que isso acontecer.
+      #
+      # --privileged e os dois --security-opt sao os mesmos do job do juiz, de
+      # proposito: assim a UNICA variavel entre os dois jobs e a imagem. Isso
+      # nao afirma que a fila roda privilegiada -- o servico `queue` do
+      # docker-compose.yml nao e privilegiado --; quem precisa de privilegio
+      # aqui e o bwrap do runner. Medido sem --privileged nesta maquina: os 67
+      # testes se pulam com "bubblewrap cannot create a sandbox here".
+      #
+      # --fail-on-skipped pelo mesmo motivo do job do juiz: sem ele, uma
+      # imagem sem sandbox passaria como verde tendo executado nada.
+      - name: Suíte multi-linguagem dentro da imagem da aplicação
+        run: |
+          docker run --rm --privileged \
+            --security-opt apparmor=unconfined \
+            --security-opt seccomp=unconfined \
+            -v "$PWD":/var/www/html \
+            -w /var/www/html \
+            microhelium-app:ci \
+            ./vendor/bin/phpunit --no-coverage --fail-on-skipped \
+              --testsuite E2E \
+              --filter 'MultiLanguageJudging|LanguageVerdictFidelity' \
+              --exclude-filter 'o_limite_de_memoria_do_problema_chega_ao_php|php_que_estoura_a_memoria_recebe_mle_e_nao_re'
+
+      # Os dois testes que o passo acima exclui, rodados a parte e sem poder
+      # reprovar o job. Nao e um `|| true` mudo: o passo IMPRIME o resultado
+      # dos dois nos dois casos. Enquanto a #356 estiver aberta eles falham e
+      # o log mostra a falha em vez de escondê-la; no dia em que passarem, o
+      # aviso abaixo e o lembrete de apagar o --exclude-filter e traze-los
+      # para dentro do portao -- que e o unico jeito de a exclusao nao virar
+      # permanente por esquecimento.
+      - name: Fora do portão por causa da #356 (informativo)
+        run: |
+          if docker run --rm --privileged \
+              --security-opt apparmor=unconfined \
+              --security-opt seccomp=unconfined \
+              -v "$PWD":/var/www/html \
+              -w /var/www/html \
+              microhelium-app:ci \
+              ./vendor/bin/phpunit --no-coverage \
+                --testsuite E2E \
+                --filter 'o_limite_de_memoria_do_problema_chega_ao_php|php_que_estoura_a_memoria_recebe_mle_e_nao_re'
+          then
+            echo "::warning::Os dois testes de memoria do PHP PASSARAM na imagem da aplicacao: a #356 parece resolvida. Remova o --exclude-filter do passo anterior para que o portao volte a cobri-los."
+          else
+            echo "Falharam, como a #356 descreve -- o veredito de memoria do PHP diverge entre o juiz e a fila. O portao acima segue sem eles ate a #356 fechar."
+          fi
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
