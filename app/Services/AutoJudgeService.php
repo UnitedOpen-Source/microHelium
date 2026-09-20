@@ -94,10 +94,22 @@ class AutoJudgeService
     protected int $compileWallSeconds;
 
     /**
-     * A folga de relogio sobre o limite de CPU do problema, na execucao.
-     * Continua sendo 5 s; o que mudou e poder mexer nela sem editar codigo.
+     * A parcela ADITIVA da folga de relogio da execucao: o que nao escala
+     * com o limite do problema (subir o processo, montar o bwrap, entrar no
+     * cgroup). O que escala esta no fator abaixo.
      */
     protected int $runWallGraceSeconds;
+
+    /**
+     * Issue #329 -- quantas vezes o relogio pode passar do tempo de CPU
+     * quando a maquina de julgamento esta cheia.
+     *
+     * Ver a justificativa medida em `config/autojudge.php`: o backstop era
+     * uma folga FIXA de 5 s sobre o limite do problema, e carga nao SOMA
+     * tempo de parede, ela MULTIPLICA. Esse era o defeito de forma que
+     * sobrou depois do #342.
+     */
+    protected int $wallContentionFactor;
 
     protected ?bool $sandboxProbeFailed = null;
 
@@ -135,6 +147,28 @@ class AutoJudgeService
         $this->rssTimePath = (string) config('autojudge.rss_time_path', '/usr/bin/time');
         $this->compileWallSeconds = max(1, (int) config('autojudge.compile_timeout', 30));
         $this->runWallGraceSeconds = max(1, (int) config('autojudge.run_wall_grace_seconds', 5));
+        $this->wallContentionFactor = max(1, (int) config('autojudge.wall_contention_factor', 3));
+    }
+
+    /**
+     * Issue #329 -- quanto RELOGIO um passo de $cpuSeconds de CPU pode
+     * gastar antes de o backstop desistir dele.
+     *
+     * Multiplicativo de proposito. O `ulimit -t` do sandbox conta CPU; este
+     * backstop conta parede; e o que separa as duas e a fila da maquina.
+     * Com uma folga aditiva, um limite de problema de 10 s recebia 15 s de
+     * relogio -- 1,5x -- enquanto o #126 mediu, nesta mesma imagem, 2,20x de
+     * inflacao com 8 workers para 10 CPUs e 3,27x com 12. Um backstop que
+     * da 1,5x onde a maquina precisa de 2,2x dispara por carga, e o preco
+     * disso e um CS num envio que tinha veredito.
+     *
+     * Vale reparar no que NAO muda: o veredito do programa continua vindo
+     * do `ulimit -t`, que nao foi tocado. Afrouxar o relogio nao da mais
+     * CPU a ninguem -- da mais paciencia ao juiz.
+     */
+    protected function wallBackstopSeconds(int $cpuSeconds): int
+    {
+        return (int) ceil(max(0, $cpuSeconds) * $this->wallContentionFactor) + $this->runWallGraceSeconds;
     }
 
     /**
@@ -816,7 +850,7 @@ class AutoJudgeService
         // the same name recurs, and the name carries the pid, so after a
         // worker is recycled it never does.
         try {
-            $wallSeconds = $timeLimit + $this->runWallGraceSeconds;
+            $wallSeconds = $this->wallBackstopSeconds($timeLimit);
 
             $result = $this->runWithWallBackstop(
                 Process::timeout($wallSeconds)
@@ -1030,6 +1064,14 @@ class AutoJudgeService
      * attacker-controlled input. The run directory (where the actual output
      * lives) is the writable root; the input and expected-output files are
      * bound in read-only, individually.
+     *
+     * Issue #329 -- este era o TERCEIRO backstop de parede, e ficou de fora
+     * do #342: continuava um `Process::timeout()` cru, entao um comparador
+     * que travasse sob carga devolvia a linha de comando inteira do `bwrap`
+     * dentro da mensagem do Symfony, que e exatamente o que a issue descreve
+     * como ilegivel. Passa pelo mesmo envolucro dos outros dois, com etapa
+     * propria ("comparacao") para que a organizacao saiba qual dos tres
+     * passos estourou.
      */
     protected function runCompareScript(string $script, string $inputFile, string $expectedOutputFile, string $actualOutputFile): array
     {
@@ -1051,7 +1093,14 @@ class AutoJudgeService
             ]
         );
 
-        $result = Process::timeout($this->defaultTimeLimit * 2)->run($command);
+        $compareWallSeconds = $this->wallBackstopSeconds($this->defaultTimeLimit * 2);
+
+        $result = $this->runWithWallBackstop(
+            Process::timeout($compareWallSeconds),
+            $command,
+            'comparacao',
+            $compareWallSeconds
+        );
 
         $this->assertSandboxStarted($result);
 

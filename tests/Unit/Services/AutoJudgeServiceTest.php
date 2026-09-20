@@ -283,6 +283,156 @@ class AutoJudgeServiceTest extends TestCase
     }
 
     /**
+     * Issue #329, caminho 2 -- o backstop da execucao e MULTIPLICATIVO.
+     *
+     * Este e o defeito de forma que sobrou depois do #342. A folga era fixa
+     * (`limite + 5 s`), e carga nao soma tempo de parede: multiplica. O
+     * #126 mediu nesta mesma imagem, com 10 CPUs, 2,20x de inflacao por run
+     * com 8 workers e 3,27x com 12 -- contra os 1,5x que `10 + 5` dava.
+     *
+     * NAO ha temporizacao aqui, de proposito: o que se afirma e a conta,
+     * nao quanto tempo alguma coisa levou. Teste de carga foi recusado pelo
+     * #250 e a auditoria da propria #329 manteve a recusa.
+     */
+    public function test_o_backstop_de_parede_da_execucao_e_multiplicativo()
+    {
+        config([
+            'autojudge.wall_contention_factor' => 3,
+            'autojudge.run_wall_grace_seconds' => 5,
+        ]);
+
+        $service = new AutoJudgeService;
+
+        // 10 s de CPU x 3 + 5 s de folga.
+        $this->assertSame(35, $this->callProtected($service, 'wallBackstopSeconds', [10]));
+
+        // E a afirmacao que MATA a versao aditiva: com a folga somada o
+        // valor seria 15 s, e 15 s e menos do que a inflacao que o #126
+        // mediu para uma maquina cheia.
+        $this->assertGreaterThan(
+            10 + 5,
+            $this->callProtected($service, 'wallBackstopSeconds', [10]),
+            'o backstop voltou a ser aditivo: uma folga fixa nao absorve um fator de contencao'
+        );
+
+        // Multiplicativo quer dizer que dobrar o limite do problema dobra a
+        // parte que escala. Uma folga fixa daria 15 e 25 (diferenca 10); o
+        // fator da 35 e 65 (diferenca 30).
+        $this->assertSame(65, $this->callProtected($service, 'wallBackstopSeconds', [20]));
+    }
+
+    /**
+     * Issue #329 -- e o valor calculado e o que chega ao `Process::timeout()`
+     * da execucao, com o limite EFETIVO do problema (o de
+     * `problem_language_limits` quando existe).
+     *
+     * Sem esta, a conta acima poderia estar certa e nao ser usada.
+     */
+    public function test_a_execucao_recebe_o_relogio_derivado_do_limite_efetivo()
+    {
+        config([
+            'autojudge.use_bwrap' => false,
+            'autojudge.wall_contention_factor' => 3,
+            'autojudge.run_wall_grace_seconds' => 5,
+        ]);
+
+        Process::fake(['*' => Process::result(output: '', errorOutput: '', exitCode: 0)]);
+
+        $run = $this->runFixture();
+        $run->problem->update(['time_limit' => 7]);
+        $run->refresh();
+
+        $service = new AutoJudgeService;
+        $runDir = sys_get_temp_dir().'/mh_backstop_'.getmypid();
+        @mkdir($runDir, 0755, true);
+
+        try {
+            $this->callProtected($service, 'executeProgram', [$run, $runDir, '/dev/null', $runDir.'/out.txt']);
+        } finally {
+            foreach (glob($runDir.'/*') ?: [] as $leftover) {
+                @unlink($leftover);
+            }
+            @rmdir($runDir);
+        }
+
+        // 7 s de limite x 3 + 5 = 26 s, e nao os 12 s da folga aditiva.
+        Process::assertRan(fn ($process) => $process->timeout === 26);
+        Process::assertDidntRun(fn ($process) => $process->timeout === 12);
+    }
+
+    /**
+     * Issue #329 -- o TERCEIRO backstop de parede, que o #342 deixou passar.
+     *
+     * `runCompareScript()` continuava com um `Process::timeout()` cru: um
+     * comparador travado sob carga devolvia a linha de comando inteira do
+     * `bwrap` dentro da mensagem do Symfony, que e o exato sintoma que a
+     * issue chama de ilegivel. Agora tem etapa propria, para que quem
+     * investiga saiba qual dos tres passos estourou.
+     */
+    public function test_o_backstop_da_comparacao_diz_que_foi_a_comparacao()
+    {
+        config([
+            'autojudge.use_bwrap' => false,
+            'autojudge.time_limit' => 1,
+            'autojudge.wall_contention_factor' => 1,
+            'autojudge.run_wall_grace_seconds' => 1,
+        ]);
+
+        $service = new AutoJudgeService;
+
+        // 1 s de limite x 2 (o teto do comparador) x 1 + 1 = 3 s de relogio,
+        // contra um script que dorme 8.
+        $script = sys_get_temp_dir().'/mh_cmp_'.getmypid().'.sh';
+        file_put_contents($script, "#!/bin/sh\nsleep 8\n");
+
+        try {
+            $this->callProtected($service, 'runCompareScript', [
+                $script, '/dev/null', '/dev/null', sys_get_temp_dir().'/mh_cmp_out_'.getmypid().'.txt',
+            ]);
+            $this->fail('o backstop de parede da comparacao nao disparou');
+        } catch (JudgeWallClockTimeoutException $e) {
+            $this->assertSame('comparacao', $e->etapa);
+            $this->assertStringContainsString('comparacao', $e->getMessage());
+            $this->assertStringNotContainsString('exceeded the timeout', $e->getMessage());
+            $this->assertStringNotContainsString('--ro-bind', $e->getMessage());
+        } finally {
+            @unlink($script);
+            @unlink(sys_get_temp_dir().'/mh_cmp_out_'.getmypid().'.txt');
+        }
+    }
+
+    /**
+     * Issue #329 -- os dois numeros da calibracao nao podem se soltar.
+     *
+     * O teto da compilacao e um numero de PAREDE fixo, e o fator de
+     * contencao e o que diz quanto a parede cresce quando a maquina enche.
+     * Quem subir o fator sem subir o teto reintroduz o defeito da issue na
+     * compilacao -- foi assim que `kt` virava CS sob carga: 7,92 s de CPU
+     * medidos vezes 2,20x de inflacao dao 17,4 s contra um teto de 20 s.
+     *
+     * A constante abaixo e a pior CPU de compilacao MEDIDA nesta imagem
+     * entre as 48 linguagens ativas (`go build`, 7,64 s; `kt` vem em
+     * seguida com 6,53 s). Se a imagem ganhar um compilador mais caro, este
+     * numero muda junto -- e e por isso que ele esta escrito aqui, e nao
+     * inferido.
+     */
+    public function test_o_teto_da_compilacao_cobre_o_compilador_mais_caro_medido()
+    {
+        $piorCpuDeCompilacaoMedida = 7.64; // `go build -o solution solution.go`
+
+        $teto = (int) config('autojudge.compile_timeout');
+        $fator = (int) config('autojudge.wall_contention_factor');
+
+        $this->assertGreaterThanOrEqual(
+            (int) ceil($piorCpuDeCompilacaoMedida * $fator),
+            $teto,
+            "autojudge.compile_timeout ({$teto} s) nao cobre mais o compilador mais caro medido "
+            ."({$piorCpuDeCompilacaoMedida} s de CPU) sob o fator de contencao configurado ({$fator}x). "
+            .'Suba o teto junto com o fator, ou a compilacao volta a virar CS sob carga (issue #329).'
+        );
+    }
+
+    /**
      * Issue #49 -- command-string generation only. These never need a real
      * bubblewrap: /bin/sh stands in as an existing, executable binary so the
      * generated arguments can be asserted on any platform. Confinement

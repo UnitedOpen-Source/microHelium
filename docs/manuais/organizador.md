@@ -374,6 +374,61 @@ quebra), e o Treino Livre não entra nesta fase.
 Quem não quiser Portugol numa prova desativa a linguagem em **Linguagens**,
 naquele contest.
 
+### Recursão profunda: o Bash não aguenta, e não há o que configurar
+
+Uma busca em profundidade recursiva sobre um grafo de 10 mil vértices é
+código banal — e **em Bash ela não roda**, em nenhum limite que faça sentido
+numa prova. Isto é o que sobrou da #327 depois que Python, Node e TypeScript
+foram resolvidos: aquelas três tinham botão, o Bash não tem.
+
+Medido nesta imagem do juiz (aarch64, `bash` 5.3.9), a recursão
+`f(n) = n + f(n-1)` escrita do jeito natural — com `$(...)`, que é como se
+devolve valor de uma função em shell:
+
+| profundidade | CPU total |
+|---:|---:|
+| 100 | 0,06 s |
+| 200 | 0,30 s |
+| 300 | 1,09 s |
+| 400 | 3,12 s |
+| 500 | **7,37 s** |
+
+O custo é da ordem de `n⁴`. Ou seja: **por volta da profundidade 450 o
+programa já estourou um limite de 5 segundos de CPU**, e a profundidade 10⁴
+da issue está fora de alcance por várias ordens de grandeza. Pior: a partir de
+cerca de mil níveis o Bash não falha limpo — ele imprime
+`arithmetic syntax error: operand expected` e devolve **saída vazia**, que
+para o juiz é resposta errada e não erro de execução.
+
+> **Não existe `ulimit` nem variável que conserte isso.** O `FUNCNEST` do Bash
+> só serve para **limitar** o aninhamento, nunca para aumentá-lo: medido,
+> `FUNCNEST=100000` não muda nada e `FUNCNEST=50` faz falhar antes.
+> `shopt` e `set -o` não têm nada sobre profundidade. Não há equivalente ao
+> `sys.setrecursionlimit` do Python nem ao `--stack-size` do Node.
+
+Reescrita sem `$(...)` — passando o resultado por variável global, que já não
+é a forma natural — o Bash chega a 10⁴, mas só com a pilha aumentada
+(`ulimit -s` de 8192 dá *segmentation fault*; a partir de 32768 funciona) e
+gastando **26,4 s de CPU**. Continua fora de qualquer limite de prova. Subir a
+pilha troca um `RE` por um `TLE`, e não um `TLE` por um `AC`.
+
+**O que fazer ao montar a prova:**
+
+- Se o problema admite solução recursiva profunda, **escreva a solução de
+  referência de forma iterativa** e verifique que ela cabe no limite. Isso vale
+  para todas as linguagens, não só para o Bash.
+- **Não conte com recursão profunda em Bash.** Se o enunciado depende disso,
+  ou o Bash sai daquela prova (em **Linguagens**, naquele contest), ou o
+  problema aceita solução iterativa.
+- O limite **por linguagem** (`problem_language_limits`) resolve *partida de
+  runtime* lenta — é para isso que ele existe, e é o que o Portugol Studio, o
+  Scala e o Groovy usam. Ele **não** resolve este caso: aqui o custo cresce com
+  a entrada, e nenhum limite praticável alcança.
+
+Para referência, as outras três linguagens da #327 **foram resolvidas** e
+aguentam 10⁴ níveis; o Bash é a única exceção que sobrou, e sobrou por não
+haver o que configurar.
+
 ### O pacote de resultados, para um ranking nacional
 
 ```
@@ -516,6 +571,31 @@ mecanismo foi feito para atender, e é o que o regulamento da Maratona manda
 fazer. Veja *Global ou por sede*, na seção 3. (Uma versão anterior deste
 manual dizia que o ajuste era só do contest inteiro; estava errado, e a
 coluna de escopo existe desde o #198.)
+
+**Envios estão virando `CS` (erro de julgamento) quando a prova aperta.**
+`CS` quer dizer *"a nossa infraestrutura falhou"* — nunca é um veredito sobre
+o programa da equipe, e quem recebeu um precisa ser **rejulgado**.
+
+Desde o #329 a mensagem diz o que aconteceu. Abra o envio e leia
+`auto_judge_stderr`: se estiver escrito *"O julgamento excedeu N s de tempo de
+parede na etapa de …"*, o que estourou foi o **relógio do juiz**, e a etapa
+(`compilacao`, `execucao` ou `comparacao`) diz onde.
+
+| A etapa que aparece | O que ajustar |
+|---|---|
+| `compilacao` | `AUTOJUDGE_COMPILE_TIMEOUT` (padrão 30 s) |
+| `execucao` | `AUTOJUDGE_WALL_CONTENTION_FACTOR` (padrão 3) |
+| `comparacao` | idem — o comparador usa o mesmo fator |
+
+> **Não é o limite de tempo do problema.** Esses são relógios de segurança da
+> máquina de julgamento; afrouxá-los **não dá mais CPU a ninguém** e não muda
+> o veredito de quem estourou o limite do problema — esse continua saindo do
+> `ulimit -t`, como `TLE`.
+
+A causa quase sempre é **workers demais para os núcleos que a máquina tem**.
+Medido (#126), passar da contagem de CPUs não adiciona vazão nenhuma — só
+fila, e a fila é o que vira `CS`. Antes de subir os números acima, confira
+quantos `autojudge:start` estão rodando.
 
 **Precisa corrigir vereditos em lote.**
 Rejulgamento em lote, com **prévia obrigatória**: o juiz vê o que vai mudar
