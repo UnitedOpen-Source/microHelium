@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Models\Language;
 use App\Services\Judgehost\MachineCapabilities;
 use Tests\TestCase;
 
@@ -103,5 +104,102 @@ class MachineCapabilitiesTest extends TestCase
         ]);
 
         $this->assertSame(['sh'], $detected);
+    }
+
+    /**
+     * Issue #354 -- o artefato nao e o programa.
+     *
+     * O `run_command` de toda linguagem compilada e literalmente
+     * `./{executable}`: o binario que a etapa de compilacao acabou de
+     * produzir, e que por definicao nao existe em maquina nenhuma antes de
+     * a submissao chegar. Sondar esse token e perguntar por um arquivo que
+     * nunca vai estar la, e como `detect()` exige que TODOS os binarios de
+     * uma linguagem existam, a linguagem inteira era recusada.
+     *
+     * A pergunta certa para uma compilada ja estava sendo feita no outro
+     * comando: existe o compilador?
+     */
+    public function test_uma_linguagem_compilada_e_declarada_pelo_compilador(): void
+    {
+        $detected = (new MachineCapabilities)->detect([
+            $this->language('c', 'sh -c true {source}', './{executable}'),
+        ]);
+
+        $this->assertSame(['c'], $detected);
+    }
+
+    public function test_uma_linguagem_compilada_sem_o_compilador_nao_e_declarada(): void
+    {
+        // Controle negativo, e ele e o que torna o teste acima util: sem
+        // este, "declarar tudo sempre" tambem passaria.
+        $detected = (new MachineCapabilities)->detect([
+            $this->language('zz', 'definitely-not-a-real-compiler-zz {source}', './{executable}'),
+        ]);
+
+        $this->assertSame([], $detected);
+    }
+
+    public function test_um_placeholder_no_meio_do_comando_nao_vira_o_binario_sondado(): void
+    {
+        // Descartar o `./{executable}` e seguir lendo daria o token
+        // seguinte -- um `<`, um `{input}`, o que viesse depois. Quando o
+        // comando comeca por um placeholder, nao ha programa instalado a
+        // sondar, e a resposta e "nao sei", nao "o proximo token".
+        $detected = (new MachineCapabilities)->detect([
+            $this->language('redir', null, './{executable} < {input}'),
+        ]);
+
+        $this->assertSame([], $detected);
+    }
+
+    /**
+     * O catalogo inteiro, contra uma maquina que tem tudo.
+     *
+     * Esta e a rede que faltava: ela nao pergunta se o toolchain esta
+     * instalado aqui -- pergunta se a sonda sabe o que perguntar. Por isso
+     * o `exists()` e substituido; o que esta sob teste e QUAL binario cada
+     * linguagem faz a maquina procurar, e nao se o shell o encontra (isso
+     * os outros casos deste arquivo ja medem contra o shell de verdade).
+     *
+     * Antes da #354 este teste reprovava 22 vezes -- todas as compiladas.
+     */
+    public function test_o_catalogo_inteiro_e_declarado_por_uma_maquina_que_tem_os_toolchains(): void
+    {
+        $machine = new class extends MachineCapabilities
+        {
+            /** @var list<string> */
+            public array $probed = [];
+
+            protected function exists(string $binary): bool
+            {
+                $this->probed[] = $binary;
+
+                return true;
+            }
+        };
+
+        $active = array_values(array_filter(
+            Language::getDefaultLanguages(),
+            fn (array $language) => (bool) ($language['is_active'] ?? false)
+        ));
+
+        $expected = array_values(array_unique(array_map(
+            fn (array $language) => (string) $language['extension'],
+            $active
+        )));
+
+        $this->assertSame(
+            $expected,
+            $machine->detect($active),
+            'uma linguagem ativa que a sonda nao declara e uma linguagem que o judgehost remoto recusa'
+        );
+
+        foreach ($machine->probed as $binary) {
+            $this->assertStringNotContainsString(
+                '{',
+                $binary,
+                "a sonda procurou `{$binary}`, que e um molde e nao um programa instalado"
+            );
+        }
     }
 }

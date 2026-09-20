@@ -3,6 +3,7 @@
 namespace App\Services\Judgehost;
 
 use App\Models\Language;
+use App\Support\Judge\ToolchainManifest;
 use Illuminate\Support\Facades\Process;
 
 /**
@@ -93,29 +94,37 @@ class MachineCapabilities
     }
 
     /**
-     * The program a command line actually starts, skipping the environment
-     * assignments a command template may begin with.
+     * The program a command line actually starts, or null when it starts no
+     * installed program at all.
+     *
+     * Issue #354 -- this used to skip only tokens that BEGIN with `{`, and
+     * the run command of every compiled language is literally
+     * `./{executable}`, which begins with a dot. So the token handed to the
+     * probe was the template itself, `command -v './{executable}'` failed on
+     * any machine alive, and since a language needs every one of its
+     * binaries to exist, all 22 compiled languages were dropped from the
+     * declared list. A remote judgehost then refused exactly C, C++, Rust
+     * and Go -- the ones it was most certainly able to compile.
+     *
+     * The rule now has a single owner, {@see ToolchainManifest::executableOf()},
+     * which already got this right for the install manifest: a token
+     * containing `{` anywhere is a mould, not a program, and a command that
+     * starts with one answers "no installed program" rather than moving on
+     * to the next token (the next token is a `<` or another placeholder, not
+     * a better guess). Two copies of this rule is how they came to disagree.
      */
     private function executableOf(string $command): ?string
     {
-        foreach (preg_split('/\s+/', trim($command)) ?: [] as $token) {
-            if ($token === '') {
-                continue;
-            }
-
-            // VAR=value prefixes, and the placeholders the templates use
-            // for paths the judge substitutes later.
-            if (str_contains($token, '=') || str_starts_with($token, '{')) {
-                continue;
-            }
-
-            return $token;
-        }
-
-        return null;
+        return ToolchainManifest::executableOf($command);
     }
 
-    private function exists(string $binary): bool
+    /**
+     * Protected, not private, so a test can ask what this probes for without
+     * needing the toolchain installed -- the question the catalogue-wide
+     * regression net asks is WHICH binary each language sends it looking
+     * for, which is the part that was wrong.
+     */
+    protected function exists(string $binary): bool
     {
         // An absolute path is checked directly; anything else is resolved
         // the way the judge itself would resolve it, through PATH.
