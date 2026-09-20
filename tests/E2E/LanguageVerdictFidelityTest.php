@@ -415,6 +415,46 @@ class LanguageVerdictFidelityTest extends TestCase
      */
     public function test_a_beam_sobe_vinte_vezes_seguidas_dentro_do_sandbox()
     {
+        // Issue #339 -- a exigencia e CONDICIONAL a oferecermos a linguagem.
+        //
+        // `erl` e `ex` foram desativadas porque a BEAM nao sobe de forma
+        // confiavel em x86_64 e nenhuma release do OTP carrega a correcao. Com
+        // elas fora do catalogo, exigir 20/20 aqui seria cobrar de um runtime
+        // que nao oferecemos -- e, num runner afetado, isso vira vermelho
+        // permanente que bloqueia PR nenhum relacionado. Ja bloqueou: segurou
+        // o CI da correcao de seguranca da #311.
+        //
+        // Vermelho que nao corresponde a defeito do PR e o pior formato de
+        // falha que uma suite pode ter: ensina a equipe a reexecutar o CI em
+        // vez de ler, e ai o proximo vermelho de verdade tambem e reexecutado.
+        //
+        // O que fica guardado enquanto estao desativadas e a COERENCIA da
+        // decisao: as duas compartilham a BEAM, entao nao existe estado em que
+        // uma esteja ligada e a outra nao. No dia em que alguem reativar, a
+        // exigencia de 20/20 volta a valer sozinha, naquele host.
+        $ativa = fn (string $ext): bool => collect(Language::getDefaultLanguages())
+            ->firstWhere('extension', $ext)['is_active'] ?? false;
+
+        $erlAtiva = $ativa('erl');
+        $exAtiva = $ativa('ex');
+
+        // Incondicional, e nao dentro do ramo de "ambas inativas": um estado
+        // incoerente (uma ligada e a outra nao) precisa reprovar AQUI. Na
+        // primeira versao deste guard a checagem ficava dentro do ramo, e a
+        // mutacao mostrou o furo -- com so o `erl` ligado o teste caia direto
+        // no requisito das vinte partidas e passava, sem nunca cobrar a
+        // coerencia.
+        $this->assertSame(
+            $erlAtiva,
+            $exAtiva,
+            'erl e ex compartilham a BEAM: nao existe estado em que uma esteja '
+            .'ativa e a outra nao. Ver #339.'
+        );
+
+        if (! $erlAtiva) {
+            return;
+        }
+
         if (trim((string) shell_exec('command -v erl 2>/dev/null')) === '') {
             $this->markTestSkipped('erl nao esta nesta maquina (rode dentro da imagem do juiz)');
         }
