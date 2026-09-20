@@ -6,6 +6,7 @@ use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\Language;
 use App\Models\Problem;
+use App\Models\ProblemLanguageLimit;
 use App\Models\Run;
 use App\Models\Site;
 use App\Models\TestCase as ProblemTestCase;
@@ -495,6 +496,183 @@ class LanguageVerdictFidelityTest extends TestCase
     }
 
     // -----------------------------------------------------------------
+    // Issues #301 e #347 -- erro de execucao que virava WA silencioso
+    //
+    // Sao dois runtimes com o MESMO defeito de classe: o programa morre, o
+    // processo sai com 0, e o juiz conclui "rodou e a saida ficou
+    // diferente". A equipe recebe "resposta errada" sobre um programa que
+    // nem terminou, sem uma linha de diagnostico -- e em nenhuma outra das
+    // 48 linguagens ativas isso acontece.
+    //
+    // O controle do MECANISMO ja esta no repositorio: um segfault em C da
+    // `RE` corretamente, entao o caminho de `RE` do juiz funciona. O que
+    // faltava era o erro chegar la.
+    // -----------------------------------------------------------------
+
+    /**
+     * Issue #301 -- divisao por zero em Portugol Studio e `RE`, e nao `WA`.
+     *
+     * O gemeo deste teste, para `CE`, e
+     * `MultiLanguageJudgingTest::test_a_portugol_syntax_error_is_a_compilation_error_and_not_a_wrong_answer`.
+     * Ali o veredito vem do codigo de saida da COMPILACAO, e por isso o
+     * `compile_command` deixou de ser o console em #269; aqui vem do codigo
+     * de saida da EXECUCAO, e e por isso que o `run_command` tambem deixou
+     * de ser o console.
+     *
+     * A mutacao que prova o mecanismo: devolver ao invocador
+     * `/usr/local/bin/portugol-studio` o
+     * `java -jar portugol-console-2.7.5.jar "$@" -no-wait` de antes. Medido,
+     * este teste volta a receber `WA` com stdout e stderr vazios.
+     */
+    public function test_erro_de_execucao_em_portugol_e_re_e_nao_wa()
+    {
+        $run = $this->judgeSolution(
+            'portugol_studio',
+            'solution.por',
+            "programa {\n  funcao inicio() {\n    inteiro a = 10, b = 0\n    escreva(a / b)\n  }\n}\n",
+            "3\n5\n"
+        );
+
+        $this->assertSame(
+            'RE',
+            $run->answer?->short_name,
+            "erro de execucao em Portugol nao virou RE: veredito '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+
+        // E a equipe recebe o diagnostico, que era a outra metade da issue:
+        // ate aqui `auto_judge_stderr` vinha VAZIO.
+        $this->assertStringContainsString(
+            'Erro de execucao',
+            (string) $run->auto_judge_stderr,
+            'o RE saiu sem uma linha de diagnostico -- foi o WA silencioso trocando de nome'
+        );
+        $this->assertStringContainsString(
+            'Linha: 4',
+            (string) $run->auto_judge_stderr,
+            'o diagnostico nao diz ONDE o programa morreu'
+        );
+    }
+
+    /**
+     * O controle positivo da #301, e ele e metade do trabalho: uma
+     * "correcao" que transformasse tudo em `RE` passaria no teste acima e
+     * destruiria a linguagem.
+     *
+     * Ele cobre tambem o que a troca do console poderia ter quebrado sem
+     * ninguem ver: `leia` continua lendo do stdin e `escreva` continua indo
+     * para a saida COMPARADA. `AC` aqui e comparacao byte a byte contra
+     * `8\n` -- se "Programa finalizado", "Pressione ENTER para continuar"
+     * ou uma sequencia de escape de terminal entrassem na saida, isto seria
+     * `WA`.
+     *
+     * O `leia` nao e detalhe do fixture: ele foi o caminho que quebrou
+     * primeiro. O `switch` sobre `TipoDado` dentro de `solicitaEntrada()`
+     * faz o javac emitir uma classe sintetica, e enquanto a imagem copiava
+     * so a classe externa TODO programa que lia entrada ficava pendurado
+     * ate o limite de tempo. Um controle positivo que so escrevesse uma
+     * constante teria passado verde por cima disso.
+     */
+    public function test_um_programa_portugol_valido_continua_sendo_aceito()
+    {
+        $run = $this->judgeSolution(
+            'portugol_studio',
+            'solution.por',
+            "programa {\n  funcao inicio() {\n    inteiro a, b\n    leia(a)\n    leia(b)\n    escreva(a + b, \"\\n\")\n  }\n}\n",
+            "3\n5\n"
+        );
+
+        $this->assertTrue(
+            $run->answer->is_accepted,
+            "programa Portugol valido virou '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+    }
+
+    /**
+     * Issue #347 -- divisao por zero em GNU Prolog e `RE`, e nao `WA`.
+     *
+     * Duas causas somadas na mesma medicao, e as duas verificadas aqui: o
+     * processo saia com 0 E o texto do erro saia na SAIDA PADRAO, que e o
+     * arquivo comparado. A segunda e a mais traicoeira -- a saida da equipe
+     * deixava de ser a resposta e virava a mensagem do runtime.
+     *
+     * A mutacao que prova o mecanismo: tirar
+     * `{judge_runtime}/gprolog/envolucro.pro` do `compile_command`, ou
+     * move-lo para ANTES de `{source}`. Medido, o primeiro volta a dar `WA`
+     * com `system_error(cannot_catch_throw(...))` no stdout; o segundo faz
+     * o `main` da equipe rodar duas vezes.
+     */
+    public function test_erro_de_execucao_em_gnu_prolog_e_re_e_nao_wa()
+    {
+        $run = $this->judgeSolution(
+            'prolog_gnu',
+            'solution.pro',
+            "main :-\n"
+            ."    read_integer(A),\n"
+            ."    read_integer(B),\n"
+            ."    C is (A + B) // (B - B),\n"
+            ."    write(C), nl.\n"
+            .":- initialization(main).\n",
+            "3\n5\n"
+        );
+
+        $this->assertSame(
+            'RE',
+            $run->answer?->short_name,
+            "erro de execucao em GNU Prolog nao virou RE: veredito '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+
+        // O diagnostico existe e nao foi descartado -- mas em stderr.
+        $this->assertStringContainsString(
+            'zero_divisor',
+            (string) $run->auto_judge_stderr,
+            'o RE saiu sem dizer o que aconteceu'
+        );
+
+        // E, o que e o outro lado da mesma issue: ele NAO esta na saida
+        // comparada.
+        $this->assertStringNotContainsString(
+            'cannot_catch_throw',
+            (string) $run->auto_judge_stdout,
+            'a mensagem do runtime continua indo para o arquivo que o juiz compara'
+        );
+    }
+
+    /**
+     * O controle positivo da #347, e tambem ele e metade do trabalho: um
+     * envolucro que chamasse `halt(1)` sempre passaria no teste acima e
+     * mataria a linguagem.
+     *
+     * `AC` aqui e comparacao byte a byte contra `8\n`, e e isso que faz
+     * dele o guarda da ORDEM na linha de compilacao: com o envolucro em
+     * primeiro lugar, medido, o `main` da equipe roda antes e depois de
+     * novo, a saida vira `8` seguido de um erro de leitura, e o veredito
+     * deixa de ser `AC`. Foi assim que a ordem foi descoberta.
+     */
+    public function test_um_programa_gnu_prolog_valido_continua_sendo_aceito()
+    {
+        $run = $this->judgeSolution(
+            'prolog_gnu',
+            'solution.pro',
+            "main :-\n"
+            ."    read_integer(A),\n"
+            ."    read_integer(B),\n"
+            ."    C is A + B,\n"
+            ."    write(C), nl.\n"
+            .":- initialization(main).\n",
+            "3\n5\n"
+        );
+
+        $this->assertTrue(
+            $run->answer->is_accepted,
+            "programa GNU Prolog valido virou '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+    }
+
+    // -----------------------------------------------------------------
 
     private function compileCommandOf(string $extension): string
     {
@@ -573,6 +751,20 @@ class LanguageVerdictFidelityTest extends TestCase
         }
 
         $problem = Problem::factory()->create(['contest_id' => $contest->id]);
+
+        // Issue #269, e depois #301: o Portugol Studio COMPILA PARA JAVA em
+        // tempo de execucao -- chama `javac` e sobe uma segunda JVM --, e
+        // duas partidas de JVM nao cabem no segundo de CPU que e o padrao da
+        // tabela. `problem_language_limits` e o mecanismo que existe para
+        // isto; afrouxar o limite do PROBLEMA daria mais tempo a todas as
+        // linguagens, que e o que este campo existe para evitar.
+        if ($extension === 'portugol_studio') {
+            ProblemLanguageLimit::create([
+                'problem_id' => $problem->id,
+                'language_id' => $language->id,
+                'time_limit' => 30,
+            ]);
+        }
 
         $inputRelative = "problems/{$contest->id}/{$problem->id}/input/1";
         $outputRelative = "problems/{$contest->id}/{$problem->id}/output/1";
