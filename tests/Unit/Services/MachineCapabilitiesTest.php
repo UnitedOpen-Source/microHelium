@@ -121,6 +121,12 @@ class MachineCapabilitiesTest extends TestCase
      * fazer. A mutacao que este teste pega e literalmente essa: devolver os
      * comandos para `bash ...` faz o PATH montado aqui (que tem `csharp-net8`
      * e nao tem `csharp-net10`) passar a anunciar as duas.
+     *
+     * O PATH e INJETADO, e nao posto com `putenv`. A primeira versao usava
+     * `putenv` e reprovava dentro da imagem do juiz enquanto passava aqui --
+     * ver o comentario do construtor de `MachineCapabilities` para o porque
+     * (resumo: `$_ENV` vence o `putenv` quando `variables_order` tem `E`, que
+     * e o padrao da imagem `php:8.3-cli-alpine`).
      */
     public function test_um_host_com_um_sdk_de_dotnet_so_anuncia_uma_das_duas_entradas_de_csharp(): void
     {
@@ -132,25 +138,18 @@ class MachineCapabilitiesTest extends TestCase
 
         $this->assertCount(2, $catalogo, 'o catalogo deixou de ter as duas entradas de C#');
 
-        // Um PATH que contem o invocador do .NET 8 e nao o do .NET 10 --
-        // um judgehost que so instalou um dos SDKs. `/bin` e `/usr/bin`
-        // entram porque a sonda usa `sh -c 'command -v ...'`, mas
-        // `/usr/local/bin` fica de fora: e la que a imagem do juiz poe os
-        // dois invocadores, e este caso precisa da maquina que tem um so.
-        $falso = sys_get_temp_dir().'/mh-cap-csharp-'.getmypid();
-        @mkdir($falso, 0o700, true);
-        file_put_contents($falso.'/csharp-net8', "#!/bin/sh\nexit 0\n");
-        chmod($falso.'/csharp-net8', 0o755);
-
-        $pathAnterior = getenv('PATH');
-        putenv('PATH='.$falso.':/bin:/usr/bin');
+        // Uma maquina que instalou o SDK 8 e nao o 10: o PATH tem o
+        // `csharp-net8` e nao tem o `csharp-net10`. `/bin` e `/usr/bin`
+        // entram porque a sonda usa `sh -c 'command -v ...'` e precisa achar
+        // o proprio `sh`; `/usr/local/bin` fica DE FORA de proposito, porque
+        // e la que a imagem do juiz poe os dois invocadores e este caso
+        // precisa da maquina que tem um so.
+        $falso = $this->binFalsoCom(['csharp-net8']);
 
         try {
-            $detectadas = (new MachineCapabilities)->detect($catalogo);
+            $detectadas = (new MachineCapabilities($falso.':/bin:/usr/bin'))->detect($catalogo);
         } finally {
-            putenv('PATH='.$pathAnterior);
-            @unlink($falso.'/csharp-net8');
-            @rmdir($falso);
+            $this->removeBinFalso($falso);
         }
 
         $this->assertSame(
@@ -160,5 +159,80 @@ class MachineCapabilitiesTest extends TestCase
             .'dos comandos precisa ser o invocador da versao (csharp-net8/csharp-net10), '
             .'senao um host com um SDK so anuncia os dois.'
         );
+    }
+
+    /**
+     * Issue #305 -- o PATH injetado e mesmo o que a sonda consulta.
+     *
+     * Guarda do proprio mecanismo do teste acima, e nao da regra de negocio.
+     * Ela existe porque o jeito anterior de montar a maquina hipotetica
+     * (`putenv`) era um botao que NAO fazia nada dentro da imagem do juiz, e
+     * o teste que dependia dele mudava de resposta conforme a
+     * `variables_order` do PHP. Se alguem transformar `searchPath` num
+     * parametro ignorado, o caso de baixo (o do C#) voltaria a medir o PATH
+     * da maquina real; este aqui reprova primeiro, e dizendo o porque.
+     *
+     * As duas metades importam: achar o que esta no PATH injetado prova que
+     * ele e lido, e NAO achar o que so existe fora dele prova que ele
+     * substitui o ambiente em vez de ser somado a ele.
+     */
+    public function test_a_sonda_consulta_o_path_injetado_e_nao_o_do_processo(): void
+    {
+        $falso = $this->binFalsoCom(['mh-marcador-inventado']);
+
+        try {
+            $sonda = new MachineCapabilities($falso.':/bin:/usr/bin');
+
+            $dentro = $sonda->detect([
+                $this->language('dentro', null, 'mh-marcador-inventado {source}'),
+            ]);
+
+            // `sh` existe em /bin, que esta no PATH injetado, mas NAO no
+            // diretorio falso -- serve para provar que o PATH injetado e
+            // usado inteiro, e nao so o primeiro item.
+            $doPath = $sonda->detect([
+                $this->language('sh', null, 'sh {source}'),
+            ]);
+
+            // Um PATH injetado que so tem o diretorio falso nao acha `sh`.
+            $foraDoPath = (new MachineCapabilities($falso))->detect([
+                $this->language('sh', null, 'sh {source}'),
+            ]);
+        } finally {
+            $this->removeBinFalso($falso);
+        }
+
+        $this->assertSame(['dentro'], $dentro, 'o PATH injetado nao foi consultado pela sonda');
+        $this->assertSame(['sh'], $doPath, 'o PATH injetado perdeu os diretorios depois do primeiro');
+        $this->assertSame([], $foraDoPath, 'a sonda achou um binario que o PATH injetado nao cobre -- '
+            .'o PATH injetado esta sendo somado ao ambiente em vez de substitui-lo');
+    }
+
+    /**
+     * Um diretorio com executaveis de mentira, para montar maquinas
+     * hipoteticas sem depender do que a maquina de verdade tem instalado.
+     *
+     * @param  list<string>  $binarios
+     */
+    private function binFalsoCom(array $binarios): string
+    {
+        $dir = sys_get_temp_dir().'/mh-cap-'.getmypid().'-'.bin2hex(random_bytes(4));
+        mkdir($dir, 0o700, true);
+
+        foreach ($binarios as $nome) {
+            file_put_contents($dir.'/'.$nome, "#!/bin/sh\nexit 0\n");
+            chmod($dir.'/'.$nome, 0o755);
+        }
+
+        return $dir;
+    }
+
+    private function removeBinFalso(string $dir): void
+    {
+        foreach (glob($dir.'/*') ?: [] as $arquivo) {
+            @unlink($arquivo);
+        }
+
+        @rmdir($dir);
     }
 }
