@@ -432,7 +432,7 @@ que sobrou *entre elas*, e sobrou por não haver o que configurar.
 **Mas o Bash não é a única linguagem do catálogo que não aguenta 10⁴ níveis.**
 A #327 nasceu olhando 24 linguagens; hoje são 48, e a varredura completa
 (`tests/E2E/LanguageConformanceTest.php`, o mesmo programa em todas, julgado
-pelo juiz de verdade) encontrou mais cinco. Nenhuma é defeito do juiz — é o
+pelo juiz de verdade) encontrou mais sete. Nenhuma é defeito do juiz — é o
 que cada runtime aguenta:
 
 | Linguagem | O que acontece | O teto, medido | Onde mora o teto |
@@ -443,17 +443,41 @@ que cada runtime aguenta:
 | `lisp_clisp` | `RE` | passa em 3000, estoura em 5000 | pilha do CLISP 2.49 |
 | `r` | `RE` | passa em 2000, estoura em 5000 | `options(expressions)` |
 | `nim` | `RE` | 2000 | `nim c` sem `-d:release` |
+| `clj` | `RE` | corte não medido | `StackOverflowError`, quadro gordo do Clojure |
+| `portugol_studio` | `RE` | corte não medido | o próprio interpretador detecta e aborta |
+
+As duas últimas são mais novas que as outras seis, e entraram aqui pelo
+caminho que este manual recomenda: a tabela de conformidade afirmava que elas
+aguentavam, a suíte rodou dentro da imagem do juiz, o juiz respondeu `RE` nas
+duas, e quem estava errado era a tabela.
 
 Dois controles que valem a pena conhecer, porque eles mostram que o problema é
 da implementação e não do programa: o `lisp_sbcl` compila **a mesma fonte** do
 `lisp_clisp`, byte a byte, e faz os 10⁴ níveis; e o `scala`, na **mesma JVM**
-do `groovy`, também faz. As outras 42 linguagens ativas passam.
+do `groovy` e do `clj`, também faz — das três linguagens de JVM do catálogo,
+só o Scala passa, o que localiza o custo no quadro de cada linguagem e não na
+pilha da máquina virtual. As outras 40 linguagens ativas passam.
 
-O `nim` é o único dos seis que teria conserto do nosso lado: o teto de 2000
-quadros é do *build de depuração*, e o mesmo programa compilado com
-`nim c -d:release` devolve o resultado certo. Fica registrado aqui porque
+O `nim` continua sendo o único dos oito com conserto **medido** do nosso lado:
+o teto de 2000 quadros é do *build de depuração*, e o mesmo programa compilado
+com `nim c -d:release` devolve o resultado certo. Fica registrado aqui porque
 mudar o comando do catálogo é decisão de quem mantém a imagem, não deste
 manual.
+
+O `clj` é candidato ao mesmo tratamento, e a diferença de palavra importa:
+`docker/judge/bin/clojure-run` chama `java -cp .../clojure.jar clojure.main`
+**sem `-Xss`**, então a pilha é a padrão da JVM — mas ninguém mediu se um
+`-Xss` maior resolve, e enquanto não medir este manual não vai dizer que
+resolve. O `portugol_studio` não tem esse botão: quem barra é o próprio núcleo
+do Portugol, e não a pilha por baixo dele.
+
+> **Se um problema seu depende de recursão profunda em Portugol, leia a
+> mensagem que a equipe recebe.** O núcleo do Portugol Studio diagnostica o
+> estouro como *"existe alguma função do programa que está sendo chamada de
+> forma recursiva sem uma condição de parada"* e mostra um exemplo de recursão
+> infinita. Numa recursão legítima de 10⁴ níveis **esse diagnóstico está
+> errado** — a condição de parada existe, o que faltou foi pilha. A equipe vai
+> caçar um defeito que não tem.
 
 ### O que cada linguagem aguenta, medido
 
@@ -469,7 +493,7 @@ v2 delegado.
 
 | O que | Onde | O que fazer ao escrever o problema |
 |---|---|---|
-| **Recursão de 10⁴ níveis reprova** | as seis da tabela acima | uma DFS recursiva sobre 10 mil vértices não passa nelas. Se o problema exige profundidade, diga no enunciado |
+| **Recursão de 10⁴ níveis reprova** | as oito da tabela acima | uma DFS recursiva sobre 10 mil vértices não passa nelas. Se o problema exige profundidade, diga no enunciado |
 | **`inteiro` do Portugol é de 32 bits** | `portugol_studio` | resposta acima de 2 147 483 647 é impossível: medido, 5000050000 sai 705082704. Dimensione o caso de teste |
 | **Divisão inteira por zero não quebra em `aarch64`** | `c_*`, `cpp_*`, `f90`, `f77`, `cob` | o `sdiv` do ARM devolve 0 em vez de gerar exceção (em COBOL, sem `ON SIZE ERROR`, o resultado fica inalterado). O mesmo programa dá `RE` num juiz x86 e `WA` num juiz ARM |
 | **O GNU Prolog não passa de 32 MB** | `prolog_gnu` | as pilhas do runtime são fixas; um problema que exija estrutura grande não tem solução nessa linguagem, qualquer que seja o `memory_limit` |

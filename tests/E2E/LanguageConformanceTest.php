@@ -88,11 +88,23 @@ use Tests\TestCase;
  * CONSERTADO", e a asserção foi invertida. O contrato acima deixou de ser
  * promessa e virou histórico.
  *
- * O que sobra fixado são seis `LIMITE_DA_LINGUAGEM`, todos no item de
- * recursão: `sh`, `tcl`, `r`, `lisp_clisp`, `groovy` e `nim`. Ali o juiz
- * está certo e quem não dá conta é o runtime -- a #327 foi fechada
- * documentando isso no manual do organizador, e o teste existe para avisar
- * se algum dia mudar.
+ * O que sobra fixado são OITO `LIMITE_DA_LINGUAGEM`, todos no item de
+ * recursão: `sh`, `tcl`, `r`, `lisp_clisp`, `groovy`, `nim`, `clj` e
+ * `portugol_studio`. Ali o juiz está certo e quem não dá conta é o runtime
+ * -- a #327 foi fechada documentando isso no manual do organizador, e o
+ * teste existe para avisar se algum dia mudar.
+ *
+ * SEIS vieram da #327. As duas últimas vieram DESTA SUÍTE, e vale contar
+ * como: a tabela declarava `clj` e `portugol_studio` CONFORME no item de
+ * recursão, e na PRIMEIRA vez que a suíte rodou dentro da imagem do juiz
+ * -- no CI, onde os 512 casos deixam de pular -- as duas responderam `RE`.
+ * A #327 tinha olhado 24 linguagens; hoje são 48, e estas duas estavam no
+ * pedaço que ninguém tinha medido.
+ *
+ * Nenhuma das duas foi "consertada" afrouxando o teste. O que o juiz
+ * respondeu virou a tabela, com a justificativa escrita em limites() e o
+ * manual do organizador atualizado junto, porque é ele que quem escreve o
+ * problema vai ler.
  *   NAO_SE_APLICA     -- a linguagem não tem a construção que o item exige
  *                        (sed não tem recursão nem ponto flutuante). Exige
  *                        justificativa escrita; é registro de limite, e não
@@ -531,8 +543,8 @@ class LanguageConformanceTest extends TestCase
 
         // Recursão de 10^4 níveis -- profundidade banal numa busca em
         // profundidade sobre um grafo de 10 mil vértices. Medido nesta
-        // revisão contra TODAS as linguagens ativas. Ver defeitos(), que registra
-        // o teto de cada uma -- e note que eles são de naturezas
+        // revisão contra TODAS as linguagens ativas. Ver limites(), que
+        // registra o teto de cada uma -- e note que eles são de naturezas
         // diferentes (limite do interpretador, pilha do runtime, e, no
         // caso do Nim, uma escolha do comando de compilação do catálogo).
         $recursaoLimitada = [self::ITEM_RECURSAO => self::LIMITE_DA_LINGUAGEM];
@@ -650,7 +662,7 @@ class LanguageConformanceTest extends TestCase
             'awk' => ['familia' => 'awk', 'itens' => $tudoConforme],
             'tcl' => ['familia' => 'tcl', 'itens' => array_merge($tudoConforme, $recursaoLimitada)],
             'r' => ['familia' => 'r', 'itens' => array_merge($tudoConforme, $recursaoLimitada)],
-            'clj' => ['familia' => 'clj', 'itens' => $tudoConforme],
+            'clj' => ['familia' => 'clj', 'itens' => array_merge($tudoConforme, $recursaoLimitada)],
             // `erl` e `ex` saíram de `is_active` no #346 (a BEAM não sobe de
             // forma confiável em x86_64 -- #339). As linhas FICAM: o
             // provedor de dados filtra por `is_active`, então elas não
@@ -701,7 +713,7 @@ class LanguageConformanceTest extends TestCase
 
             'cob' => ['familia' => 'cob', 'itens' => $tudoConforme],
 
-            'portugol_studio' => ['familia' => 'portugol', 'itens' => array_merge($tudoConforme, [
+            'portugol_studio' => ['familia' => 'portugol', 'itens' => array_merge($tudoConforme, $recursaoLimitada, [
                 self::ITEM_SAIDA => self::NAO_SE_APLICA,
                 self::ITEM_STDERR => self::NAO_SE_APLICA,
                 self::ITEM_MLE => self::NAO_MEDIDO,
@@ -745,12 +757,18 @@ class LanguageConformanceTest extends TestCase
      * O registro dos LIMITES DE LINGUAGEM medidos -- ver a constante
      * self::LIMITE_DA_LINGUAGEM para a diferença em relação a um defeito.
      *
-     * Todos os de hoje são o mesmo item, recursão de 10^4 níveis, e todos
+     * Todos os de hoje são o mesmo item, recursão de 10^4 níveis, e seis
      * vêm da #327: a issue foi FECHADA (#345 consertou Python, Node e
      * TypeScript, que tinham botão; o #350 documentou o Bash, que não tem).
-     * O que sobrou aqui não é defeito do juiz -- é a profundidade que cada
+     * O que sobrou ali não é defeito do juiz -- é a profundidade que cada
      * runtime aguenta, medida uma a uma, e está no manual do organizador
      * para quem escreve o problema.
+     *
+     * As outras duas -- `clj` e `portugol_studio` -- não vêm de issue
+     * nenhuma: vêm desta suíte. A tabela as declarava CONFORME, a primeira
+     * execução dentro da imagem do juiz respondeu `RE` nas duas, e o teste
+     * ficou vermelho. A #327 tinha olhado 24 linguagens; hoje são 48, e
+     * estas duas estavam no pedaço que ninguém tinha medido.
      *
      * @return array<string, array<string, array{veredito: string, porque: string, onde: string}>>
      */
@@ -808,10 +826,48 @@ class LanguageConformanceTest extends TestCase
                     'onde' => 'docs/manuais/organizador.md, tabela de profundidade por linguagem',
                 ],
             ],
+            // As duas entradas abaixo NÃO vieram da #327: vieram desta suíte,
+            // na primeira vez que ela rodou dentro da imagem do juiz. A
+            // tabela afirmava CONFORME para as duas, o juiz respondeu RE, e
+            // o teste ficou vermelho -- que é exatamente o que ele existe
+            // para fazer. O que segue é a tabela corrigida para o medido.
+            'clj' => [
+                self::ITEM_RECURSAO => [
+                    'veredito' => 'RE',
+                    'porque' => '`Execution error (StackOverflowError) at user/f (solution.clj:2).` A '
+                        .'recursão deste item é `(+ n (f (dec n)))`, que NÃO é de cauda -- `recur` não se '
+                        .'aplica a ela, e o que o item mede é o que um competidor escreve. O controle que '
+                        .'torna isto uma afirmação sobre a IMPLEMENTAÇÃO e não sobre a JVM é o `scala`, que '
+                        .'na MESMA JVM faz os 10^4 níveis e devolve 50005000: o que é caro é o quadro do '
+                        .'Clojure (despacho por `IFn.invoke` e aritmética boxeada em `clojure.lang.Numbers`), '
+                        .'como no `groovy`. Dos três da JVM, só o Scala passa. NÃO medimos o corte exato nem '
+                        .'o tamanho da pilha padrão. O que está verificado no repositório é que '
+                        .'`docker/judge/bin/clojure-run` é `java -cp /usr/share/clojure/clojure.jar '
+                        .'clojure.main`, SEM `-Xss`: a pilha é a padrão da JVM. Um `-Xss` ali é candidato a '
+                        .'conserto do nosso lado, e não foi medido -- quem for medir, saiba que este teste '
+                        .'fica vermelho quando funcionar, e é assim que se descobre.',
+                    'onde' => 'docs/manuais/organizador.md, tabela de profundidade por linguagem',
+                ],
+            ],
+            'portugol_studio' => [
+                self::ITEM_RECURSAO => [
+                    'veredito' => 'RE',
+                    'porque' => 'quem detecta e aborta é o PRÓPRIO núcleo do Portugol Studio, antes de a '
+                        .'pilha da JVM estourar: "Ocorreu um estouro de pilha de memória no programa", com '
+                        .'`Linha: 3, Coluna: 8` -- a chamada recursiva. NÃO é a #301 de volta: lá o erro de '
+                        .'execução virava `WA` mudo, e aqui o diagnóstico chega ao stderr e o veredito é '
+                        .'`RE`, ou seja é o conserto do #351 funcionando. O corte exato não foi medido. '
+                        .'RESSALVA PARA QUEM ESCREVE O PROBLEMA: a mensagem do núcleo AFIRMA que falta '
+                        .'condição de parada e mostra um exemplo de recursão infinita -- e neste caso ela '
+                        .'está errada, porque a condição existe. A equipe vai ler um diagnóstico que aponta '
+                        .'para o defeito errado.',
+                    'onde' => 'docs/manuais/organizador.md, tabela de profundidade por linguagem',
+                ],
+            ],
             'nim' => [
                 self::ITEM_RECURSAO => [
                     'veredito' => 'RE',
-                    'porque' => 'este é o único dos seis que teria conserto do NOSSO lado, e por isso vale '
+                    'porque' => 'este é o único dos oito com conserto do nosso lado já MEDIDO, e por isso vale '
                         .'ler duas vezes: não é limite do runtime, é o comando do catálogo. O '
                         .'`compile_command` é `nim c -o:{output} {source}`, sem `-d:release`, e o build de '
                         .'depuração do Nim impõe um teto de 2000 quadros -- "call depth limit reached in a '
