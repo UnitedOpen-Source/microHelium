@@ -202,6 +202,24 @@ class CliClientOverRealHttpTest extends BaseTestCase
      * whether backslash-escaping inside a quoted parameter is understood is
      * a property of the server, and "the specification permits it" is a
      * different claim from "this application reads it".
+     *
+     * Issue #311 -- o que se espera no BANCO mudou, e o que este teste mede
+     * nao mudou.
+     *
+     * Antes daquela issue a API gravava `getClientOriginalName()` cru, entao
+     * "a aspa chegou inteira" e "a aspa esta gravada" eram a mesma
+     * afirmacao. Nao sao mais: a aspa chega inteira e e SANEADA na entrada,
+     * porque dali ela seguia sem escape para a linha que o AutoJudgeService
+     * entrega a `bash -c`.
+     *
+     * A propriedade que este teste existe para medir continua inteira, e e
+     * por isso que a asserção continua valendo alguma coisa. Se o
+     * `header_value()` do `bin/mh` voltar a interpolar cru, a aspa fecha o
+     * parametro cedo, o servidor recebe `A` -- e nao o nome todo -- e o
+     * banco guarda `A`. Com a codificacao certa ele recebe `A"1.sh` inteiro
+     * e guarda `A_1.sh`. Os dois casos continuam distinguiveis; so deixou de
+     * ser a aspa literal o que os distingue. Medido: com a interpolacao crua
+     * restaurada, este teste falha com 'A'.
      */
     public function test_a_file_name_with_a_quote_in_it_survives_the_upload(): void
     {
@@ -228,7 +246,16 @@ class CliClientOverRealHttpTest extends BaseTestCase
         $run = $this->db()->query('select filename, source_hash from runs')->fetch(PDO::FETCH_ASSOC);
 
         $this->assertNotFalse($run, "nothing reached the database:\n".$this->say($submit));
-        $this->assertSame('A"1.sh', $run['filename'], 'the quote did not survive the header encoding');
+
+        // O nome INTEIRO chegou -- e a aspa virou `_` na entrada (#311). Um
+        // parametro fechado cedo pela aspa daria `A`, e e esse o caso que
+        // esta asserção separa.
+        $this->assertSame(
+            'A_1.sh',
+            $run['filename'],
+            'the quote did not survive the header encoding: the server saw a truncated name'
+        );
+        $this->assertNotSame('A', $run['filename'], 'the quoted parameter was closed early by the quote');
         $this->assertSame(hash_file('sha256', $source), $run['source_hash'], 'the file body was corrupted');
     }
 

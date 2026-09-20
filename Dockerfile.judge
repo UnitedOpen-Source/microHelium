@@ -348,8 +348,18 @@ RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
 
 # Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
 # zip (pure JVM + a launcher script, arch-independent given the JDK above).
+#
+# Issue #304 -- KOTLIN_SHA256 e o sha256 que o proprio GitHub atesta para
+# este artefato (campo `digest` de
+# GET /repos/JetBrains/kotlin/releases/tags/v2.4.20, conferido em
+# 2026-09-19). Aqui o pino pesa ainda mais do que nas outras duas imagens:
+# esta e A imagem do juiz, e e ela que parceiros constroem sob julgamento
+# distribuido (#53), em redes que nao controlamos. Ver Dockerfile para o
+# texto completo.
 ARG KOTLIN_VERSION=2.4.20
+ARG KOTLIN_SHA256=59e9ca74c7904ef2c122b12114937673ccce68de820a663f0ed66ccf8799e0b7
 RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -O /tmp/kotlin.zip \
+    && echo "${KOTLIN_SHA256}  /tmp/kotlin.zip" | sha256sum -c - \
     && unzip -q /tmp/kotlin.zip -d /opt \
     && rm /tmp/kotlin.zip \
     && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc \
@@ -578,22 +588,34 @@ RUN set -eux; \
     rm -f /tmp/fumaca.por
 
 # Free Pascal has no Alpine package either; installed from the official
-# per-architecture SourceForge binary tarball. See Dockerfile.dev for the
-# detailed rationale (retry loop: the SourceForge download occasionally
-# serves a truncated file under automated tools).
+# per-architecture SourceForge binary tarball. See Dockerfile for the
+# detailed rationale.
+#
+# Issue #304 -- SHA-256 fixado por arquitetura, conferido a cada tentativa.
+# O laco continua porque o download do SourceForge realmente serve arquivo
+# truncado sob ferramenta automatizada, mas quem decide se a tentativa valeu
+# e o hash, e nao o `tar -tf`. O `wget -c` saiu: `-c` RETOMA um download
+# parcial e costurava o segundo pedaco no primeiro.
+#
+# Dos tres downloads sem hash que a issue mapeou, este era o menos
+# previsivel: o SourceForge serve por espelhos, e era o unico cujo proprio
+# comentario ja admitia instabilidade.
 ARG FPC_VERSION=3.2.2
+ARG FPC_SHA256_AARCH64=b39470f9b6b5b82f50fc8680a5da37d2834f2129c65c24c5628a80894d565451
+ARG FPC_SHA256_X86_64=5adac308a5534b6a76446d8311fc340747cbb7edeaacfe6b651493ff3fe31e83
 RUN set -eu; \
     arch="$(apk --print-arch)"; \
     case "$arch" in \
-        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64 ;; \
-        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64 ;; \
+        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64; fpc_sha256="${FPC_SHA256_X86_64}" ;; \
+        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64; fpc_sha256="${FPC_SHA256_AARCH64}" ;; \
         *) echo "Unsupported arch for FPC: $arch" >&2; exit 1 ;; \
     esac; \
     url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
     tries=0; \
-    until wget -q -c "$url" -O /tmp/fpc.tar && tar -tf /tmp/fpc.tar >/dev/null 2>&1; do \
+    until wget -q "$url" -O /tmp/fpc.tar \
+        && echo "${fpc_sha256}  /tmp/fpc.tar" | sha256sum -c -; do \
         tries=$((tries + 1)); \
-        [ "$tries" -ge 6 ] && { echo "Failed to download a valid FPC tarball after $tries attempts" >&2; exit 1; }; \
+        [ "$tries" -ge 6 ] && { echo "FPC ${FPC_VERSION} (${fpc_arch}): $tries tentativas sem bater o SHA-256 fixado" >&2; exit 1; }; \
         rm -f /tmp/fpc.tar; \
     done; \
     mkdir -p /tmp/fpcx && tar -xf /tmp/fpc.tar -C /tmp/fpcx; \

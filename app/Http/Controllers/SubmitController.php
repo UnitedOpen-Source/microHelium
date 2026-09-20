@@ -8,6 +8,7 @@ use App\Models\Problem;
 use App\Services\ContestClock;
 use App\Services\DuplicateSubmissionException;
 use App\Services\RunSubmissionService;
+use App\Support\SourceFilename;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -100,11 +101,11 @@ class SubmitController extends Controller
             // makes every wizard-created contest's submissions fail to
             // compile. The basename is preserved since some languages (Java)
             // require it to match the program's class/entry-point name.
-            $basename = pathinfo($this->sanitizeFilename($file->getClientOriginalName()), PATHINFO_FILENAME);
-            $originalName = ($basename !== '' ? $basename : 'main').'.'.$this->sanitizeFilename($language->getFileExtension());
+            $basename = pathinfo(SourceFilename::sanitize($file->getClientOriginalName()), PATHINFO_FILENAME);
+            $originalName = ($basename !== '' ? $basename : 'main').'.'.SourceFilename::sanitize($language->getFileExtension());
             $sourceContent = file_get_contents($file->path());
         } else {
-            $originalName = 'main.'.$this->sanitizeFilename($language->getFileExtension());
+            $originalName = 'main.'.SourceFilename::sanitize($language->getFileExtension());
             $sourceContent = $request->input('code_text');
         }
 
@@ -156,21 +157,5 @@ class SubmitController extends Controller
         if ($user->contest_id !== $problem->contest_id) {
             abort(403, 'Este problema nao pertence ao seu contest.');
         }
-    }
-
-    /**
-     * The client-supplied filename (getClientOriginalName()) is untrusted
-     * input that was being concatenated straight into the storage path --
-     * a name like "../../../../etc/cron.d/evil" would escape the intended
-     * runs/{contest}/{user}/ directory. Strip any path component and only
-     * keep a conservative character set.
-     */
-    private function sanitizeFilename(string $name): string
-    {
-        $name = basename($name);
-        $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
-        $name = ltrim($name, '.');
-
-        return $name !== '' ? substr($name, 0, 150) : 'source';
     }
 }
