@@ -63,10 +63,54 @@ return [
     |
     | E TEMPO DE PAREDE, nao CPU: quando ele estoura, o julgamento termina
     | em CS (erro de julgamento), que e um veredito sobre a nossa
-    | infraestrutura e nao sobre o programa da equipe. Numa maquina ociosa
-    | `kotlinc solution.kt -include-runtime` custa 4,51 s de parede aqui; o
-    | numero existe para o caso patologico, e sob concorrencia a folga
-    | encolhe. Uma sede que veja CS por compilacao sobe este valor.
+    | infraestrutura e nao sobre o programa da equipe.
+    |
+    | -------------------------------------------------------------------
+    | A CALIBRACAO, medida -- issue #329, caminho 3
+    | -------------------------------------------------------------------
+    |
+    | O `compile_command` de cada uma das 48 linguagens ativas foi medido
+    | nesta imagem do judge (aarch64, maquina ociosa, mediana de tres
+    | execucoes, programa a+b). As seis mais caras, em CPU:
+    |
+    |     go       7,64 s de CPU   1,99 s de parede
+    |     kt       6,53 s          3,23 s
+    |     cr       6,42 s          1,87 s
+    |     scala    5,27 s          1,75 s
+    |     zig      3,82 s          3,46 s
+    |     groovy   1,84 s          0,67 s
+    |
+    | e as outras 42 ficam abaixo de 1,1 s de CPU.
+    |
+    | O QUE ESSA TABELA EXPLICA e por que o backstop antigo (20 s) reprovava
+    | `kt` sob carga e nao reprovava sozinho. Repare que nas quatro
+    | primeiras a CPU e VARIAS VEZES a parede: sao compiladores PARALELOS.
+    | Numa maquina ociosa eles espalham o trabalho pelos nucleos e terminam
+    | em 2-3 s; numa maquina de julgamento cheia esses nucleos nao estao
+    | livres, o paralelismo some e a parede sobe em direcao a CPU -- e
+    | depois passa dela, pela fila.
+    |
+    | Com o `wall_contention_factor` abaixo (3), o pior caso medido fica em
+    | 7,64 x 3 = 23 s, que e o que este numero precisa cobrir. O backstop
+    | antigo de 20 s nao cobria: a medicao da issue deu 7,92 s de CPU para
+    | o `kotlinc`, e 7,92 x 2,20 (o fator medido em #126 com 8 workers para
+    | 10 CPUs) = 17,4 s contra 20 s -- 13% de margem. Uma margem de 13% e
+    | exatamente o que produz um CS a cada cento e poucos julgamentos, que
+    | foi o que a issue observou (2 em 225).
+    |
+    | POR QUE NAO HA TABELA POR LINGUAGEM AQUI. O caminho 3 da issue pedia
+    | um backstop de compilacao por linguagem, e a medicao acima o REJEITA:
+    | entre o compilador mais caro (7,64 s) e este teto (30 s) ha 3,9x de
+    | folga, e apertar o teto das 42 linguagens rapidas nao compra nada. Um
+    | backstop de parede e uma guarda de VIVACIDADE -- ele existe para que
+    | um passo travado nao segure a maquina para sempre, e nao para julgar
+    | ninguem. Um teto apertado no `gcc` so muda em quanto tempo se percebe
+    | um travamento, enquanto o preco de erra-lo para menos e um CS. Custo
+    | de manter 48 numeros a cada mudanca de imagem, beneficio nenhum.
+    |
+    | SE VOCE SUBIR o `wall_contention_factor`, confira este numero junto:
+    | a relacao `compile_timeout >= pior CPU medida x fator` esta fixada em
+    | AutoJudgeServiceTest, para que os dois nao se soltem em silencio.
     */
     'compile_timeout' => env('AUTOJUDGE_COMPILE_TIMEOUT', 30),
 
@@ -75,13 +119,66 @@ return [
     | Folga de relogio na execucao
     |--------------------------------------------------------------------------
     |
-    | Issue #329 -- o backstop de parede da execucao e `limite do problema +
-    | esta folga`. Quem mata o programa que gasta CPU demais e o `ulimit -t`
-    | do sandbox, e o veredito dele e TLE; este aqui so existe para o passo
-    | que trava sem gastar CPU, e o preco de ele disparar por carga e um CS.
+    | Issue #329 -- a parcela ADITIVA do backstop de parede da execucao, que
+    | inteiro e `limite do problema x wall_contention_factor + esta folga`.
+    | Quem mata o programa que gasta CPU demais e o `ulimit -t` do sandbox,
+    | e o veredito dele e TLE; este aqui so existe para o passo que trava
+    | sem gastar CPU, e o preco de ele disparar por carga e um CS.
+    |
+    | A folga cobre o que NAO escala com o limite do problema: subir o
+    | processo, montar o bwrap, entrar no cgroup. O que escala com o limite
+    | esta no fator, e nao aqui -- ver a explicacao logo abaixo.
     |
     */
     'run_wall_grace_seconds' => (int) env('AUTOJUDGE_RUN_WALL_GRACE_SECONDS', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fator de contencao do relogio
+    |--------------------------------------------------------------------------
+    |
+    | Issue #329, caminho 2 -- "derivar o backstop da maquina". O backstop da
+    | execucao era `limite do problema + 5 s`, uma folga FIXA, e esse e o
+    | defeito de FORMA que sobrou depois do #342: a carga nao soma segundos
+    | ao tempo de parede, ela os MULTIPLICA.
+    |
+    | O `ulimit -t` do sandbox limita CPU. O backstop limita parede. Numa
+    | maquina ociosa as duas quase coincidem; numa maquina cheia, a parede e
+    | a CPU vezes quanto se espera na fila de execucao. Uma folga aditiva de
+    | 5 s nao tem como absorver um fator.
+    |
+    | O fator nao e chutado: o #126 mediu esta mesma imagem, privilegiada,
+    | com 10 CPUs e MySQL, rodando K processos `autojudge:start` de verdade
+    | sobre 24 submissoes CPU-bound. A inflacao de parede por run e K
+    | dividido pelo speedup que aquela tabela registrou:
+    |
+    |     K workers    speedup medido    inflacao por run
+    |         1            1,00x              1,00x
+    |         2            1,67x              1,20x
+    |         4            2,67x              1,50x
+    |         8            3,64x              2,20x
+    |        12            3,67x              3,27x
+    |        16            3,53x              4,53x
+    |        24            4,45x              5,39x
+    |
+    | O padrao 3 cobre com folga o ponto de operacao que o proprio #126
+    | recomenda -- workers ATE a contagem de CPUs, onde a inflacao medida foi
+    | 2,20x -- e fica perto do 3,27x de 12 workers para 10 CPUs. Nao cobre
+    | oversubscription pesada, e isso e deliberado: a mesma tabela mostra que
+    | passar da contagem de CPUs nao adiciona vazao nenhuma, so fila.
+    |
+    | QUEM RODA MAIS WORKERS QUE CPUs sobe este numero, e sobe o
+    | `compile_timeout` junto (a relacao entre os dois esta fixada em teste).
+    |
+    | O QUE ISTO NAO RESOLVE, e precisa ser dito: 3 e o fator medido NESTE
+    | parque -- uma maquina, 10 CPUs, aarch64, MySQL. O numero certo para uma
+    | sede depende do hardware dela e de quantos workers ela sobe, e sai da
+    | mesma medicao do #126 repetida la. O que este patch conserta e a FORMA
+    | do backstop, que estava errada em qualquer hardware; o VALOR continua
+    | sendo uma decisao de quem opera, agora com a conta escrita.
+    |
+    */
+    'wall_contention_factor' => max(1, (int) env('AUTOJUDGE_WALL_CONTENTION_FACTOR', 3)),
 
     /*
     |--------------------------------------------------------------------------

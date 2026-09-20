@@ -219,11 +219,20 @@ class LanguageVerdictFidelityTest extends TestCase
      *
      * As tres aqui sao as que TEM conserto: Python pelo
      * `sys.setrecursionlimit` do sitecustomize, Node e TypeScript pelo
-     * `--stack-size` derivado em `judge-runtime/node/run.sh`. O `sh`
-     * (bash) nao esta nesta lista de proposito -- ele nao estoura a pilha,
-     * fica lento demais, e o custo e do interpretador e nao de um limite
-     * configuravel; isso e informacao de manual, e a issue segue aberta
-     * para ele.
+     * `--stack-size` derivado em `judge-runtime/node/run.sh`.
+     *
+     * O `sh` (bash) nao esta nesta lista, e agora por medicao e nao por
+     * hipotese: o custo da forma natural (`$(...)`) cresce com n^4 -- 0,06 s
+     * de CPU em 100 niveis, 7,37 s em 500 --, de modo que um limite de 5 s
+     * ja estoura por volta de 450 niveis; e nao ha botao nenhum a girar,
+     * porque `FUNCNEST` so LIMITA o aninhamento (medido: `FUNCNEST=100000`
+     * nao muda nada, `FUNCNEST=50` faz falhar antes) e nao existe
+     * equivalente ao `setrecursionlimit` ou ao `--stack-size`. Escrita sem
+     * `$(...)` e com a pilha aumentada ela chega a 10^4, custando 26,4 s de
+     * CPU -- troca `RE` por `TLE`, nao por `AC`.
+     *
+     * Por isso o `sh` fecha a #327 por documentacao: ver
+     * docs/manuais/organizador.md, "Recursao profunda: o Bash nao aguenta".
      *
      * @return array<string, array{0: string, 1: string, 2: string}>
      */
