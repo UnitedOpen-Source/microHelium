@@ -73,6 +73,12 @@ class UserController extends Controller
             // what the ICPC standings report keys on, and a report with the
             // column blank is useless to whoever files it.
             'icpc_id' => ['nullable', 'string', 'max:50'],
+            // Issue #332 -- o rotulo curto que a Contest API exige em
+            // `teams.label`, e que o resolver mostra na cerimonia. Sem
+            // caminho de entrada a coluna seria um mecanismo que nao pode
+            // funcionar, e o schema continuaria satisfeito por um padrao
+            // que ninguem escolheu.
+            'label' => ['nullable', 'string', 'max:32'],
             // Issue #270 -- a instituicao pela qual a equipe compete.
             // Escopada a instituicoes nao arquivadas pelo mesmo motivo do
             // select: `Rule::exists` consulta a tabela crua, entao sem o
@@ -94,6 +100,10 @@ class UserController extends Controller
             'site_id' => $siteId,
             'contest_id' => $siteId ? Site::find($siteId)->contest_id : null,
             'icpc_id' => $validated['icpc_id'] ?? null,
+            // `?:` pelo mesmo motivo do `organization_id` logo abaixo: o
+            // campo vazio chega como string vazia, e um rotulo vazio nao e
+            // rotulo -- nulo e o que faz o presenter cair no padrao.
+            'label' => ($validated['label'] ?? null) ?: null,
             // `?:` e nao `??`: o select vazio chega como string vazia, que o
             // `nullable` deixa passar e viraria 0 -- id de instituicao que
             // nao existe.
@@ -142,6 +152,12 @@ class UserController extends Controller
                 Rule::exists('sites', 'id')->whereNull('deleted_at'),
             ],
             'icpc_id' => ['nullable', 'string', 'max:50'],
+            // Issue #332 -- o rotulo curto que a Contest API exige em
+            // `teams.label`, e que o resolver mostra na cerimonia. Sem
+            // caminho de entrada a coluna seria um mecanismo que nao pode
+            // funcionar, e o schema continuaria satisfeito por um padrao
+            // que ninguem escolheu.
+            'label' => ['nullable', 'string', 'max:32'],
             // Issue #270 -- a instituicao pela qual a equipe compete.
             // Escopada a instituicoes nao arquivadas pelo mesmo motivo do
             // select: `Rule::exists` consulta a tabela crua, entao sem o
@@ -177,6 +193,10 @@ class UserController extends Controller
             // The contest follows the site, exactly as it does on create.
             'contest_id' => $siteId ? Site::find($siteId)->contest_id : null,
             'icpc_id' => $validated['icpc_id'] ?? null,
+            // `?:` pelo mesmo motivo do `organization_id` logo abaixo: o
+            // campo vazio chega como string vazia, e um rotulo vazio nao e
+            // rotulo -- nulo e o que faz o presenter cair no padrao.
+            'label' => ($validated['label'] ?? null) ?: null,
             'organization_id' => ($validated['organization_id'] ?? null) ?: null,
             'is_enabled' => $enabled,
         ];

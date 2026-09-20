@@ -8,9 +8,9 @@ use App\Models\Run;
 use App\Services\Clics\ClicsPresenter;
 use App\Services\Clics\EventFeedBuilder;
 use App\Services\Clics\EventFeedStream;
+use App\Services\Clics\FreezeWindow;
 use App\Services\Clics\TeamAffiliation;
 use App\Services\ContestClock;
-use App\Services\FrozenScoreboard;
 use App\Services\ScoreboardTeams;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,7 +78,7 @@ class ContestApiController extends Controller
     private const ENDPOINTS_OFERECIDOS = [
         'contest' => ['id', 'name', 'formal_name', 'start_time', 'duration', 'scoreboard_freeze_duration', 'scoreboard_type', 'penalty_time'],
         'problems' => ['id', 'label', 'name', 'ordinal', 'test_data_count', 'rgb', 'color'],
-        'teams' => ['id', 'name', 'display_name', 'group_ids', 'organization_id', 'icpc_id'],
+        'teams' => ['id', 'name', 'label', 'display_name', 'group_ids', 'organization_id', 'icpc_id'],
         'organizations' => ['id', 'icpc_id', 'name', 'formal_name', 'country'],
         'groups' => ['id', 'icpc_id', 'name', 'type'],
         'languages' => ['id', 'name', 'entry_point_required', 'extensions'],
@@ -233,7 +233,7 @@ class ContestApiController extends Controller
      * congelamento saberia, pelo /judgements, o que o /scoreboard esconde --
      * e entregaria a classificacao pela porta dos fundos.
      */
-    public function judgements(Request $request, Contest $contest): JsonResponse
+    public function judgements(Request $request, Contest $contest, FreezeWindow $freeze): JsonResponse
     {
         $this->authorizeContestVisibility($contest);
 
@@ -255,9 +255,16 @@ class ContestApiController extends Controller
             $runs = $runs->filter(fn (Run $run) => ! $run->isVerdictWithheld());
         }
 
+        // Issue #319 -- o corte da SEDE de cada run, e nao um numero so.
+        //
+        // Era `cutoffSeconds($contest)` aplicado a lista inteira. Numa prova
+        // de 300/60 com uma sede de 240/60, essa sede congela no minuto 180
+        // dela e o corte global ficava no 240: os julgamentos da ULTIMA HORA
+        // daquela sede saiam por aqui enquanto ela ainda submetia -- e o
+        // /scoreboard, corrigido no #341, ja os escondia. A mesma resposta
+        // pelas duas portas e o ponto inteiro de `FreezeWindow`.
         if ($this->frozenFor($request, $contest)) {
-            $cutoff = FrozenScoreboard::cutoffSeconds($contest);
-            $runs = $runs->filter(fn (Run $run) => (int) $run->contest_time < $cutoff);
+            $runs = $runs->filter(fn (Run $run) => ! $freeze->covers($contest, $run));
         }
 
         return response()->json($this->presenter->judgements($contest, $runs->values()));

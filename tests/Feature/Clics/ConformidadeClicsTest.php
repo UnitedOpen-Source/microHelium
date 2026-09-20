@@ -55,20 +55,16 @@ class ConformidadeClicsTest extends TestCase
      * @var array<string, string>
      */
     private const DIVERGENCIAS_CONHECIDAS = [
-        // Issue #332 -- `team.json` tem "required": ["id","name","label"], e
-        // a spec define `label` como "Label of the team, at WFs normally the
-        // team seat number".
+        // VAZIA, e que continue assim.
         //
-        // Continua aqui porque NAO E TRADUCAO. Nao existe coluna de rotulo
-        // nem de assento em `users`: as candidatas sao o autoincremento (que
-        // e o que ja sai em `id`, e emitir o mesmo numero duas vezes nao
-        // acrescenta nada), o `username` (que em instalacoes que usam e-mail
-        // como login poria dado pessoal na tela da cerimonia) e o `icpc_id`
-        // (que muitas equipes nao tem). Inventar um rotulo para satisfazer o
-        // schema seria exatamente o "verde contra mecanismo que nao pode
-        // funcionar" que esta suite existe para impedir. A decisao -- criar a
-        // coluna, e quem a preenche -- fica na #332.
-        'teams[0]: falta "label"' => '#332',
+        // A ultima entrada a sair foi `teams[0]: falta "label"` (#332), que
+        // nao era traducao: nao havia coluna de rotulo em `users`. Agora ha
+        // -- `users.label`, preenchida pela banca --, e o padrao para quem
+        // nao preencheu e o id da equipe, que e o que o consumidor ja usava
+        // na ausencia do campo. Ver ClicsPresenter::teamLabel().
+        //
+        // Uma violacao NOVA quebra a suite, e o teste diz qual. Nao
+        // acrescente linha aqui sem a issue ao lado.
     ];
 
     /** @var array<string, array<string, mixed>> */

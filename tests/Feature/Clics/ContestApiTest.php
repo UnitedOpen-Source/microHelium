@@ -514,6 +514,56 @@ class ContestApiTest extends TestCase
     }
 
     /**
+     * Issue #332 -- `team.json` tem "required": ["id","name","label"], e a
+     * spec define `label` como "Label of the team, at WFs normally the team
+     * seat number".
+     *
+     * O rotulo cadastrado ganha, e e o unico caminho pelo qual um numero de
+     * crachá chega ao telao.
+     */
+    public function test_the_team_reports_its_registered_label(): void
+    {
+        $this->team->update(['label' => 'B12']);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertSame('B12', $teams[0]['label']);
+    }
+
+    /**
+     * Sem rotulo cadastrado, o padrao e o id -- e ele e emitido, e nao
+     * omitido: `label` e OBRIGATORIO no schema, entao "sem rotulo" nao pode
+     * virar objeto invalido.
+     *
+     * O padrao nao finge ser um numero de assento. Ele e o que o consumidor
+     * ja usava na ausencia do campo, agora dito em voz alta.
+     */
+    public function test_a_team_without_a_registered_label_falls_back_to_its_id(): void
+    {
+        $this->team->update(['label' => null]);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertSame((string) $this->team->user_id, $teams[0]['label']);
+    }
+
+    /**
+     * String vazia nao e rotulo.
+     *
+     * Sem o `trim`, um campo salvo em branco pela tela de edicao sairia como
+     * `""` -- que passa no `required` do schema e chega a cerimonia como uma
+     * equipe sem nome nenhum na coluna.
+     */
+    public function test_a_blank_label_falls_back_instead_of_shipping_an_empty_string(): void
+    {
+        $this->team->update(['label' => '   ']);
+
+        $teams = $this->getJson("/api/clics/contests/{$this->contest->id}/teams")->json();
+
+        $this->assertSame((string) $this->team->user_id, $teams[0]['label']);
+    }
+
+    /**
      * Issue #270 -- `icpc_id` da equipe passa a sair.
      *
      * `users.icpc_id` existe desde o #89 e a Contest API define o campo no

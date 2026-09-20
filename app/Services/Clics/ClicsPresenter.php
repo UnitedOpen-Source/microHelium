@@ -10,7 +10,7 @@ use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Site;
 use App\Services\ContestAwards;
-use App\Services\FrozenScoreboard;
+use App\Services\ContestClock;
 use Helium\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -192,6 +192,9 @@ class ClicsPresenter
         return $teams->values()->map(fn (User $team) => [
             'id' => (string) $team->user_id,
             'name' => $team->fullname ?? $team->username,
+            // Issue #332 -- obrigatorio em `team.json`
+            // ("required": ["id","name","label"]).
+            'label' => $this->teamLabel($team),
             'display_name' => $team->fullname ?? $team->username,
             // A sede e o grupo: na Contest API "group" e a subdivisao da
             // prova, que e exatamente o que `sites` significa aqui.
@@ -409,6 +412,38 @@ class ClicsPresenter
         return $this->awards->forContest($contest)['awards'];
     }
 
+    /**
+     * Issue #332 -- o rotulo que vai ao telao.
+     *
+     * A spec: "Label of the team, at WFs normally the team seat number"
+     * (Contest API 2023-06, Teams). E obrigatorio, entao a pergunta nao e
+     * "emitir ou nao", e "o que emitir quando ninguem cadastrou".
+     *
+     * `users.label` e a resposta cadastrada -- o numero do crachá, que a
+     * banca digita na tela de edicao da equipe. Quando esta vazio, o padrao
+     * e o `user_id`.
+     *
+     * O padrao NAO finge ser um numero de assento, e essa e a escolha:
+     * emitir o id e dizer a verdade ("nao ha rotulo cadastrado, aqui esta o
+     * unico identificador estavel que existe"), e e exatamente o que o
+     * consumidor ja faz hoje quando o campo falta -- a #332 descreve o
+     * sintoma: "Sem ele o resolver mostra o `id` interno do nosso banco".
+     * Com isto ele passa a mostrar a mesma coisa, mas o campo existe, o
+     * objeto valida, e ha onde a banca por o numero certo.
+     *
+     * A alternativa DESCARTADA foi derivar um ordinal bonitinho (1..N por
+     * ordem de inscricao). Ele muda quando uma equipe e removida: o rotulo
+     * de todas as seguintes anda um, e ninguem percebe -- num telao de
+     * cerimonia o locutor chama a equipe errada. Um rotulo que vai a
+     * cerimonia nao pode ser derivado de uma contagem que se mexe.
+     */
+    private function teamLabel(User $team): string
+    {
+        $label = trim((string) ($team->label ?? ''));
+
+        return $label !== '' ? $label : (string) $team->user_id;
+    }
+
     private function organizationIdFor(User $team): ?string
     {
         // Issue #270 -- a afiliacao propria, e nao a governanca do banco.
@@ -424,16 +459,76 @@ class ClicsPresenter
 
     /**
      * O instante em que o placar congelou, ou null se ainda nao congelou.
+     *
+     * ## Issue #319 -- o PRIMEIRO congelamento, e nao o do contest
+     *
+     * `state.frozen` e "Time when the scoreboard was frozen" (Contest API
+     * 2023-06, secao "Contest state"), e e por CONTEST na spec: o objeto
+     * `state` e singleton, nao ha um por sede. Com janelas por sede (#276)
+     * nao existe instante unico "o congelamento", e a pergunta vira qual dos
+     * instantes publicar.
+     *
+     * Era o corte do CONTEST, e isso fazia esta API se contradizer. Quem
+     * decide se o visitante anonimo recebe a versao congelada e
+     * `frozenFor()`, que cai em `ContestClock::isFrozenForAnyone()` -- ou
+     * seja, a partir do congelamento da PRIMEIRA sede o /judgements ja
+     * filtra e o /scoreboard ja mostra celulas pendentes. Numa prova de
+     * 300/60 com uma sede de 240/60, isso comeca no minuto 180 e o corte do
+     * contest so chega no 240: por uma hora o consumidor recebia dado
+     * escondido com `frozen: null` ao lado, isto e, "nada esta congelado".
+     *
+     * Publicar o primeiro instante nao e escolher uma sede: e dizer quando
+     * ESTE placar -- o unico que esta API serve -- passou a esconder. E
+     * continua sendo um instante unico por contest, que e o que a spec pede.
+     *
+     * Conservador na mesma direcao do #276 ("conservador e a escolha certa
+     * aqui porque o congelamento existe para esconder"): declarar o
+     * congelamento cedo demais nunca revela nada; declarar tarde demais
+     * autoriza o consumidor a tratar como definitivo um quadro que ja esta
+     * incompleto.
      */
     private function frozenAt(Contest $contest): ?string
     {
-        if ($this->freezeMinutes($contest) <= 0 || ! $contest->start_time) {
+        if (! $contest->start_time) {
             return null;
         }
 
-        $moment = $contest->start_time->copy()->addSeconds(FrozenScoreboard::cutoffSeconds($contest));
+        $primeiro = $this->firstFreezeStart($contest);
 
-        return now()->gte($moment) ? Carbon::instance($moment)->toIso8601String() : null;
+        return $primeiro !== null && now()->gte($primeiro)
+            ? Carbon::instance($primeiro)->toIso8601String()
+            : null;
+    }
+
+    /**
+     * O mais cedo dos inicios de congelamento das sedes desta prova.
+     *
+     * Null quando nenhuma sede congela -- que e diferente de "ainda nao
+     * congelou", e e por isso que `freezeStartFor()` ja devolve null nesse
+     * caso em vez de um instante impossivel.
+     *
+     * Sem sede nenhuma cai no calculo do proprio contest, exatamente como
+     * `ContestClock::isFrozenForAnyone()` faz -- as duas respondem sobre o
+     * mesmo conjunto, e uma discordancia entre elas seria o defeito de novo.
+     */
+    private function firstFreezeStart(Contest $contest): ?Carbon
+    {
+        $clock = app(ContestClock::class);
+        $sites = $contest->sites()->get();
+
+        $ids = $sites->isEmpty() ? [null] : $sites->map(fn (Site $site) => (int) $site->id)->all();
+
+        $primeiro = null;
+
+        foreach ($ids as $id) {
+            $inicio = $clock->freezeStartFor($contest, $id);
+
+            if ($inicio !== null && ($primeiro === null || $inicio->lt($primeiro))) {
+                $primeiro = $inicio;
+            }
+        }
+
+        return $primeiro;
     }
 
     /**

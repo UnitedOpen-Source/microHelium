@@ -132,6 +132,13 @@
                         <label for="icpc_id" class="block text-sm font-medium text-foreground mb-1">ID ICPC <span class="text-muted-foreground">(opcional, equipes)</span></label>
                         <input id="icpc_id" type="text" name="icpc_id" value="{{ old('icpc_id') }}" maxlength="50" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="usado no relatorio de classificacao ICPC">
                     </div>
+                    {{-- Issue #332 -- `teams.label` da Contest API: o rotulo
+                         curto que o resolver mostra na cerimonia. Em branco,
+                         cai no id da equipe. --}}
+                    <div>
+                        <label for="label" class="block text-sm font-medium text-foreground mb-1">Rótulo <span class="text-muted-foreground">(opcional, equipes)</span></label>
+                        <input id="label" type="text" name="label" value="{{ old('label') }}" maxlength="32" class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="numero do crachá, ex.: 12 ou SP-07">
+                    </div>
                     {{-- Issue #270 -- por qual instituicao esta equipe COMPETE.
                          Pergunta diferente de "pode editar o acervo de", que
                          e `organization_memberships` (#46). Antes disto a
