@@ -218,7 +218,16 @@ RUN apk add --no-cache \
     make \
     musl-dev \
     libc-dev \
-    libstdc++ \
+    # Issue #306 -- o pino que faltava, e que o teste de paridade achou.
+    #
+    # `Dockerfile` e `Dockerfile.dev` ja instalavam `libstdc++=15.2.0-r5`;
+    # aqui ele estava sem versao. E biblioteca de EXECUCAO dos toolchains
+    # construidos em C++ (LDC e Crystal arrastam LLVM), entao cai no criterio
+    # de sempre da #303: esta no caminho de execucao de codigo submetido, e
+    # uma imagem construida noutro dia passaria a rodar outra versao -- em
+    # julgamento distribuido (#53), dois workers com respostas diferentes
+    # para a mesma submissao.
+    libstdc++=15.2.0-r5 \
     # Java -- issue #305: as DUAS LTS, lado a lado.
     #
     # Cada JDK do Alpine vive no seu proprio prefixo

@@ -88,13 +88,19 @@ WORKDIR /src
 
 RUN ./gradlew :portugol-console:jar --no-daemon -q
 
+# As duas etapas do juiz, e nenhuma delas e o Console -- gemeo do estagio do
+# Dockerfile.judge (issues #269 e #301), e as medicoes de cada classe estao
+# nos docblocks delas.
 COPY docker/judge/portugol/VerificaPortugol.java /verifica/
+COPY docker/judge/portugol/ExecutaPortugol.java /verifica/
 
 RUN set -eux; \
     libs="$(find /src/console/build/libs -name '*.jar' | tr '\n' ':')"; \
     mkdir -p /verifica/classes; \
-    javac -encoding UTF-8 -cp "$libs" -d /verifica/classes /verifica/VerificaPortugol.java; \
-    test -s /verifica/classes/VerificaPortugol.class
+    javac -encoding UTF-8 -cp "$libs" -d /verifica/classes \
+        /verifica/VerificaPortugol.java /verifica/ExecutaPortugol.java; \
+    test -s /verifica/classes/VerificaPortugol.class; \
+    test -s /verifica/classes/ExecutaPortugol.class
 
 # ---------------------------------------------------------------------------
 # Scratch (issue #268) -- construido aqui, e nao baixado. Gemeo do estagio do
@@ -447,20 +453,53 @@ RUN printf '#!/bin/sh\nexec node /opt/scratch-run/index.js "$@"\n' > /usr/local/
 # compila o programa para Java e chama o compilador. O `openjdk21-jdk` da
 # lista de pacotes ja cobre isso, e e a razao de ele nao poder virar `-jre`.
 COPY --from=portugol-studio-builder /src/console/build/libs /opt/portugol-studio
-COPY --from=portugol-studio-builder /verifica/classes/VerificaPortugol.class /opt/portugol-studio/
+#
+# O DIRETORIO inteiro, e nao as classes nomeadas uma a uma: o `switch` sobre
+# `TipoDado` dentro de `ExecutaPortugol.solicitaEntrada()` faz o javac emitir
+# uma classe sintetica `ExecutaPortugol$1`, e sem ela o `leia` morre com
+# `NoClassDefFoundError` -- um `Error`, que o nucleo nao captura. Ver
+# Dockerfile.judge para a medicao.
+COPY --from=portugol-studio-builder /verifica/classes/ /opt/portugol-studio/
 
 # Dois invocadores, e nao um, pela mesma regra de roteamento por capacidade:
 # comandos escritos como `java -jar ...` anunciariam "java", e nao
 # "portugol_studio".
+#
+# Issue #301 -- nenhum dos dois e o Console, pelo mesmo motivo medido no
+# Dockerfile.judge: com `-no-wait` o console sai com 0 e sem uma linha de
+# stderr quando o programa MORRE, e erro de execucao virava `WA` mudo.
+#
+# Esta imagem julga pela fila (docker-compose roda ELA nos servicos `queue` e
+# `scheduler`), entao o invocador dela tem de ser o mesmo -- a #351 trocou o
+# do worker autonomo e estes dois ficaram para tras, que e a forma da #302
+# uma camada mais fundo. Agora e teste:
+# tests/Unit/Judge/ToolchainManifestParityTest::test_os_invocadores_sao_os_mesmos_nos_tres_dockerfiles.
+#
+# O smoke test tem as duas metades, e o programa valido LE DA ENTRADA de
+# proposito (so `escreva` nao toca no caminho que quebrava). O
+# `rm -rf /tmp/portugol` no fim nao e faxina: o nucleo escreve ali como root,
+# e o diretorio deixado na imagem faz toda execucao do usuario sem privilegio
+# morrer com `Permission denied`.
 RUN set -eux; \
-    printf '#!/bin/sh\nexec java -jar /opt/portugol-studio/portugol-console-2.7.5.jar "$@" -no-wait\n' \
+    printf '#!/bin/sh\nexec java -cp "/opt/portugol-studio:$(find /opt/portugol-studio -name \x27*.jar\x27 | tr \x27\\n\x27 \x27:\x27)" ExecutaPortugol "$@"\n' \
         > /usr/local/bin/portugol-studio; \
     printf '#!/bin/sh\nexec java -cp "/opt/portugol-studio:$(find /opt/portugol-studio -name \x27*.jar\x27 | tr \x27\\n\x27 \x27:\x27)" VerificaPortugol "$@"\n' \
         > /usr/local/bin/portugol-studio-check; \
     chmod 755 /usr/local/bin/portugol-studio /usr/local/bin/portugol-studio-check; \
-    printf 'programa {\n  funcao inicio() {\n    escreva("ok")\n  }\n}\n' > /tmp/fumaca.por; \
-    portugol-studio-check /tmp/fumaca.por; \
-    rm -f /tmp/fumaca.por
+    mkdir -p /tmp/fumaca-portugol; \
+    cd /tmp/fumaca-portugol; \
+    printf 'programa {\n  funcao inicio() {\n    inteiro a, b\n    leia(a)\n    leia(b)\n    escreva(a + b)\n  }\n}\n' > fumaca.por; \
+    printf '3\n5\n' > entrada.txt; \
+    portugol-studio-check fumaca.por; \
+    test "$(portugol-studio fumaca.por < entrada.txt)" = "8"; \
+    printf 'programa {\n  funcao inicio() {\n    inteiro a = 10, b = 0\n    escreva(a / b)\n  }\n}\n' > divzero.por; \
+    if portugol-studio divzero.por < /dev/null > saida.txt 2> erro.txt; then \
+        echo "ExecutaPortugol saiu 0 num erro de execucao (issue #301)" >&2; exit 1; \
+    fi; \
+    grep -q 'Erro de execucao' erro.txt; \
+    test ! -s saida.txt; \
+    cd /; \
+    rm -rf /tmp/fumaca-portugol /tmp/portugol
 
 # JPlag (issue #42, similarity analysis) -- pinned to v6.2.0, the last
 # release built against JDK 21 (v6.3.0 bumped the minimum to JDK 25; see
