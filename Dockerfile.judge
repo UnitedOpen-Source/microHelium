@@ -233,8 +233,19 @@ RUN apk add --no-cache \
     # Cada JDK do Alpine vive no seu proprio prefixo
     # (`/usr/lib/jvm/java-NN-openjdk`), e as entradas do catalogo apontam
     # para o caminho absoluto de cada um. Sem isso, "manter a versao antiga"
-    # e so um rotulo: `javac` resolve para uma JVM so. O `kotlinc` e o
-    # Portugol Studio seguem usando o `default-jvm`, que continua sendo o 21.
+    # e so um rotulo: `javac` resolve para uma JVM so.
+    #
+    # O `kotlinc` e o Portugol Studio NAO apontam para JDK nenhum: eles
+    # chamam `java` pelo PATH, que e o `default-jvm`. Medido nesta imagem:
+    #
+    #   /usr/lib/jvm/default-jvm -> java-25-openjdk
+    #   kotlinc -version         -> kotlinc-jvm 2.4.20 (JRE 25.0.4+7-alpine-r0)
+    #
+    # Ou seja, o `default-jvm` e o 25, e nao o 21 -- o `apk` aponta o link
+    # para o maior JDK instalado, e ele se moveu quando o 25 entrou. Os dois
+    # rodam, e por isso a suite nao acusou nada; o que estava errado era o
+    # comentario, que dizia 21. Quem depende de uma JVM especifica e o
+    # catalogo, por caminho absoluto, e nao este link.
     openjdk21-jdk=21.0.12_p8-r0 \
     openjdk25-jdk=25.0.4_p7-r0 \
     # Python 3

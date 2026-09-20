@@ -407,19 +407,31 @@ class Language extends Model
             // em execucoes distintas -- inclusive bloqueando o PR da correcao
             // de seguranca da #311, que nao tem relacao nenhuma com ela.
             //
-            // Subir a versao NAO resolve, e isto foi medido e nao suposto: o
-            // Alpine 3.24 publica `erlang27` e `erlang28`, e
-            // `ss.ss_size = SIGSTKSZ` continua em OTP-27.3.4.17, OTP-28.5.0.6,
-            // OTP-28.6 e OTP-29.0. A correcao (`sysconf(_SC_MINSIGSTKSZ)`,
-            // erlang/otp#11376) existe SO no `master` do upstream -- nao ha
-            // release que a carregue.
+            // Subir a versao NAO resolve, e isto foi medido e nao suposto --
+            // mas o MOTIVO mudou, e o comentario anterior ficou errado.
+            //
+            // Ele dizia que a correcao (`sysconf(_SC_MINSIGSTKSZ)`,
+            // erlang/otp#11376) existia so no `master` do upstream. Deixou de
+            // ser verdade em 16/09/2026. Conferido baixando
+            // `erts/emulator/sys/unix/sys_signal_stack.c` por tag:
+            //
+            //   OTP-29.1          -> tem `_SC_MINSIGSTKSZ`
+            //   OTP-29.0.6        -> nao tem
+            //   OTP-28.5.0.6      -> nao tem
+            //   OTP-27.3.4.17     -> nao tem
+            //
+            // O que trava agora e EMPACOTAMENTO, e nao upstream: `apk search
+            // -q erlang` devolve so `erlang27` e `erlang28`, tanto no Alpine
+            // 3.24 quanto no `edge` -- `erlang29` nao existe em nenhum dos
+            // dois. A decisao de desativar segue a mesma; a condicao de
+            // reativacao e que mudou de lugar.
             //
             // Desativar e reversivel; deixar ligado nao e. Linguagem
             // intermitente e pior que linguagem ausente: ausente, a equipe nao
             // a escolhe; intermitente, ela submete e recebe veredito de erro
             // que nao e dela, com diagnostico que nao da para contestar. Os
-            // comandos ficam prontos -- basta virar `true` quando houver
-            // release com a correcao, e o
+            // comandos ficam prontos -- basta virar `true` quando o ALPINE
+            // publicar um `erlang` com a correcao (OTP >= 29.1), e o
             // `test_a_beam_sobe_vinte_vezes_seguidas_dentro_do_sandbox` (#345)
             // e quem diz se ja da.
             ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => false, 'category' => 'compiled'],
