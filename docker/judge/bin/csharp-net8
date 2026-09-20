@@ -43,9 +43,21 @@ export HELIUM_DOTNET_SDK HELIUM_DOTNET_TFM
 if [ "$1" = "--version" ]; then
     dir=$(mktemp -d)
     printf '{"sdk":{"version":"%s","rollForward":"latestFeature"}}\n' "$HELIUM_DOTNET_SDK" > "$dir/global.json"
+    # `DOTNET_CLI_HOME` porque quem pergunta a versao nem sempre tem `HOME`.
+    # Medido: rodando pelo PHPUnit dentro da imagem, o SDK 10 responde "The
+    # user's home directory could not be determined" e o 8 nao -- e
+    # ToolchainVersionsMatchCatalogTest reprovava o .NET 10 por isso, com a
+    # mensagem de erro no lugar do numero da versao.
+    #
+    # So aqui, e nao no caminho de julgamento: la o `HOME` e o diretorio do
+    # run, posto pelo AutoJudgeService (ver o comentario da #331 no
+    # compile.sh).
+    DOTNET_CLI_HOME="$dir"
+    export DOTNET_CLI_HOME
     cd "$dir" || exit 1
     dotnet --version
     rc=$?
+    cd / || exit 1
     rm -rf "$dir"
     exit "$rc"
 fi

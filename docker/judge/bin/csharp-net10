@@ -17,9 +17,15 @@ export HELIUM_DOTNET_SDK HELIUM_DOTNET_TFM
 if [ "$1" = "--version" ]; then
     dir=$(mktemp -d)
     printf '{"sdk":{"version":"%s","rollForward":"latestFeature"}}\n' "$HELIUM_DOTNET_SDK" > "$dir/global.json"
+    # Ver o `csharp-net8`: sem `DOTNET_CLI_HOME` o SDK 10 responde "The
+    # user's home directory could not be determined" onde nao ha `HOME`, e
+    # foi assim que este invocador reprovou no primeiro E2E.
+    DOTNET_CLI_HOME="$dir"
+    export DOTNET_CLI_HOME
     cd "$dir" || exit 1
     dotnet --version
     rc=$?
+    cd / || exit 1
     rm -rf "$dir"
     exit "$rc"
 fi
