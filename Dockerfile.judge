@@ -244,8 +244,31 @@ RUN apk add --no-cache \
     # Dockerfile.dev's comment on why multiple Node majors aren't installed
     nodejs=24.18.1-r0 \
     npm=11.12.1-r0 \
-    # .NET / C#
+    # .NET / C# -- issue #305: as DUAS LTS, lado a lado.
+    #
+    # Ao contrario do Java, aqui nao ha um prefixo por versao a invocar: os
+    # dois SDKs convivem sob o MESMO `dotnet` (/usr/bin/dotnet ->
+    # /usr/lib/dotnet/dotnet), em /usr/lib/dotnet/sdk/8.0.131 e
+    # /usr/lib/dotnet/sdk/10.0.303, e quem escolhe entre eles e o
+    # `global.json` que o compile.sh escreve no diretorio do run.
+    #
+    # Medido nesta imagem, com os dois instalados:
+    #
+    #   dotnet --list-sdks     -> 8.0.131 e 10.0.303
+    #   dotnet --version       -> 10.0.303 (sempre o maior, sem global.json)
+    #   net8.0 SEM global.json -> NU1100, tenta baixar
+    #                             Microsoft.NETCore.App.Ref (= 8.0.30)
+    #   net8.0 com 8.0.x fixo  -> compila e roda em .NET 8.0.31
+    #   net10.0 com 10.0.x     -> compila e roda em .NET 10.0.12
+    #   net10.0 com 8.0.x fixo -> NETSDK1045
+    #
+    # Custo em disco medido com `apk add --simulate` sobre a linha de base
+    # desta imagem nesta arquitetura (aarch64): 5214,4 -> 5816,3 MiB,
+    # ou +602 MiB. E o item mais caro do catalogo depois do GHC, e a
+    # alternativa seria trocar o .NET 8 pelo 10 -- que e exatamente o que a
+    # #305 proibe, porque a versao do compilador e parte do edital.
     dotnet8-sdk=8.0.131-r0 \
+    dotnet10-sdk=10.0.303-r0 \
     # Go
     go=1.26.8-r0 \
     # Rust
@@ -343,13 +366,20 @@ RUN apk add --no-cache \
 
 
 # Issue #305 -- os invocadores das linguagens cujo comando de compilacao
-# nao cabe numa linha de catalogo (Clojure, Racket, Tcl).
+# nao cabe numa linha de catalogo (Clojure, Racket, Tcl) e das duas LTS
+# de C#.
 #
-# Nomes proprios, e nao `java -cp ...`/`racket -e ...` escritos no
-# catalogo, pela mesma razao do `scratch-run` e do `portugol-studio`: o
-# roteamento por capacidade olha o PRIMEIRO TOKEN do comando, e um
-# comando comecando em `java` faria toda maquina com JDK anunciar que
-# sabe julgar Clojure.
+# Nomes proprios, e nao `java -cp ...`/`racket -e ...`/`bash ...`
+# escritos no catalogo, pela mesma razao do `scratch-run` e do
+# `portugol-studio`: o roteamento por capacidade olha o PRIMEIRO TOKEN do
+# comando, e um comando comecando em `java` faria toda maquina com JDK
+# anunciar que sabe julgar Clojure.
+#
+# O C# e o caso que mostra que isso nao e estetica. As duas entradas de
+# .NET tinham comandos identicos a menos de uma variavel de ambiente, e o
+# `bash` no inicio das duas nao distingue nada: um host com so um dos
+# SDKs anunciava as duas linguagens. Com `csharp-net8`/`csharp-net10` o
+# primeiro token volta a ser uma afirmacao verificavel sobre a maquina.
 COPY --chmod=755 docker/judge/bin/ /usr/local/bin/
 
 # Issue #303 -- versao fixada tambem aqui.

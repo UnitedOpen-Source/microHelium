@@ -186,6 +186,7 @@ RUN apk add --no-cache \
     nodejs=24.18.1-r0 \
     npm=11.12.1-r0 \
     dotnet8-sdk=8.0.131-r0 \
+    dotnet10-sdk=10.0.303-r0 \
     go=1.26.8-r0 \
     rust=1.96.1-r0 \
     ruby=3.4.9-r0 \
@@ -235,9 +236,10 @@ RUN apk add --no-cache \
     # installs this package for the same reason.
     util-linux
 
-# Issue #305 -- os invocadores de Clojure, Racket e Tcl, iguais aos do
-# Dockerfile.judge. Ver o comentario la para por que eles tem nome proprio
-# em vez de serem um `java -cp ...` escrito no catalogo.
+# Issue #305 -- os invocadores de Clojure, Racket, Tcl e das duas LTS de
+# C#, iguais aos do Dockerfile.judge. Ver o comentario la para por que eles
+# tem nome proprio em vez de serem um `java -cp ...`/`bash ...` escrito no
+# catalogo.
 COPY --chmod=755 docker/judge/bin/ /usr/local/bin/
 
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)

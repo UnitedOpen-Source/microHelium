@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Models\Language;
 use App\Services\Judgehost\MachineCapabilities;
 use Tests\TestCase;
 
@@ -103,5 +104,61 @@ class MachineCapabilitiesTest extends TestCase
         ]);
 
         $this->assertSame(['sh'], $detected);
+    }
+
+    /**
+     * Issue #305 -- um host com um SDK de .NET so anuncia UMA das duas
+     * entradas de C#.
+     *
+     * Este e o teste que decidiu a forma da mudanca, e ele usa as entradas
+     * DE VERDADE do catalogo de proposito: o que se quer proteger nao e o
+     * comportamento de `detect()`, que ja estava certo, e sim a escolha de
+     * como as duas entradas de C# sao escritas.
+     *
+     * Enquanto as duas comecavam em `bash`, a sonda nao tinha o que
+     * distinguir -- `bash` existe em toda maquina, entao um judgehost com
+     * so o SDK 8 anunciava tambem o .NET 10 e recebia trabalho que nao sabe
+     * fazer. A mutacao que este teste pega e literalmente essa: devolver os
+     * comandos para `bash ...` faz o PATH montado aqui (que tem `csharp-net8`
+     * e nao tem `csharp-net10`) passar a anunciar as duas.
+     */
+    public function test_um_host_com_um_sdk_de_dotnet_so_anuncia_uma_das_duas_entradas_de_csharp(): void
+    {
+        $catalogo = collect(Language::getDefaultLanguages())
+            ->whereIn('extension', ['cs_dotnet', 'cs_dotnet10'])
+            ->map(fn (array $l) => (object) $l)
+            ->values()
+            ->all();
+
+        $this->assertCount(2, $catalogo, 'o catalogo deixou de ter as duas entradas de C#');
+
+        // Um PATH que contem o invocador do .NET 8 e nao o do .NET 10 --
+        // um judgehost que so instalou um dos SDKs. `/bin` e `/usr/bin`
+        // entram porque a sonda usa `sh -c 'command -v ...'`, mas
+        // `/usr/local/bin` fica de fora: e la que a imagem do juiz poe os
+        // dois invocadores, e este caso precisa da maquina que tem um so.
+        $falso = sys_get_temp_dir().'/mh-cap-csharp-'.getmypid();
+        @mkdir($falso, 0o700, true);
+        file_put_contents($falso.'/csharp-net8', "#!/bin/sh\nexit 0\n");
+        chmod($falso.'/csharp-net8', 0o755);
+
+        $pathAnterior = getenv('PATH');
+        putenv('PATH='.$falso.':/bin:/usr/bin');
+
+        try {
+            $detectadas = (new MachineCapabilities)->detect($catalogo);
+        } finally {
+            putenv('PATH='.$pathAnterior);
+            @unlink($falso.'/csharp-net8');
+            @rmdir($falso);
+        }
+
+        $this->assertSame(
+            ['cs_dotnet'],
+            $detectadas,
+            'a sonda de capacidade nao distingue as duas entradas de C#: o primeiro token '
+            .'dos comandos precisa ser o invocador da versao (csharp-net8/csharp-net10), '
+            .'senao um host com um SDK so anuncia os dois.'
+        );
     }
 }

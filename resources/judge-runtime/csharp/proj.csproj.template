@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <!--
+      Issue #305: o alvo vem do invocador (csharp-net8 / csharp-net10) e e
+      substituido pelo compile.sh. Ele anda junto do `global.json` que o
+      compile.sh escreve: um SDK 8 nao compila `net10.0` (NETSDK1045), e um
+      projeto `net8.0` sem `global.json` cai no SDK 10 e morre offline
+      (NU1100). Por isso este arquivo e um template e nao um `.csproj`.
+    -->
+    <TargetFramework>@HELIUM_DOTNET_TFM@</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InvariantGlobalization>true</InvariantGlobalization>

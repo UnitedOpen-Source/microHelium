@@ -241,7 +241,28 @@ class Language extends Model
             // resolved by AutoJudgeService, not here -- this array must stay
             // callable from contexts where the app isn't booted yet (e.g.
             // PHPUnit data providers), where base_path() isn't available.
-            ['name' => 'C# (.NET 8)', 'extension' => 'cs_dotnet', 'file_ext' => 'cs', 'compile_command' => 'bash {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'bash {judge_runtime}/csharp/run.sh {executable} {memory}', 'is_active' => true, 'category' => 'compiled'],
+            //
+            // Issue #305 -- as DUAS LTS de .NET, lado a lado, e o primeiro
+            // token deixando de ser `bash`.
+            //
+            // Os dois SDKs convivem sob um `dotnet` so
+            // (`/usr/lib/dotnet/sdk/{8.0.131,10.0.303}`), e quem escolhe
+            // entre eles e o `global.json` que o compile.sh escreve -- nao
+            // ha caminho absoluto por versao como ha no Java. Isso deixava
+            // as duas entradas com comandos identicos a menos de uma
+            // variavel de ambiente, e `MachineCapabilities::executableOf()`
+            // sonda o PRIMEIRO TOKEN: com `bash` nos dois, todo host com
+            // bash anunciaria as duas e receberia trabalho que nao sabe
+            // fazer.
+            //
+            // Dai os invocadores `csharp-net8`/`csharp-net10`
+            // (docker/judge/bin/), pelo mesmo motivo que `scratch-run`,
+            // `portugol-studio` e `clojure-run` tem nome proprio. Medido
+            // numa imagem com os dois SDKs, removendo
+            // /usr/local/bin/csharp-net10: a sonda passa a anunciar
+            // `cs_dotnet` sem `cs_dotnet10`, que e a verdade daquele host.
+            ['name' => 'C# (.NET 10 LTS)', 'extension' => 'cs_dotnet10', 'file_ext' => 'cs', 'compile_command' => 'csharp-net10 {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'csharp-net10 {judge_runtime}/csharp/run.sh {executable} {memory}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C# (.NET 8 LTS)', 'extension' => 'cs_dotnet', 'file_ext' => 'cs', 'compile_command' => 'csharp-net8 {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'csharp-net8 {judge_runtime}/csharp/run.sh {executable} {memory}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'C# (Mono)', 'extension' => 'cs_mono', 'file_ext' => 'cs', 'compile_command' => 'mcs -out:{output}.exe {source}', 'run_command' => 'mono {executable}.exe', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'F# (.NET 8)', 'extension' => 'fs_dotnet', 'file_ext' => 'fs', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Visual Basic (.NET 8)', 'extension' => 'vb', 'file_ext' => 'vb', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],

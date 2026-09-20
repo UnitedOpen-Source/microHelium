@@ -1,0 +1,53 @@
+#!/bin/sh
+# Issue #305 -- o invocador do C# sobre o .NET 8 LTS.
+#
+# ## Por que um nome proprio, e nao `bash .../compile.sh`
+#
+# `MachineCapabilities::executableOf()` sonda o PRIMEIRO TOKEN do comando.
+# Com as duas entradas de C# comecando em `bash`, a sonda nao distinguia um
+# host com o SDK 8 de um com o SDK 10: os dois comandos comecam pelo mesmo
+# binario, que existe em qualquer maquina. O host anunciaria as duas
+# linguagens e receberia trabalho que nao sabe fazer -- o defeito que a #125
+# resolve devolvendo o run, e que aqui e melhor nao criar.
+#
+# E o mesmo padrao do `scratch-run`, do `portugol-studio` e do
+# `clojure-run`: quando o comando de uma linguagem nao cabe numa linha de
+# catalogo, ele ganha um nome proprio em /usr/local/bin e a sonda volta a
+# dizer a verdade. Medido, numa imagem com os dois SDKs, removendo
+# /usr/local/bin/csharp-net10: a sonda passa a anunciar `cs_dotnet` e nao
+# `cs_dotnet10` -- e com `bash` nos dois anunciava as duas.
+#
+# ## O que ele faz
+#
+# Escolhe o SDK e o alvo, e passa o resto adiante. Os dois valores andam
+# JUNTOS e por isso moram no mesmo arquivo: medido, um `global.json` fixando
+# o SDK 8 num projeto `net10.0` morre com NETSDK1045, e um projeto `net8.0`
+# sem `global.json` e assumido pelo SDK 10, que tenta baixar
+# `Microsoft.NETCore.App.Ref (= 8.0.30)` do NuGet e morre com NU1100 -- o
+# sandbox nao tem rede.
+#
+# O nome das variaveis e prefixado porque TODA variavel de ambiente vira
+# propriedade do MSBuild: uma chamada `TargetFramework` mexeria no build por
+# um caminho que ninguem procuraria.
+HELIUM_DOTNET_SDK=8.0.0
+HELIUM_DOTNET_TFM=net8.0
+export HELIUM_DOTNET_SDK HELIUM_DOTNET_TFM
+
+# `--version` responde a versao do SDK que ESTE invocador seleciona, e nao a
+# do `dotnet` do PATH -- que, com dois SDKs instalados, e sempre o maior
+# (medido: `dotnet --version` fora de um projeto responde 10.0.303).
+#
+# E a mesma selecao que o compile.sh usa, e nao uma leitura paralela: o
+# arquivo e escrito do mesmo jeito, no diretorio de onde o `dotnet` e
+# chamado. Quem confere isto e ToolchainVersionsMatchCatalogTest.
+if [ "$1" = "--version" ]; then
+    dir=$(mktemp -d)
+    printf '{"sdk":{"version":"%s","rollForward":"latestFeature"}}\n' "$HELIUM_DOTNET_SDK" > "$dir/global.json"
+    cd "$dir" || exit 1
+    dotnet --version
+    rc=$?
+    rm -rf "$dir"
+    exit "$rc"
+fi
+
+exec bash "$@"

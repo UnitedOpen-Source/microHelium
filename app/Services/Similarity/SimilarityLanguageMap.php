@@ -37,6 +37,7 @@ class SimilarityLanguageMap
         'ts' => 'typescript',
         'kt' => 'kotlin',
         'scala' => 'scala',
+        'cs_dotnet10' => 'csharp',
         'cs_dotnet' => 'csharp',
         'cs_mono' => 'csharp',
         'rs' => 'rust',
