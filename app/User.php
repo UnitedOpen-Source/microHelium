@@ -50,6 +50,10 @@ class User extends Authenticatable
         // through the query builder, which is why #89 worked and editing
         // did not.
         'icpc_id',
+        // Issue #332 -- o rotulo curto que a Contest API exige em
+        // `teams.label` ("at WFs normally the team seat number"). Nulo quer
+        // dizer "use o padrao"; ver ClicsPresenter::teamLabel().
+        'label',
         'is_enabled',
         'birthdate',
         'managed_by',

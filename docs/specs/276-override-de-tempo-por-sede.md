@@ -75,6 +75,54 @@ numa regional. A relação `contest` é injetada em cada sede carregada porque o
 fallback de `getEffectiveDuration()` lê `$this->contest->duration` — sem isso,
 cada sede faria a sua própria consulta.
 
+## A terceira pergunta: **o que** esconder (#319)
+
+As duas perguntas acima decidem **quando** cada sede congela. Elas não decidem
+**o que** o congelamento esconde, e essa distinção ficou de fora por um tempo:
+o corte aplicado a cada run continuou sendo `duration - freeze` **do contest**,
+global, embora o tempo ajustado de cada run já fosse calculado pela sede dele.
+
+Numa prova de 300/60 com uma sede de 240/60 — que congela no minuto 180 dela —
+o corte global caía no 240. Os sessenta minutos entre um e outro, que são a
+**última hora inteira daquela sede**, saíam no telão, no `/judgements` e no
+event feed enquanto ela ainda competia. A direção oposta é o mesmo defeito com
+o sinal trocado: uma sede de 360/60 congela no minuto 300, e o corte global
+escondia dela sessenta minutos que não precisava esconder.
+
+| Pergunta | Quem faz | Método |
+|---|---|---|
+| "este run está **dentro da janela da sede dele**?" | o placar congelado | `FrozenScoreboard::cutoffSeconds($contest, $siteId)`, comparado run a run em `cell()` (#341) |
+| a mesma, na Contest API | o event feed, o `/judgements` | `Clics\FreezeWindow::covers($contest, $run)` |
+
+Uma só definição para os dois caminhos CLICS, e a **mesma comparação** que o
+placar faz: tempo ajustado da sede contra o corte da sede. É o que garante que
+o feed esconde exatamente o que o placar esconde, e nem um run a mais — duas
+verdades sobre o mesmo veredito seriam piores do que uma incompleta.
+
+O tempo comparado é o **ajustado** (#198) e não o cru: `cutoffSeconds()` está
+em tempo que conta, então comparar `contest_time` cru com ele mede duas
+grandezas diferentes, e uma hora removida da prova antecipava o congelamento
+do feed em uma hora.
+
+### `state.frozen`, que precisa de um instante só
+
+O feed decide **por evento** — `contest_events.after_freeze` é gravado olhando
+o run, com a janela da sede dele — e por isso não precisa de instante absoluto
+nenhum, nem de `site_id` na linha do log: a resposta vale para todo observador,
+porque o congelamento esconde de **todos** e o descongelamento é do contest
+inteiro (`contests.unfrozen_at`).
+
+Quem precisa de instante único é `state.frozen` da Contest API: `state` é
+singleton na spec, e há um por contest. A resposta publicada é o **primeiro**
+congelamento entre as sedes, e não o do contest. O motivo é interno: quem
+decide se o visitante anônimo recebe a versão congelada é `isFrozenForAnyone()`
+— ou seja, a API começa a esconder no minuto em que a **primeira** sede
+congela. Publicar o corte do contest fazia a API se contradizer: por uma hora
+ela filtrava julgamentos e mostrava células pendentes com `frozen: null` ao
+lado. Conservador na mesma direção da segunda pergunta: declarar cedo demais
+nunca revela nada; declarar tarde demais autoriza o consumidor a tratar como
+definitivo um quadro que já está incompleto.
+
 ## Invariantes preservadas
 
 - **#189** — o congelamento sobrevive ao fim da prova, e só `unfrozen_at` o

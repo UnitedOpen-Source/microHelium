@@ -34,6 +34,7 @@ class UserEditTest extends TestCase
             'user_type' => $user->user_type,
             'site_id' => $user->site_id,
             'icpc_id' => $user->icpc_id,
+            'label' => $user->label,
             'is_enabled' => $user->is_enabled ? '1' : '0',
         ], $overrides);
     }
@@ -114,6 +115,37 @@ class UserEditTest extends TestCase
             ->put(route('backend.users.update', $user->user_id), $this->payload($user, ['icpc_id' => 'ICPC-4242']));
 
         $this->assertSame('ICPC-4242', $user->fresh()->icpc_id);
+    }
+
+    /**
+     * Issue #332 -- `teams.label` da Contest API precisa de um caminho de
+     * entrada, ou a coluna e um mecanismo que nao pode funcionar e o schema
+     * fica satisfeito por um padrao que ninguem escolheu.
+     *
+     * O rotulo vai ao telao da cerimonia. Quem o digita e a banca, aqui.
+     */
+    public function test_the_team_label_reaches_the_column_through_the_form(): void
+    {
+        $user = $this->target(['label' => null]);
+
+        $this->actingAs($this->createAdminUser())
+            ->put(route('backend.users.update', $user->user_id), $this->payload($user, ['label' => 'B12']));
+
+        $this->assertSame('B12', $user->fresh()->label);
+    }
+
+    /**
+     * E o campo deixado em branco grava NULO, e nao string vazia: e o nulo
+     * que faz a Contest API cair no padrao.
+     */
+    public function test_an_empty_label_field_stores_null(): void
+    {
+        $user = $this->target(['label' => 'B12']);
+
+        $this->actingAs($this->createAdminUser())
+            ->put(route('backend.users.update', $user->user_id), $this->payload($user, ['label' => '']));
+
+        $this->assertNull($user->fresh()->label);
     }
 
     public function test_the_contest_follows_the_chosen_site(): void
