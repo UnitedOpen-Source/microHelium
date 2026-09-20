@@ -197,18 +197,30 @@ final class ToolchainManifest
                 ToolchainRequirement::stage('gprolog-builder'),
                 ToolchainRequirement::invoker('gplc'),
             ],
+            // Issue #347 -- o `compile_command` liga o envolucro do juiz, que
+            // e o que transforma erro de execucao em codigo de saida != 0 em
+            // vez de `WA` mudo. Ele vem do repositorio junto com o codigo da
+            // aplicacao, e nao de instalacao nenhuma.
+            'gprolog/envolucro.pro' => [
+                ToolchainRequirement::repoFile('resources/judge-runtime/gprolog/envolucro.pro'),
+            ],
             'scratch-run' => [
                 ToolchainRequirement::stage('scratch-run-builder'),
                 ToolchainRequirement::invoker('scratch-run'),
                 ToolchainRequirement::apk('nodejs', 'o invocador e um `node /opt/scratch-run/index.js`'),
             ],
+            // As duas classes sao fonte DESTE repositorio, compiladas no
+            // estagio: `ExecutaPortugol` (#301) executa, `VerificaPortugol`
+            // (#269) so analisa. Nenhuma das duas e o Console.
             'portugol-studio' => [
                 ToolchainRequirement::stage('portugol-studio-builder'),
+                ToolchainRequirement::repoFile('docker/judge/portugol/ExecutaPortugol.java'),
                 ToolchainRequirement::invoker('portugol-studio'),
-                ToolchainRequirement::apk('openjdk21-jdk', 'o console do Portugol Studio roda na JVM'),
+                ToolchainRequirement::apk('openjdk21-jdk', 'o Portugol Studio roda na JVM, e compila para Java em tempo de execucao'),
             ],
             'portugol-studio-check' => [
                 ToolchainRequirement::stage('portugol-studio-builder'),
+                ToolchainRequirement::repoFile('docker/judge/portugol/VerificaPortugol.java'),
                 ToolchainRequirement::invoker('portugol-studio-check'),
                 ToolchainRequirement::apk('openjdk21-jdk'),
             ],

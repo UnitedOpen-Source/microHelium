@@ -152,6 +152,52 @@ final class DockerfileToolchain
     }
 
     /**
+     * A linha que CRIA um invocador, normalizada.
+     *
+     * Existir com o nome certo nao basta: dois `/usr/local/bin/portugol-studio`
+     * podem chamar programas diferentes. Foi o que aconteceu no #351, que
+     * trocou o invocador do Portugol Studio no Dockerfile.judge (do `Console`
+     * com `-no-wait`, que engole erro de execucao, para o `ExecutaPortugol`)
+     * e deixou as duas imagens da aplicacao com o invocador antigo -- a
+     * mesma forma da #302, uma camada mais fundo.
+     *
+     * Compara-se so a linha da criacao, e nao o RUN inteiro: as verificacoes
+     * de fumaca ao redor dela sao diferentes de proposito entre as imagens.
+     * Quando o redirecionamento esta numa linha propria (`> /usr/local/...`),
+     * a linha anterior entra junto, porque e ela que tem o comando.
+     */
+    public function invokerRecipe(string $name): ?string
+    {
+        $lines = explode("\n", $this->finalStage);
+        $creators = '#(?:>\s*|ln\s+-s\s+\S+\s+|install\s+-m\s*[0-7]+\s+\S+\s+|-o\s+)/usr/local/bin/'
+            .preg_quote($name, '#').'(?![A-Za-z0-9_.+-])#';
+
+        foreach ($lines as $index => $line) {
+            if (preg_match($creators, $line) !== 1) {
+                continue;
+            }
+
+            $recipe = $line;
+
+            if (str_starts_with(trim($line), '>') && $index > 0) {
+                $recipe = $lines[$index - 1].' '.$line;
+            }
+
+            return self::normalize($recipe);
+        }
+
+        // Os invocadores versionados no repositorio nao tem receita no
+        // Dockerfile: eles chegam inteiros pelo COPY do diretorio, e o
+        // conteudo deles e o mesmo arquivo para as tres imagens.
+        return in_array($name, $this->invokers(), true) ? 'COPY docker/judge/bin/' : null;
+    }
+
+    private static function normalize(string $line): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', str_replace('\\'."\n", ' ', $line)), " \t\\");
+    }
+
+    /**
      * Os estagios que existem E sao copiados para a imagem final.
      *
      * @return list<string>

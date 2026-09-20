@@ -106,6 +106,44 @@ class DockerfileToolchainTest extends TestCase
         );
     }
 
+    public function test_a_receita_do_invocador_ignora_o_smoke_test_e_nao_o_corpo(): void
+    {
+        // Dois invocadores com o MESMO nome e corpos diferentes -- o que o
+        // #351 deixou entre o Dockerfile.judge e as imagens da aplicacao.
+        $console = $this->parse(<<<'DOCKER'
+        FROM php:8.3-cli-alpine
+        RUN set -eux; \
+            printf '#!/bin/sh\nexec java -jar /opt/p/console.jar "$@" -no-wait\n' \
+                > /usr/local/bin/portugol-studio; \
+            chmod 755 /usr/local/bin/portugol-studio; \
+            echo um smoke test qualquer
+        DOCKER);
+
+        $nucleo = $this->parse(<<<'DOCKER'
+        FROM php:8.3-cli-alpine
+        RUN set -eux; \
+            printf '#!/bin/sh\nexec java -cp /opt/p ExecutaPortugol "$@"\n' \
+                > /usr/local/bin/portugol-studio; \
+            chmod 755 /usr/local/bin/portugol-studio; \
+            echo outro smoke test, bem diferente, com mais linhas; \
+            echo e mais uma
+        DOCKER);
+
+        $this->assertNotSame(
+            $console->invokerRecipe('portugol-studio'),
+            $nucleo->invokerRecipe('portugol-studio'),
+            'o corpo do invocador e o que decide o comportamento; dois corpos diferentes nao sao o mesmo invocador'
+        );
+
+        $this->assertStringContainsString('ExecutaPortugol', (string) $nucleo->invokerRecipe('portugol-studio'));
+        $this->assertStringNotContainsString(
+            'smoke test',
+            (string) $nucleo->invokerRecipe('portugol-studio'),
+            'a verificacao de fumaca ao redor e diferente de proposito entre as imagens e nao entra na comparacao'
+        );
+        $this->assertNull($console->invokerRecipe('nao-criado-aqui'));
+    }
+
     public function test_estagio_declarado_e_nao_copiado_nao_satisfaz(): void
     {
         $image = $this->parse(<<<'DOCKER'

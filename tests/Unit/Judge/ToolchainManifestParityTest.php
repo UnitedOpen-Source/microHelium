@@ -156,6 +156,55 @@ class ToolchainManifestParityTest extends TestCase
     }
 
     /**
+     * O mesmo invocador tem de chamar o mesmo programa nas tres imagens.
+     *
+     * Existir com o nome certo nao basta. Enquanto este teste era escrito, o
+     * #351 trocou o `/usr/local/bin/portugol-studio` do `Dockerfile.judge`
+     * (do `Console` com `-no-wait`, que sai 0 quando o programa morre, para o
+     * `ExecutaPortugol`) e deixou as duas imagens da aplicacao com o
+     * invocador antigo. As tres tinham o arquivo, com o nome certo, e uma
+     * delas ainda transformava erro de execucao em `WA` mudo (#301) -- a
+     * forma da #302 uma camada mais fundo, e invisivel para qualquer
+     * checagem de presenca.
+     *
+     * So a linha que CRIA o invocador e comparada; as verificacoes de fumaca
+     * ao redor dela sao diferentes de proposito entre as imagens.
+     */
+    public function test_os_invocadores_sao_os_mesmos_nos_tres_dockerfiles(): void
+    {
+        $images = [];
+
+        foreach (self::dockerfiles() as $dockerfile) {
+            $images[$dockerfile] = self::image($dockerfile);
+        }
+
+        foreach (self::allRequirements() as $requirement) {
+            if ($requirement->kind !== ToolchainRequirement::INVOKER) {
+                continue;
+            }
+
+            $recipes = [];
+
+            foreach ($images as $dockerfile => $image) {
+                $recipes[$dockerfile] = $image->invokerRecipe($requirement->target);
+            }
+
+            $this->assertCount(
+                1,
+                array_unique($recipes, SORT_REGULAR),
+                "/usr/local/bin/{$requirement->target} e criado de formas diferentes nas tres imagens:\n  "
+                .implode("\n  ", array_map(
+                    fn (string $file, ?string $recipe) => $file.': '.($recipe ?? '(nao existe)'),
+                    array_keys($recipes),
+                    $recipes
+                ))
+                ."\nO mesmo nome chamando programas diferentes e a #302 uma camada mais fundo: a linguagem "
+                .'aparece instalada nas tres e se comporta de um jeito em cada uma.'
+            );
+        }
+    }
+
+    /**
      * Issue #303 -- tudo que compila ou executa codigo de competidor esta
      * fixado.
      *
