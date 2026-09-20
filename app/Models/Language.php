@@ -174,9 +174,23 @@ class Language extends Model
             // programa nem compilou. `portugol-studio-check` chama
             // `Portugol.compilarParaAnalise()`, que analisa e nao executa.
             //
-            // A execucao usa -no-wait de proposito: sem ele o console
-            // imprime "Programa finalizado" e "Pressione ENTER para
-            // continuar" na saida comparada.
+            // A ETAPA DE EXECUCAO TAMBEM NAO E O CONSOLE -- issue #301.
+            // Ela era, com `-no-wait`, e esse era o preco: o console sai com
+            // 0 e sem uma linha de stderr quando o programa MORRE (divisao
+            // por zero, indice fora do vetor, entrada malformada), entao
+            // erro de execucao virava WA -- e o caso e pior que o da
+            // compilacao, porque Portugol e a linguagem dos INICIANTES, para
+            // quem "resposta errada, sem explicacao" no lugar de "erro de
+            // execucao na linha 5" e o pior retorno possivel.
+            //
+            // O `-no-wait` nao podia sair (sem ele o console imprime
+            // "Programa finalizado" e "Pressione ENTER para continuar" na
+            // saida comparada, e um laco trava a fila), e a causa e upstream
+            // -- UNIVALI-LITE/Portugol-Studio#1218, num `Console.java` que
+            // nao e tocado desde 2019. Entao quem saiu foi o console:
+            // `portugol-studio` agora e o `ExecutaPortugol`, que chama
+            // `Portugol.compilarParaExecucao()` e tira o codigo de saida do
+            // `ResultadoExecucao`.
             ['name' => 'Portugol Studio', 'extension' => 'portugol_studio', 'file_ext' => 'por', 'compile_command' => 'portugol-studio-check {source}', 'run_command' => 'portugol-studio {source}', 'is_active' => true, 'category' => 'interpreted'],
 
             // JVM Languages
@@ -547,7 +561,22 @@ class Language extends Model
             // receberia WA, com a resposta certa na primeira linha. Com
             // `--no-top-level` a saida e exatamente `8\n` e o processo sai
             // com 0: medido com `od -c`.
-            ['name' => 'Prolog (GNU Prolog 1.5)', 'extension' => 'prolog_gnu', 'file_ext' => 'pro', 'compile_command' => 'gplc --no-top-level -o {output} {source}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+            //
+            // Issue #347 -- o `envolucro.pro` no fim da linha de compilacao
+            // e o que faz erro de execucao virar RE em vez de WA. Medido:
+            // uma divisao por zero dentro do goal de `:- initialization(main).`
+            // NAO derruba o binario (o gprolog reclama e sai com 0) e ainda
+            // despeja `system_error(cannot_catch_throw(...))` na SAIDA
+            // PADRAO, que e o arquivo comparado. O envolucro chama `main`
+            // por `catch/3`, manda o diagnostico para `user_error` e encerra
+            // com `halt(1)`.
+            //
+            // A POSICAO e obrigatoria: o GNU Prolog executa as diretivas
+            // `initialization/1` na ordem INVERSA da ligacao, entao o
+            // envolucro so roda ANTES do `main` da equipe se vier POR
+            // ULTIMO aqui. Invertido, medido, o `main` roda duas vezes.
+            // O resto esta no proprio arquivo.
+            ['name' => 'Prolog (GNU Prolog 1.5)', 'extension' => 'prolog_gnu', 'file_ext' => 'pro', 'compile_command' => 'gplc --no-top-level -o {output} {source} {judge_runtime}/gprolog/envolucro.pro', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
             // Database/Query -- issue #305: o `sqlite3` cabe na imagem por
             // menos de 1 MiB e mesmo assim esta entrada fica inativa, por
