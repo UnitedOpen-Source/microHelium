@@ -12,6 +12,7 @@ use App\Models\Problem;
 use App\Models\Run;
 use App\Models\Score;
 use App\Services\ContestClock;
+use App\Support\SourceFilename;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -129,7 +130,12 @@ class RunController extends Controller
             'problem_id' => $problem->id,
             'language_id' => $language->id,
             'run_number' => Run::getNextRunNumber($contest->id, $user->site_id ?? 1),
-            'filename' => $file->getClientOriginalName(),
+            // Issue #311 -- o mesmo saneamento do formulario web, que este
+            // caminho nao tinha. A validacao acima e `required|file|max:N`:
+            // nao ha regra nenhuma sobre o NOME, e o valor bruto seguia
+            // daqui para `{source}`/`{classname}` na linha que o
+            // AutoJudgeService entrega a `bash -c`.
+            'filename' => SourceFilename::sanitize($file->getClientOriginalName()),
             'source_file' => $path,
             'source_hash' => $sourceHash,
             'contest_time' => $contest->getContestTime(),

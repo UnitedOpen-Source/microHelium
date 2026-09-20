@@ -50,6 +50,73 @@ RUN set -eux; \
     ninja -C /tmp/swipl-build install; \
     /opt/swipl/bin/swipl --version
 
+# ---------------------------------------------------------------------------
+# Portugol Studio (issue #269, parte A) -- construido do fonte.
+#
+# Issue #302: este estagio existia SO no Dockerfile.judge, e o preco disso
+# foi medido. `docker-compose.yml` roda ESTA imagem nos servicos `queue` e
+# `scheduler`, e e la que o `JudgeRunJob` compila e executa. Numa instalacao
+# que nao sobe o servico `autojudge` -- e o compose de dev nao sobe --, TODA
+# submissao passa por aqui. Sem estes dois runtimes, uma submissao CORRETA
+# em Portugol Studio virava `CE` com `portugol-studio-check: command not
+# found`; o proprio comentario da lista de pacotes do Dockerfile.judge ja
+# prometia que as duas listas nao poderiam derivar, e derivaram.
+#
+# Pior que errar: errar dizendo "erro de compilacao". As duas linguagens sao
+# semeadas `is_active => true` globalmente em
+# `Language::getDefaultLanguages()`, entao a plataforma OFERECE a linguagem
+# no formulario e no Contest Wizard e depois reprova a submissao por um erro
+# que nao existe -- e essa reprovacao conta como tentativa errada na
+# penalidade do placar.
+#
+# O porque de cada escolha aqui (o commit fixado em vez da tag, o JDK 11 por
+# causa do Gradle 4.10, o `:portugol-console`) esta escrito no
+# Dockerfile.judge, uma vez so.
+FROM eclipse-temurin:11-jdk AS portugol-studio-builder
+
+ARG PORTUGOL_STUDIO_COMMIT=5640a2e95de1c5d63c11f453c324812b4d6a8f6c
+
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --no-checkout https://github.com/UNIVALI-LITE/Portugol-Studio.git /src \
+    && cd /src \
+    && git fetch --depth 1 origin "${PORTUGOL_STUDIO_COMMIT}" \
+    && git checkout --detach "${PORTUGOL_STUDIO_COMMIT}"
+
+WORKDIR /src
+
+RUN ./gradlew :portugol-console:jar --no-daemon -q
+
+COPY docker/judge/portugol/VerificaPortugol.java /verifica/
+
+RUN set -eux; \
+    libs="$(find /src/console/build/libs -name '*.jar' | tr '\n' ':')"; \
+    mkdir -p /verifica/classes; \
+    javac -encoding UTF-8 -cp "$libs" -d /verifica/classes /verifica/VerificaPortugol.java; \
+    test -s /verifica/classes/VerificaPortugol.class
+
+# ---------------------------------------------------------------------------
+# Scratch (issue #268) -- construido aqui, e nao baixado. Gemeo do estagio do
+# Dockerfile.judge; a medicao que descarta os binarios do release (ELF glibc,
+# `not found` no musl) esta la.
+#
+# Issue #302: mesma razao do estagio acima -- esta imagem julga pela fila.
+FROM node:24-alpine AS scratch-run-builder
+
+ARG SCRATCH_RUN_COMMIT=02f11e519210f8593cdcf04f257237fc0ceb7180
+
+RUN apk add --no-cache git \
+    && git clone --no-checkout https://github.com/VNOI-Admin/scratch-run.git /src \
+    && cd /src \
+    && git fetch --depth 1 origin "${SCRATCH_RUN_COMMIT}" \
+    && git checkout --detach "${SCRATCH_RUN_COMMIT}"
+
+WORKDIR /src
+RUN npm install --no-audit --no-fund && npx webpack
+
+RUN test -s /src/dist/index.js
+
 # MicroHelium Dockerfile
 # PHP 8.3 with required extensions for Laravel 12
 
@@ -175,8 +242,24 @@ RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
 # zip. This is the same install method used by every other Kotlin judge
 # container (it's pure JVM + a launcher script, so it's arch-independent
 # given the JDK above).
+#
+# Issue #304 -- KOTLIN_SHA256 e o sha256 que o proprio GitHub atesta para
+# este artefato (campo `digest` de
+# GET /repos/JetBrains/kotlin/releases/tags/v2.4.20, conferido em
+# 2026-09-19), e nao um hash calculado a partir do que esta maquina baixou.
+# A diferenca e o ponto inteiro: um hash tirado do download nao prova nada
+# sobre o download.
+#
+# Por que isto vale a linha que ocupa: o juiz compila e executa codigo nao
+# confiavel por construcao (docs/specs/49-judge-isolation.md), e todo o
+# desenho de isolamento parte de que o SANDBOX e hostil e o TOOLCHAIN e
+# confiavel. Um compilador trocado roda fora do sandbox, com o privilegio do
+# estagio de build -- e o lado do qual nenhum `bwrap` protege. O padrao ja
+# existia neste arquivo (o JPlag, mais abaixo); faltava aplicar aos vizinhos.
 ARG KOTLIN_VERSION=2.4.20
+ARG KOTLIN_SHA256=59e9ca74c7904ef2c122b12114937673ccce68de820a663f0ed66ccf8799e0b7
 RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -O /tmp/kotlin.zip \
+    && echo "${KOTLIN_SHA256}  /tmp/kotlin.zip" | sha256sum -c - \
     && unzip -q /tmp/kotlin.zip -d /opt \
     && rm /tmp/kotlin.zip \
     && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc \
@@ -185,21 +268,38 @@ RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VER
 # Free Pascal has no Alpine package either. Its official releases ship a
 # pre-built compiler binary per architecture (no compilation needed); we
 # only need the compiler + RTL units, not the full units-* extras or docs.
-# The SourceForge download occasionally serves a truncated file under
-# automated tools, hence the retry loop with byte-count verification.
+#
+# Issue #304 -- este comentario prometia uma "byte-count verification" que
+# NAO existia no codigo: o laco so fazia `tar -tf`, que prova que o arquivo
+# ABRE, nao que o conteudo e o esperado. Um tar truncado num limite de bloco
+# lista sem erro, e um tar integro mas DIFERENTE passava sempre. Um
+# comentario que descreve protecao inexistente e pior do que nenhum, porque
+# impede que alguem note a falta.
+#
+# O que existe agora, de verdade: SHA-256 fixado por arquitetura, conferido
+# a cada tentativa. O laco continua porque o download do SourceForge
+# realmente serve arquivo truncado sob ferramenta automatizada -- mas quem
+# decide se a tentativa valeu e o hash, e nao o `tar`.
+#
+# E o `wget -c` saiu. `-c` RETOMA um download parcial: numa retentativa ele
+# costurava o segundo pedaco no primeiro, que e exatamente o modo de falha
+# que o laco existia para evitar. Cada tentativa agora baixa limpo.
 ARG FPC_VERSION=3.2.2
+ARG FPC_SHA256_AARCH64=b39470f9b6b5b82f50fc8680a5da37d2834f2129c65c24c5628a80894d565451
+ARG FPC_SHA256_X86_64=5adac308a5534b6a76446d8311fc340747cbb7edeaacfe6b651493ff3fe31e83
 RUN set -eu; \
     arch="$(apk --print-arch)"; \
     case "$arch" in \
-        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64 ;; \
-        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64 ;; \
+        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64; fpc_sha256="${FPC_SHA256_X86_64}" ;; \
+        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64; fpc_sha256="${FPC_SHA256_AARCH64}" ;; \
         *) echo "Unsupported arch for FPC: $arch" >&2; exit 1 ;; \
     esac; \
     url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
     tries=0; \
-    until wget -q -c "$url" -O /tmp/fpc.tar && tar -tf /tmp/fpc.tar >/dev/null 2>&1; do \
+    until wget -q "$url" -O /tmp/fpc.tar \
+        && echo "${fpc_sha256}  /tmp/fpc.tar" | sha256sum -c -; do \
         tries=$((tries + 1)); \
-        [ "$tries" -ge 6 ] && { echo "Failed to download a valid FPC tarball after $tries attempts" >&2; exit 1; }; \
+        [ "$tries" -ge 6 ] && { echo "FPC ${FPC_VERSION} (${fpc_arch}): $tries tentativas sem bater o SHA-256 fixado" >&2; exit 1; }; \
         rm -f /tmp/fpc.tar; \
     done; \
     mkdir -p /tmp/fpcx && tar -xf /tmp/fpc.tar -C /tmp/fpcx; \
@@ -317,6 +417,50 @@ RUN set -eux; \
     test "$(./fumaca < /dev/null)" = "ok"; \
     cd /; \
     rm -rf /tmp/fumaca-gprolog
+
+# ---------------------------------------------------------------------------
+# Issue #302 -- Scratch e Portugol Studio, que estavam so na imagem do juiz.
+#
+# Os dois blocos abaixo sao copia fiel dos do Dockerfile.judge, inclusive o
+# smoke test de cada um: uma imagem que julga tem de provar que julga na
+# propria construcao, e nao na primeira submissao de uma equipe.
+#
+# `/opt` ja esta em config/autojudge.php -> sandbox_paths, entao isto fica
+# visivel dentro do sandbox sem bind novo.
+
+# Scratch (issue #268). O invocador existe porque
+# `MachineCapabilities::executableOf()` olha o PRIMEIRO TOKEN do comando e o
+# sonda com `command -v`: um run_command escrito como `node /opt/...`
+# anunciaria a capacidade "node", e nao "scratch".
+COPY --from=scratch-run-builder /src/dist/index.js /opt/scratch-run/index.js
+RUN printf '#!/bin/sh\nexec node /opt/scratch-run/index.js "$@"\n' > /usr/local/bin/scratch-run \
+    && chmod 755 /usr/local/bin/scratch-run \
+    && echo 'x' | scratch-run --version
+
+# Portugol Studio (issue #269, parte A).
+#
+# O layout importa: `Console.getClassPathParaCompilacao()` monta o classpath
+# lendo os jars de um diretorio `lib/` AO LADO da aplicacao -- nao e um fat
+# jar solto, e achatar isso quebra a execucao.
+#
+# A execucao precisa de `javac` EM TEMPO DE EXECUCAO: o Portugol Studio
+# compila o programa para Java e chama o compilador. O `openjdk21-jdk` da
+# lista de pacotes ja cobre isso, e e a razao de ele nao poder virar `-jre`.
+COPY --from=portugol-studio-builder /src/console/build/libs /opt/portugol-studio
+COPY --from=portugol-studio-builder /verifica/classes/VerificaPortugol.class /opt/portugol-studio/
+
+# Dois invocadores, e nao um, pela mesma regra de roteamento por capacidade:
+# comandos escritos como `java -jar ...` anunciariam "java", e nao
+# "portugol_studio".
+RUN set -eux; \
+    printf '#!/bin/sh\nexec java -jar /opt/portugol-studio/portugol-console-2.7.5.jar "$@" -no-wait\n' \
+        > /usr/local/bin/portugol-studio; \
+    printf '#!/bin/sh\nexec java -cp "/opt/portugol-studio:$(find /opt/portugol-studio -name \x27*.jar\x27 | tr \x27\\n\x27 \x27:\x27)" VerificaPortugol "$@"\n' \
+        > /usr/local/bin/portugol-studio-check; \
+    chmod 755 /usr/local/bin/portugol-studio /usr/local/bin/portugol-studio-check; \
+    printf 'programa {\n  funcao inicio() {\n    escreva("ok")\n  }\n}\n' > /tmp/fumaca.por; \
+    portugol-studio-check /tmp/fumaca.por; \
+    rm -f /tmp/fumaca.por
 
 # JPlag (issue #42, similarity analysis) -- pinned to v6.2.0, the last
 # release built against JDK 21 (v6.3.0 bumped the minimum to JDK 25; see

@@ -17,10 +17,25 @@
 # `read` percorre todas as formas do arquivo e para na primeira que nao
 # fecha. E uma checagem de LEITOR, nao de tipos -- Clojure nao tem
 # verificacao estatica para oferecer -- e e o mesmo nivel do `bash -n`.
-exec java -cp /usr/share/clojure/clojure.jar clojure.main -e "
-(let [arquivo \"$1\"
+#
+# Issue #311 -- o caminho vem por AMBIENTE, e nao interpolado no fonte.
+#
+# A versao anterior montava o programa Clojure com `\"$1\"` dentro dele. O
+# `$1` e o nome do arquivo submetido, que e valor de competidor: uma aspa
+# nele fechava a string e o resto virava CODIGO CLOJURE avaliado por este
+# processo. Nao e o mesmo buraco da linha de shell -- e um segundo, dentro
+# de um interpretador diferente, e por isso o saneamento na entrada nao
+# basta aqui: o proprio invocador tem de parar de concatenar.
+#
+# `(System/getenv ...)` le a variavel como DADO. O valor nunca e analisado
+# como fonte, entao nao ha o que escapar.
+ARQUIVO_FONTE="$1"
+export ARQUIVO_FONTE
+
+exec java -cp /usr/share/clojure/clojure.jar clojure.main -e '
+(let [arquivo (System/getenv "ARQUIVO_FONTE")
       leitor (clojure.lang.LineNumberingPushbackReader. (java.io.FileReader. arquivo))]
   (loop []
     (let [forma (read {:eof ::fim :read-cond :allow} leitor)]
       (when-not (= forma ::fim) (recur)))))
-"
+'

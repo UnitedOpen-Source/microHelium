@@ -15,11 +15,26 @@
 # execucao. O que da para checar sem executar e se o script esta COMPLETO
 # -- chaves, colchetes e aspas fechados --, que e o que `info complete`
 # responde, e e o mesmo nivel de garantia do `bash -n`.
-exec tclsh <<TCL
-set canal [open {$1} r]
-set codigo [read \$canal]
-close \$canal
-if {![info complete \$codigo]} {
+#
+# Issue #311 -- o caminho vem por AMBIENTE, e nao interpolado no fonte.
+#
+# A versao anterior escrevia `open {$1} r` num here-doc NAO citado: o shell
+# expandia o `$1` -- nome de arquivo submetido, valor de competidor --
+# dentro do script Tcl. Uma chave `}` no nome fechava o literal e o resto
+# virava COMANDO TCL. Ironia util: a chave estava la justamente como
+# tentativa de proteger, e e exatamente o caractere que a quebra.
+#
+# O here-doc agora e `<<'TCL'` (citado), entao o shell nao expande NADA e o
+# Tcl le o caminho de `$env(...)`. Substituicao de variavel em Tcl nao
+# re-divide em palavras, entao espaco no nome tambem esta coberto.
+ARQUIVO_FONTE="$1"
+export ARQUIVO_FONTE
+
+exec tclsh <<'TCL'
+set canal [open $env(ARQUIVO_FONTE) r]
+set codigo [read $canal]
+close $canal
+if {![info complete $codigo]} {
     puts stderr "erro de sintaxe: o script termina no meio de um comando (chave, colchete ou aspas sem fechar)"
     exit 1
 }
