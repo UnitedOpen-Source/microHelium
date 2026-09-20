@@ -425,9 +425,96 @@ pilha troca um `RE` por um `TLE`, e não um `TLE` por um `AC`.
   Scala e o Groovy usam. Ele **não** resolve este caso: aqui o custo cresce com
   a entrada, e nenhum limite praticável alcança.
 
-Para referência, as outras três linguagens da #327 **foram resolvidas** e
-aguentam 10⁴ níveis; o Bash é a única exceção que sobrou, e sobrou por não
-haver o que configurar.
+Para referência, as outras três linguagens da #327 — Python, Node e
+TypeScript — **foram resolvidas** e aguentam 10⁴ níveis. O Bash é a exceção
+que sobrou *entre elas*, e sobrou por não haver o que configurar.
+
+**Mas o Bash não é a única linguagem do catálogo que não aguenta 10⁴ níveis.**
+A #327 nasceu olhando 24 linguagens; hoje são 48, e a varredura completa
+(`tests/E2E/LanguageConformanceTest.php`, o mesmo programa em todas, julgado
+pelo juiz de verdade) encontrou mais cinco. Nenhuma é defeito do juiz — é o
+que cada runtime aguenta:
+
+| Linguagem | O que acontece | O teto, medido | Onde mora o teto |
+|---|---|---|---|
+| `sh` | `TLE` | ~450 níveis em 5 s de CPU | custo `n⁴`, ver acima |
+| `groovy` | `RE` | passa em 800, estoura em 900 | `StackOverflowError` |
+| `tcl` | `RE` | 1000 | `interp recursionlimit` |
+| `lisp_clisp` | `RE` | passa em 3000, estoura em 5000 | pilha do CLISP 2.49 |
+| `r` | `RE` | passa em 2000, estoura em 5000 | `options(expressions)` |
+| `nim` | `RE` | 2000 | `nim c` sem `-d:release` |
+
+Dois controles que valem a pena conhecer, porque eles mostram que o problema é
+da implementação e não do programa: o `lisp_sbcl` compila **a mesma fonte** do
+`lisp_clisp`, byte a byte, e faz os 10⁴ níveis; e o `scala`, na **mesma JVM**
+do `groovy`, também faz. As outras 42 linguagens ativas passam.
+
+O `nim` é o único dos seis que teria conserto do nosso lado: o teto de 2000
+quadros é do *build de depuração*, e o mesmo programa compilado com
+`nim c -d:release` devolve o resultado certo. Fica registrado aqui porque
+mudar o comando do catálogo é decisão de quem mantém a imagem, não deste
+manual.
+
+### O que cada linguagem aguenta, medido
+
+A recursão acima é uma de onze propriedades medidas em **todas** as linguagens
+ativas por `tests/E2E/LanguageConformanceTest.php`, com o juiz de verdade e o
+sandbox ligado. Cada item tem **controle positivo** — o `a+b` correto da mesma
+linguagem, pelo mesmo caminho —, sem o qual um `RE` não distinguiria "o juiz
+detectou o erro" de "o juiz reprova tudo nessa linguagem". Os números saem em
+`storage/logs/conformidade-linguagens.jsonl`. Medido em `aarch64`, com cgroup
+v2 delegado.
+
+**As armadilhas que mudam o enunciado**
+
+| O que | Onde | O que fazer ao escrever o problema |
+|---|---|---|
+| **Recursão de 10⁴ níveis reprova** | as seis da tabela acima | uma DFS recursiva sobre 10 mil vértices não passa nelas. Se o problema exige profundidade, diga no enunciado |
+| **`inteiro` do Portugol é de 32 bits** | `portugol_studio` | resposta acima de 2 147 483 647 é impossível: medido, 5000050000 sai 705082704. Dimensione o caso de teste |
+| **Divisão inteira por zero não quebra em `aarch64`** | `c_*`, `cpp_*`, `f90`, `f77`, `cob` | o `sdiv` do ARM devolve 0 em vez de gerar exceção (em COBOL, sem `ON SIZE ERROR`, o resultado fica inalterado). O mesmo programa dá `RE` num juiz x86 e `WA` num juiz ARM |
+| **O GNU Prolog não passa de 32 MB** | `prolog_gnu` | as pilhas do runtime são fixas; um problema que exija estrutura grande não tem solução nessa linguagem, qualquer que seja o `memory_limit` |
+| **A entrada do Portugol vai uma por linha** | `portugol_studio` | o console lê com `nextLine()`, um valor por `leia` |
+
+**Custo fixo de partida** — quanto a linguagem gasta antes da primeira linha do
+programa da equipe. É este número que obriga a usar limite **por linguagem**
+(`problem_language_limits`) em vez de afrouxar o limite do problema para todos.
+
+| | parede |
+|---|---|
+| as 26 compiladas nativas (C, C++, Rust, Go, Pascal, Zig, Nim, Crystal, D, Haskell, OCaml, Fortran, Ada, Dart, COBOL, os dois Prolog…), mais Perl, Bash, sed, Lua, AWK, Tcl e SBCL | abaixo de 10 ms |
+| Python, PHP, CLISP, Guile | ~10 ms |
+| Java 21/25, Node, TypeScript, Kotlin, C#, Ruby, Scala | 20 a 50 ms |
+| Scratch | ~110 ms |
+| R | ~160 ms |
+| Groovy | ~600 ms (o `groovy` **compila** o script antes de rodar: 1,4–1,8 s de CPU) |
+| Clojure, Racket | 510 a 720 ms |
+| **Portugol Studio** | **~980 ms de parede, 2,7 s de CPU** — não cabe em `ulimit -t 1` |
+
+**Ler 10⁵ inteiros com a E/S que um competidor escreve sem pensar** — todas dão
+conta dentro de 5 s de CPU; o que varia é a margem.
+
+| | parede |
+|---|---|
+| C, C++, Rust, Go, Pascal, OCaml, Perl, PHP, AWK, D, Fortran, Ada, Python, Lua, COBOL, Prolog | até 20 ms |
+| SBCL, Crystal, C#, Zig, Haskell, TypeScript, Tcl | 30 a 60 ms |
+| Kotlin, Ruby, Nim, Node, CLISP, Guile, Scala, Dart | 80 a 260 ms |
+| Java 21/25, R, Racket, Bash, Clojure, Groovy | 200 a 580 ms |
+| Portugol Studio | ~990 ms |
+
+**O que é garantido em todas as linguagens ativas** (medido, item a item): laço
+infinito vira `TLE`; alocação sem limite vira `MLE`; programa sintaticamente
+inválido vira `CE` **com a linha do erro**; programa que morre em execução vira
+`RE`; programa que imprime a resposta certa e sai com código diferente de zero
+vira `RE`; `printf("%.2f")` e equivalentes imprimem `3.14` e nunca `3,14`; o
+que o programa escreve em `stderr` não entra na saída comparada e chega ao juiz
+como diagnóstico; e toda linguagem roda também no caminho **sem** cgroup v2
+delegado, que é o de um contêiner não privilegiado.
+
+**Uma ressalva honesta sobre carga.** Num judgehost saturado, os *backstops* de
+tempo de parede do juiz podem disparar e produzir `CS` — que não é veredito
+sobre o programa da equipe. Foi medido acontecendo com `kotlinc` e `g++` numa
+máquina com vários contêineres disputando CPU. É mais um motivo para não rodar
+prova num judgehost compartilhado com outra coisa.
 
 ### O pacote de resultados, para um ranking nacional
 
