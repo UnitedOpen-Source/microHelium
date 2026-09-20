@@ -363,6 +363,13 @@ return [
         'scala' => null,
         'groovy' => null,
         'clj' => null,
+        // Issue #305 -- `cs_dotnet10` entra pelo mesmo motivo medido do
+        // `cs_dotnet` ao lado: com o `ulimit -v` de limite+64 o .NET nem
+        // sobe ("GC heap initialization failed"), e quem limita a memoria
+        // do C# e o DOTNET_GCHeapHardLimit do run.sh. Sem esta linha a
+        // entrada nova repetiria, no judgehost sem cgroup delegado, o
+        // defeito que o `java25` teve no #310.
+        'cs_dotnet10' => null,
         'cs_dotnet' => null,
         'cs_mono' => null,
         'fs_dotnet' => null,
