@@ -67,7 +67,19 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'rb' => ['rb', 'ruby -e "print RUBY_VERSION"', '3.4', 'Ruby 3.4'],
             'php' => ['php', 'php -r "echo PHP_VERSION;"', '8.3', 'PHP 8.3'],
             'kt' => ['kt', 'kotlinc -version 2>&1', '2.4', 'Kotlin (2.4)'],
-            'cs_dotnet' => ['cs_dotnet', 'dotnet --version', '8.0', 'C# (.NET 8)'],
+            // Issue #305 -- o INVOCADOR, e nao `dotnet --version`.
+            //
+            // Com os dois SDKs instalados, `dotnet --version` fora de um
+            // projeto responde sempre o maior: medido, 10.0.303 numa imagem
+            // com 8.0.131 ao lado. O comando antigo passaria a reprovar a
+            // entrada do .NET 8 dizendo que o rotulo mente -- quando quem
+            // mentia era a pergunta.
+            //
+            // `csharp-netN --version` faz a mesma selecao por `global.json`
+            // que o compile.sh faz, entao o que este teste confere e o que a
+            // submissao vai usar.
+            'cs_dotnet' => ['cs_dotnet', 'csharp-net8 --version', '8.0', 'C# (.NET 8 LTS)'],
+            'cs_dotnet10' => ['cs_dotnet10', 'csharp-net10 --version', '10.0', 'C# (.NET 10 LTS)'],
             'pas_fpc' => ['pas_fpc', 'fpc -iV', '3.2.2', 'Pascal (FPC)'],
             'perl' => ['perl', 'perl -e "print substr($^V,1)"', '5', 'Perl 5'],
 

@@ -231,6 +231,31 @@ class JudgeSandboxPerLanguageTest extends TestCase
         // `--version`, `--info`, `help`, `new --list` e `msbuild -version`
         // morrem todos com rc=153 sob W^X ligado; so `--list-sdks` nao, e
         // por isso ele nao serve de sonda.
+        //
+        // Issue #305 -- a sonda passa a FIXAR o SDK, e isso nao e detalhe.
+        //
+        // Com o .NET 10 ao lado do 8, um `dotnet` sem `global.json` resolve
+        // para o SDK 10, e a sonda mudou de assunto sem avisar. Medido nesta
+        // imagem, sob `ulimit -f 32768`:
+        //
+        //             W^X=0   W^X=1
+        //   SDK 8      rc=0   rc=153   <- a variavel e carregador
+        //   SDK 10     rc=0   rc=0     <- nao morre, nem com o programa
+        //                                compilado de verdade
+        //
+        // Ou seja: o escape continua SENDO PRECISO, para o .NET 8, e e
+        // inofensivo para o 10. Sem fixar, este teste reprovava por estar
+        // perguntando ao runtime errado -- e "o escape nao serve mais para
+        // nada" seria a conclusao errada de ler so o resultado.
+        //
+        // O `global.json` vai no diretorio de onde o `dotnet` e chamado,
+        // exatamente como o compile.sh faz (a resolucao sobe a partir do
+        // diretorio corrente).
+        file_put_contents(
+            $runDir.'/global.json',
+            '{"sdk":{"version":"8.0.0","rollForward":"latestFeature"}}'."\n"
+        );
+
         $sonda = $judge->wrapWithBwrap(
             'dotnet --version > /dev/null',
             $runDir,

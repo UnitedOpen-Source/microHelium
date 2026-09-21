@@ -24,6 +24,32 @@ use Illuminate\Support\Facades\Process;
 class MachineCapabilities
 {
     /**
+     * Issue #305 -- o PATH que a sonda consulta, injetado em vez de global.
+     *
+     * Em producao fica `null` e nada muda: o subprocesso herda o ambiente,
+     * que e o PATH da maquina de verdade. Quem passa um valor aqui e teste
+     * que precisa montar uma maquina hipotetica ("um host com o SDK 8 e sem
+     * o 10").
+     *
+     * Existe porque a alternativa obvia -- `putenv('PATH=...')` em volta da
+     * chamada -- NAO funciona, e falha do jeito pior: em silencio e so em
+     * algumas maquinas. O `Process` resolve o ambiente do filho com
+     * `$_ENV + getenv()` (symfony/process, `getDefaultEnv()`), e em `+` o
+     * operando da ESQUERDA vence. Entao:
+     *
+     *   variables_order sem `E` -> $_ENV vazio  -> o putenv vale
+     *   variables_order com `E` -> $_ENV['PATH'] existe -> o putenv e IGNORADO
+     *
+     * A imagem do juiz e `php:8.3-cli-alpine`, que nao ativa nenhum php.ini,
+     * entao ela cai no padrao embutido do PHP (`EGPCS`) -- com o `E`. Um
+     * teste escrito com `putenv` passava na maquina de desenvolvimento
+     * (php.ini com `GPCS`) e reprovava dentro da imagem, que e a forma
+     * invertida do defeito recorrente deste repositorio: verde onde o
+     * toolchain NAO esta, vermelho onde ele esta.
+     */
+    public function __construct(private readonly ?string $searchPath = null) {}
+
+    /**
      * The extensions this machine can run, out of the ones given.
      *
      * Takes models, plain objects, or the decoded arrays the API returns.
@@ -132,6 +158,16 @@ class MachineCapabilities
             return is_file($binary) && is_executable($binary);
         }
 
-        return Process::run(['sh', '-c', 'command -v '.escapeshellarg($binary)])->successful();
+        $comando = ['sh', '-c', 'command -v '.escapeshellarg($binary)];
+
+        // Sem PATH injetado o filho herda o ambiente, que e o comportamento
+        // de producao. Com PATH injetado ele vai EXPLICITO para o processo,
+        // que e o unico jeito que vale nas duas `variables_order` -- ver o
+        // comentario do construtor.
+        if ($this->searchPath !== null) {
+            return Process::env(['PATH' => $this->searchPath])->run($comando)->successful();
+        }
+
+        return Process::run($comando)->successful();
     }
 }
