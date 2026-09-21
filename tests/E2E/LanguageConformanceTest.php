@@ -460,6 +460,7 @@ class LanguageConformanceTest extends TestCase
         'scratch' => 5000,
         'java25' => 5000,
         'java21' => 5000,
+        'java17' => 5000,
         'ts' => 5000,
         'js_node24' => 5000,
 
@@ -575,6 +576,16 @@ class LanguageConformanceTest extends TestCase
             // faz o teste falhar até alguém trocar a linha.
             'java25' => $java,
             'java21' => $java,
+
+            // Issue #305 -- `java17` entrou LIGADA neste PR, e esta linha e
+            // MEDICAO, e nao afirmacao. Ela foi medida numa imagem do juiz
+            // com o `openjdk17-jdk=17.0.20_p8-r0` instalado ao lado do 21 e
+            // do 25 (o build derivado descrito no PR), rodando estes mesmos
+            // casos: os onze itens responderam o mesmo que o `java21` da
+            // linha de cima, inclusive recursao de 10^4 niveis, morte por
+            // TLE e morte por MLE. A famiilia e a mesma porque e a mesma
+            // fonte Java; o que muda e o JDK que o caminho absoluto invoca.
+            'java17' => $java,
 
             // INVERTIDOS nesta revisão -- os três eram DEFEITO_CONHECIDO no
             // item de recursão pela #327, e o #345 os consertou sem tocar na

@@ -75,17 +75,21 @@ class Language extends Model
             // anunciar `java25` -- coisa que com `javac` era impossivel
             // distinguir.
             //
-            // `java17` segue INATIVA porque o `openjdk17-jdk` nao esta
-            // instalado; a diferenca e que agora ela falha em vez de mentir.
-            // O pacote EXISTE no Alpine 3.24 (`openjdk17-jdk-17.0.20_p8-r0`,
-            // reconferido em 21/09/2026), entao liga-la e um `apk add` nas
-            // TRES imagens -- mais ~326 MiB medidos na #305 -- e as linhas
-            // que toda linguagem ligada precisa ter: procedencia no
-            // ToolchainManifest, identificador em ClicsLanguageIdentifiers,
-            // `memory_grace_mb` em config/autojudge.php, fixture em
-            // MultiLanguageJudgingTest e linha em LanguageConformanceTest.
-            // O que falta nao e o pacote: e a medicao dentro da imagem que
-            // essas duas ultimas exigem.
+            // `java17` FOI LIGADA em 21/09/2026, e o que a destravou foi
+            // a medicao que faltava, nao o pacote. Os tres Dockerfiles
+            // passam a instalar `openjdk17-jdk=17.0.20_p8-r0`, e dentro de
+            // uma imagem com os tres JDKs foi medido:
+            //
+            //   /usr/lib/jvm/java-17-openjdk/bin/javac -version -> 17.0.20
+            //   /usr/lib/jvm/default-jvm -> java-25-openjdk  (NAO se moveu)
+            //   kotlinc -version -> kotlinc-jvm 2.4.20 (JRE 25.0.4+7)
+            //
+            // A segunda linha era o risco real de ligar uma LTS MENOR: o
+            // `apk` aponta o `default-jvm` para o MAIOR JDK instalado, entao
+            // quem chama `java` pelo PATH (`kt`, Portugol Studio) continua
+            // no 25. O custo medido por `apk add --simulate` sobre a imagem
+            // que ja tem 21 e 25 e +259,0 MiB (os +326 MiB da #305 sao do
+            // JDK 25 sobre uma base sem JVM nenhuma).
             //
             // E o caminho absoluto de cada uma e guardado por
             // tests/Unit/Judge/PromessaDeVersaoTest.php: apontar `java17`
@@ -93,7 +97,7 @@ class Language extends Model
             // precisar de JDK instalado.
             ['name' => 'Java (OpenJDK 25 LTS)', 'extension' => 'java25', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-25-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-25-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Java (OpenJDK 21 LTS)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-21-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => false, 'category' => 'compiled'],
+            ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
 
             // Python
             // Issue #327 -- o `PYTHONPATH` poe

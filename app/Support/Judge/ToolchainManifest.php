@@ -81,9 +81,17 @@ final class ToolchainManifest
 
             // ---------------------------------------------------------
             // JVM -- cada JDK no seu prefixo, e o `java` sem caminho, que
-            // resolve para o `default-jvm` (hoje o 21) e e o que o `kt` usa
-            // para rodar o jar que o kotlinc produz.
+            // resolve para o `default-jvm` (medido na imagem: o 25, porque o
+            // `apk` aponta o link para o MAIOR JDK instalado) e e o que o
+            // `kt` usa para rodar o jar que o kotlinc produz.
+            //
+            // Issue #305 -- o 17 entrou ao lado do 21 e do 25. Medido numa
+            // imagem com os tres: `default-jvm` continua em
+            // `java-25-openjdk`, entao ligar o 17 nao move o chao de quem
+            // chama `java` pelo PATH.
             // ---------------------------------------------------------
+            '/usr/lib/jvm/java-17-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk17-jdk')],
+            '/usr/lib/jvm/java-17-openjdk/bin/java' => [ToolchainRequirement::apk('openjdk17-jdk')],
             '/usr/lib/jvm/java-21-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk21-jdk')],
             '/usr/lib/jvm/java-21-openjdk/bin/java' => [ToolchainRequirement::apk('openjdk21-jdk')],
             '/usr/lib/jvm/java-25-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk25-jdk')],

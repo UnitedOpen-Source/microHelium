@@ -160,6 +160,7 @@ RUN apk add --no-cache \
     g++=15.2.0-r5 \
     make \
     python3=3.14.7-r1 \
+    openjdk17-jdk=17.0.20_p8-r0 \
     openjdk21-jdk=21.0.12_p8-r0 \
     openjdk25-jdk=25.0.4_p7-r0 \
     nodejs=24.18.1-r0 \

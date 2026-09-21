@@ -62,6 +62,7 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'cpp17_gpp' => ['cpp17_gpp', 'g++ -dumpversion', '15', 'C++17 (G++ 15)'],
             'c_clang17' => ['c_clang17', 'clang -dumpversion', '22', 'C (Clang 22)'],
             'cpp_clang' => ['cpp_clang', 'clang++ -dumpversion', '22', 'C++ (Clang 22)'],
+            'java17' => ['java17', '/usr/lib/jvm/java-17-openjdk/bin/javac -version 2>&1', '17', 'Java (OpenJDK 17 LTS)'],
             'java21' => ['java21', '/usr/lib/jvm/java-21-openjdk/bin/javac -version 2>&1', '21', 'Java (OpenJDK 21 LTS)'],
             'java25' => ['java25', '/usr/lib/jvm/java-25-openjdk/bin/javac -version 2>&1', '25', 'Java (OpenJDK 25 LTS)'],
             'py3' => ['py3', 'python3 -c "import sys;print(\'%d.%d\' % sys.version_info[:2])"', '3.14', 'Python 3.14'],
