@@ -449,33 +449,45 @@ class Language extends Model
             // em execucoes distintas -- inclusive bloqueando o PR da correcao
             // de seguranca da #311, que nao tem relacao nenhuma com ela.
             //
-            // Subir a versao NAO resolve, e isto foi medido e nao suposto --
-            // mas o MOTIVO mudou, e o comentario anterior ficou errado.
+            // O que falta NAO e mais a correcao existir: e o Alpine
+            // empacota-la. A condicao escrita aqui antes ("basta virar `true`
+            // quando houver release com a correcao") ficou VELHA e por isso
+            // ficou perigosa -- ela ja esta satisfeita, e reativar hoje
+            // devolveria o vermelho intermitente. Reconferido em 20/09/2026,
+            // pelo conteudo do arquivo em cada ref e pelo APKINDEX, e nao
+            // pela versao anterior deste texto:
             //
-            // Ele dizia que a correcao (`sysconf(_SC_MINSIGSTKSZ)`,
-            // erlang/otp#11376) existia so no `master` do upstream. Deixou de
-            // ser verdade em 16/09/2026. Conferido baixando
-            // `erts/emulator/sys/unix/sys_signal_stack.c` por tag:
+            //     erlang/otp, erts/emulator/sys/unix/sys_signal_stack.c
+            //       OTP-29.1 (16/09/2026)  sysconf(_SC_MINSIGSTKSZ)  TEM
+            //       OTP-28.5.0.6           ss.ss_size = SIGSTKSZ     nao tem
+            //       OTP-27.3.4.17          ss.ss_size = SIGSTKSZ     nao tem
+            //       maint-28 / maint-27    o backport ainda nao saiu
             //
-            //   OTP-29.1          -> tem `_SC_MINSIGSTKSZ`
-            //   OTP-29.0.6        -> nao tem
-            //   OTP-28.5.0.6      -> nao tem
-            //   OTP-27.3.4.17     -> nao tem
+            //     APKINDEX, x86_64, community, v3.24 E edge
+            //       erlang27  27.3.4.17-r0
+            //       erlang28  28.5.0.6-r0
+            //       erlang29  NAO EXISTE em nenhum dos dois
             //
-            // O que trava agora e EMPACOTAMENTO, e nao upstream: `apk search
-            // -q erlang` devolve so `erlang27` e `erlang28`, tanto no Alpine
-            // 3.24 quanto no `edge` -- `erlang29` nao existe em nenhum dos
-            // dois. A decisao de desativar segue a mesma; a condicao de
-            // reativacao e que mudou de lugar.
+            // Ou seja: a unica release que carrega a correcao nao e publicada
+            // pelo Alpine, e a imagem do juiz e Alpine. A condicao correta
+            // para reativar passou a ser "o Alpine publicar um erlang que
+            // carregue o erlang/otp#11376" -- hoje isso quer dizer um
+            // `erlang29`, ou o backport para o `erlang28` que a equipe do OTP
+            // prometeu ("hopefully within a month or so", 07/09/2026) e ainda
+            // nao entregou.
             //
             // Desativar e reversivel; deixar ligado nao e. Linguagem
             // intermitente e pior que linguagem ausente: ausente, a equipe nao
             // a escolhe; intermitente, ela submete e recebe veredito de erro
             // que nao e dela, com diagnostico que nao da para contestar. Os
-            // comandos ficam prontos -- basta virar `true` quando o ALPINE
-            // publicar um `erlang` com a correcao (OTP >= 29.1), e o
-            // `test_a_beam_sobe_vinte_vezes_seguidas_dentro_do_sandbox` (#345)
-            // e quem diz se ja da.
+            // comandos ficam prontos; o que guarda a decisao e
+            // tests/Unit/Judge/CatalogoBeamDesativadaTest.php, que reprova na
+            // suite rapida se estas duas linhas virarem `true` antes de o
+            // bloqueio cair -- e diz, na mensagem, o que conferir no Alpine
+            // antes de virar. Depois de virar, quem responde se a maquina
+            // aguenta e o
+            // `test_a_beam_sobe_vinte_vezes_seguidas_dentro_do_sandbox` (#345),
+            // que so roda dentro da imagem do juiz.
             ['name' => 'Erlang/OTP 27', 'extension' => 'erl', 'file_ext' => 'erl', 'compile_command' => 'erlc {source}', 'run_command' => 'erl +JMsingle true -noshell -pa . -s {classname} main -s init stop', 'is_active' => false, 'category' => 'compiled'],
 
             // Issue #305 -- `elixirc` EXECUTA o codigo de nivel superior.
