@@ -81,14 +81,28 @@ final class ToolchainManifest
 
             // ---------------------------------------------------------
             // JVM -- cada JDK no seu prefixo, e o `java` sem caminho, que
-            // resolve para o `default-jvm` (hoje o 21) e e o que o `kt` usa
-            // para rodar o jar que o kotlinc produz.
+            // resolve para o `default-jvm` e e o que o `kt` usa para rodar o
+            // jar que o kotlinc produz.
+            //
+            // Issue #300 -- o `default-jvm` NAO e o 21. Medido em 21/09/2026
+            // nas duas imagens: `/usr/lib/jvm/default-jvm -> java-25-openjdk`,
+            // `java -version` responde 25.0.4 e `kotlinc -version` responde
+            // `JRE 25.0.4+7-alpine-r0`. O `apk` aponta o link para o maior JDK
+            // instalado, e ele se moveu quando o 25 entrou; o #358 ja corrigiu
+            // a mesma afirmacao no comentario do `Dockerfile.judge`, e esta
+            // aqui era a ultima copia velha dela.
+            //
+            // A EXIGENCIA abaixo continua sendo `openjdk21-jdk`, e isso e
+            // deliberado: ela existe para responder "o que instalar para que
+            // `java` exista", e o 21 e o suficiente mais barato. Qualquer JDK
+            // roda o jar que o kotlinc produz -- quem precisa de uma versao
+            // ESPECIFICA e o catalogo, e ele pede por caminho absoluto.
             // ---------------------------------------------------------
             '/usr/lib/jvm/java-21-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk21-jdk')],
             '/usr/lib/jvm/java-21-openjdk/bin/java' => [ToolchainRequirement::apk('openjdk21-jdk')],
             '/usr/lib/jvm/java-25-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk25-jdk')],
             '/usr/lib/jvm/java-25-openjdk/bin/java' => [ToolchainRequirement::apk('openjdk25-jdk')],
-            'java' => [ToolchainRequirement::apk('openjdk21-jdk', 'o `default-jvm` do Alpine')],
+            'java' => [ToolchainRequirement::apk('openjdk21-jdk', 'o JDK mais barato que faz `java` existir')],
 
             // ---------------------------------------------------------
             // Interpretados do Alpine
@@ -177,7 +191,7 @@ final class ToolchainManifest
             'kotlinc' => [
                 ToolchainRequirement::download('KOTLIN'),
                 ToolchainRequirement::invoker('kotlinc'),
-                ToolchainRequirement::apk('openjdk21-jdk', 'o kotlinc roda no default-jvm'),
+                ToolchainRequirement::apk('openjdk21-jdk', 'o kotlinc precisa de uma JVM, e esta e a mais barata'),
             ],
             'scalac' => [
                 ToolchainRequirement::download('SCALA'),

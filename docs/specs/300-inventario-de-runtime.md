@@ -1,7 +1,7 @@
 # Issue #300 — inventário das dependências de runtime do auto-judge
 
-**Revisão de 21/09/2026.** Medido contra o `master` de hoje (`ab94d7c`), nas
-imagens `helium-judge:rev21` e `helium-app:rev21`, construídas deste commit.
+**Revisão de 21/09/2026.** Medido contra o `master` de hoje (`9cdbc0a`), nas
+imagens `helium-judge:rev21c` e `helium-app:rev21c`, construídas deste commit.
 Nada aqui foi copiado da revisão anterior: cada número foi remedido, e os que
 mudaram estão marcados na seção *O que mudou desde 20/09*.
 
@@ -9,9 +9,14 @@ mudaram estão marcados na seção *O que mudou desde 20/09*.
 > O conteúdo desta página é **derivado do repositório** — contagem de
 > linguagens, pinos de versão, procedência. Ele apodrece no minuto em que
 > `app/Models/Language.php` ou um dos três Dockerfiles muda, e de 19 a
-> 21/09/2026 isso aconteceu **oito vezes** (PRs #336, #344, #345, #346, #351,
-> #353, #360 e #364 — contado por `git log` sobre esses quatro arquivos, e não
-> de memória). Um corpo de issue não pode ser guardado por teste; um arquivo
+> 21/09/2026 isso aconteceu **nove vezes** (PRs #336, #344, #345, #346, #351,
+> #353, #358, #360 e #364 — contado por `git log` sobre esses quatro arquivos,
+> e não de memória). A nona foi descoberta **pelo guard deste arquivo**: o
+> #358 entrou enquanto esta revisão era escrita, e o CI reprovou com *"a
+> entrada ativa `cs_dotnet10` não está citada no inventário"*. É o mecanismo
+> funcionando na primeira oportunidade que teve.
+>
+> Um corpo de issue não pode ser guardado por teste; um arquivo
 > pode. Quem guarda este é
 > `tests/Unit/Judge/InventarioDeRuntimeTest.php`, e ele reprova quando o
 > repositório e este texto discordam. A #309, ao contrário, descreve estado
@@ -34,24 +39,25 @@ cada uma vem e o que está fixado. Este arquivo é esse lugar.
 
 <!-- Guardados por InventarioDeRuntimeTest. Não edite sem remedir. -->
 
-- **76** entradas no catálogo `Language::getDefaultLanguages()`
-- **48** ativas (`is_active => true`)
+- **77** entradas no catálogo `Language::getDefaultLanguages()`
+- **49** ativas (`is_active => true`)
 - **28** inativas
 - **39** linguagens distintas entre as ativas — C tem três entradas, C++
-  quatro, e Java, Fortran, Prolog e Common Lisp duas cada
-- **54** executáveis distintos que o catálogo ativo chama (primeiro token de
+  quatro, e C#, Java, Fortran, Prolog e Common Lisp duas cada
+- **56** executáveis distintos que o catálogo ativo chama (primeiro token de
   `compile_command` e `run_command`, pela regra de
   `ToolchainManifest::executableOf()`)
-- **36** pacotes `apk` exigidos por linguagem ativa, mais **2** de
-  infraestrutura (`bubblewrap`, `libstdc++`) = **38** — que é exatamente a
+- **37** pacotes `apk` exigidos por linguagem ativa, mais **2** de
+  infraestrutura (`bubblewrap`, `libstdc++`) = **39** — que é exatamente a
   lista do perfil `completo` de `docs/specs/306-perfis-de-toolchain.md`
-- **40** pacotes fixados no estágio final do `Dockerfile.judge`. A diferença
-  para os 38 acima são exatamente `erlang27` e `elixir`: instalados, fixados,
+- **41** pacotes fixados no estágio final do `Dockerfile.judge`. A diferença
+  para os 39 acima são exatamente `erlang27` e `elixir`: instalados, fixados,
   e **não oferecidos** (#339) — ver a seção própria
 
-O conjunto de extensões ativas **não mudou** desde a revisão de 20/09
-(conferido por diff do catálogo entre `383b0ba` e `ab94d7c`: as 48 são as
-mesmas). O que mudou foram comandos, imagens e guardas.
+O conjunto de extensões ativas mudou **uma vez** desde a revisão de 20/09: o
+PR #358 acrescentou `cs_dotnet10` (.NET 10 LTS ao lado do 8). As outras 48 são
+as mesmas, conferido por diff do catálogo entre `383b0ba` e `9cdbc0a`. O resto
+do que mudou foram comandos, imagens e guardas.
 
 ## Como o julgamento acontece: são DOIS caminhos, não um
 
@@ -75,21 +81,34 @@ aplicação e roda `MultiLanguageJudging|LanguageVerdictFidelity` dentro dela.
 
 **Medido hoje, nas duas imagens construídas deste commit:**
 
-1. **Presença.** Os 54 executáveis do catálogo ativo existem nas duas
-   imagens. `command -v` em `helium-judge:rev21` e em `helium-app:rev21`:
-   **zero ausentes nas duas**.
+1. **Presença.** Os 56 executáveis do catálogo ativo existem nas duas
+   imagens. `command -v` em `helium-judge:rev21c` e em `helium-app:rev21c`,
+   as duas construídas de `9cdbc0a`: **zero ausentes nas duas**.
 2. **Identidade, que é a checagem que a revisão anterior teve de inventar.**
    `command -v` responde pelo *nome*, não pelo conteúdo — em 20/09 o
    `portugol-studio` da imagem da aplicação existia e era **outro programa**
-   (o Console com `-no-wait`). Hoje os três invocadores batem byte a byte:
+   (o Console com `-no-wait`). Os cinco invocadores medidos hoje:
 
-   | Invocador | md5 nas duas imagens |
-   |---|---|
-   | `/usr/local/bin/portugol-studio` | `40051ad869ea03ee6991c704328dfb76` |
-   | `/usr/local/bin/portugol-studio-check` | `561e91dce160d0d04ad6aa02c6c46947` |
-   | `/usr/local/bin/scratch-run` | `1291730af24719066e049a889397e679` |
+   | Invocador | md5 **igual nas duas imagens** | De onde ele sai |
+   |---|---|---|
+   | `/usr/local/bin/portugol-studio` | `40051ad869ea03ee6991c704328dfb76` | `printf` no Dockerfile |
+   | `/usr/local/bin/portugol-studio-check` | `561e91dce160d0d04ad6aa02c6c46947` | `printf` no Dockerfile |
+   | `/usr/local/bin/scratch-run` | `1291730af24719066e049a889397e679` | `printf` no Dockerfile |
+   | `/usr/local/bin/csharp-net8` | `dd72e53dd012bfcf8d099784b70393f3` | `COPY docker/judge/bin/` |
+   | `/usr/local/bin/csharp-net10` | `71b9fbff3c2801d022b72dff09aef8bc` | `COPY docker/judge/bin/` |
 
-3. **Listas de `apk`.** As **40** linhas fixadas dos três Dockerfiles são
+   **E a paridade entre as três imagens deixou de depender de medição.** As
+   linhas de `printf` que geram os três primeiros são **byte a byte iguais**
+   nos três Dockerfiles (conferido nesta revisão), e os dois últimos vêm de um
+   `COPY --chmod=755 docker/judge/bin/ /usr/local/bin/` idêntico nos três.
+   Quem guarda isso é
+   `ToolchainManifestParityTest::test_os_invocadores_sao_os_mesmos_nos_tres_dockerfiles()`
+   (PR #353), que compara a **receita** de cada invocador nos três arquivos.
+   Era exatamente essa a checagem que faltava quando a #352 aconteceu: o
+   `portugol-studio` existia nas duas imagens e era outro programa numa
+   delas, e nenhum teste sabia comparar conteúdo.
+
+3. **Listas de `apk`.** As **41** linhas fixadas dos três Dockerfiles são
    hoje **idênticas** — zero divergências. A única divergência que a revisão
    de 20/09 registrava (`libstdc++` fixado no `Dockerfile` e no
    `Dockerfile.dev` e **não** no `Dockerfile.judge`) foi fechada pelo PR
@@ -114,7 +133,7 @@ por conta própria é o agrupamento por origem externa:
 
 | Origem | Endereço | O que vem de lá | Fixação |
 |---|---|---|---|
-| Pacote do Alpine | repositórios `main`/`community` | 36 pacotes (tabela abaixo) | `pacote=versão-rN` |
+| Pacote do Alpine | repositórios `main`/`community` | 37 pacotes (tabela abaixo) | `pacote=versão-rN` |
 | Release do GitHub | `github.com/JetBrains/kotlin`, `github.com/scala/scala3` | Kotlin, Scala | versão + SHA-256 |
 | Arquivo do Apache | `archive.apache.org/dist/groovy` | Groovy | versão + SHA-256 |
 | CDN do Google | `storage.googleapis.com/dart-archive` | Dart SDK | versão + SHA-256 **por arquitetura** |
@@ -125,12 +144,12 @@ por conta própria é o agrupamento por origem externa:
 | Fonte de terceiro, construído por nós | `github.com/VNOI-Admin/scratch-run`, `github.com/UNIVALI-LITE/Portugol-Studio` | scratch-run, Portugol Studio | **commit** |
 | Imagem base | `php:8.3-cli-alpine` (juiz), `php:8.3-fpm-alpine` (aplicação) | `php`, `sed` (busybox) | **nada** |
 
-### As 48 entradas ativas, uma a uma
+### As 49 entradas ativas, uma a uma
 
 A coluna do meio é **derivada** de `ToolchainManifest::provenance()` mais o
 pino lido do `Dockerfile.judge` — não é transcrita, e o teste que guarda este
 arquivo reprova se ela divergir. A da direita é medida dentro de
-`helium-judge:rev21` em 21/09/2026 (`aarch64`, `--network none`); ela não é
+`helium-judge:rev21c` em 21/09/2026 (`aarch64`, `--network none`); ela não é
 derivável sem construir a imagem, e por isso carrega a data.
 
 | Entrada | De onde vem (`ToolchainManifest`) | Runtime medido na imagem |
@@ -153,7 +172,8 @@ derivável sem construir a imagem, e por isso carrega a data.
 | `scala` | baixado `SCALA_VERSION`, invocador `scalac`, invocador `scala` | scalac 3.3.8 (LTS) |
 | `groovy` | baixado `GROOVY_VERSION`, invocador `groovyc`, invocador `groovy` | Groovy 4.0.33 (JVM 21.0.12) |
 | `clj` | repo `docker/judge/bin/clojure-check`, invocador `clojure-check`, apk `clojure=1.12.5-r0`, apk `openjdk21-jdk=21.0.12_p8-r0`, repo `docker/judge/bin/clojure-run`, invocador `clojure-run` | Clojure 1.12.5 (`/usr/share/clojure/clojure.jar`, 4.985.093 bytes) |
-| `cs_dotnet` | apk `bash=5.3.9-r1`, repo `resources/judge-runtime/csharp/compile.sh`, apk `dotnet8-sdk=8.0.131-r0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 8.0.131 |
+| `cs_dotnet10` | repo `docker/judge/bin/csharp-net10`, invocador `csharp-net10`, apk `dotnet10-sdk=10.0.303-r0`, repo `resources/judge-runtime/csharp/compile.sh`, repo `resources/judge-runtime/csharp/proj.csproj.template`, apk `dotnet8-sdk=8.0.131-r0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 10.0.303 |
+| `cs_dotnet` | repo `docker/judge/bin/csharp-net8`, invocador `csharp-net8`, apk `dotnet8-sdk=8.0.131-r0`, repo `resources/judge-runtime/csharp/compile.sh`, repo `resources/judge-runtime/csharp/proj.csproj.template`, apk `dotnet10-sdk=10.0.303-r0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 8.0.131 |
 | `rs` | apk `rust=1.96.1-r0` | rustc 1.96.1 |
 | `go` | apk `go=1.26.8-r0` | go 1.26.8 |
 | `d_ldc` | apk `ldc=1.42.0-r0` | LDC 1.42.0 (DMD v2.112.1, LLVM 21.1.8) |
@@ -184,14 +204,15 @@ derivável sem construir a imagem, e por isso carrega a data.
 | `cob` | apk `gnucobol=3.2-r0` | cobc (GnuCOBOL) 3.2.0 |
 | `tcl` | repo `docker/judge/bin/tcl-check`, invocador `tcl-check`, apk `tcl=8.6.17-r1` | tclsh 8.6.17 |
 
-### Fixado por versão: os 36 pacotes `apk` de linguagem ativa
+### Fixado por versão: os 37 pacotes `apk` de linguagem ativa
 
 <!-- Guardado por InventarioDeRuntimeTest: cada pino aqui tem de existir no
      Dockerfile.judge, e cada apk que o manifesto exige tem de estar aqui. -->
 
 `R=4.6.0-r0`, `bash=5.3.9-r1`, `clang22=22.1.3-r2`,
 `clisp=2.49.95_git250727-r1`, `clojure=1.12.5-r0`, `crystal=1.20.3-r0`,
-`dotnet8-sdk=8.0.131-r0`, `g++=15.2.0-r5`, `gawk=5.3.2-r2`, `gcc=15.2.0-r5`,
+`dotnet8-sdk=8.0.131-r0`, `dotnet10-sdk=10.0.303-r0`, `g++=15.2.0-r5`,
+`gawk=5.3.2-r2`, `gcc=15.2.0-r5`,
 `gcc-gnat=15.2.0-r5`, `gcompat=1.1.0-r4`, `gfortran=15.2.0-r5`,
 `ghc=9.10.3-r2`, `gmp=6.3.0-r4`, `gnucobol=3.2-r0`, `go=1.26.8-r0`,
 `guile=3.0.9-r2`, `ldc=1.42.0-r0`, `lua5.4=5.4.8-r0`,
@@ -270,8 +291,8 @@ a correção não é a que o Alpine publica, e a imagem do juiz é Alpine. O
 bloqueio **deixou de ser upstream e passou a ser empacotamento**.
 
 **Os pacotes continuam na imagem de propósito**, ao custo medido de
-**+85,8 MiB** (`apk add --simulate` sobre o perfil `completo`: 4938,4 MiB
-sem a BEAM, 5024,2 MiB com ela). Desde o PR #364 a desativação deixou de
+**+85,8 MiB** (`apk add --simulate` sobre o perfil `completo`: 5540,3 MiB
+sem a BEAM, 5626,1 MiB com ela). Desde o PR #364 a desativação deixou de
 valer só no catálogo: `tests/Unit/Judge/CatalogoBeamDesativadaTest.php`
 reprova na suíte rápida se as duas linhas virarem `true` antes de o bloqueio
 cair, e diz na mensagem o que conferir no Alpine antes de virar.
@@ -284,10 +305,15 @@ falha de teste e não uma surpresa no dia da prova.
 
 - **`resources/judge-runtime/csharp/`** — o `dotnet build` exige um *projeto*
   e a submissão é um `.cs` solto. O `compile.sh` embrulha o fonte num projeto
-  console descartável; o `nuget.config` zera as fontes de pacote para o
-  `restore` não tentar rede; o `run.sh` converte o limite de memória em
-  `DOTNET_GCHeapHardLimit`, porque .NET é um dos runtimes que `ulimit -v` não
-  consegue limitar.
+  console descartável a partir de `proj.csproj.template`; o `nuget.config` zera
+  as fontes de pacote para o `restore` não tentar rede; o `run.sh` converte o
+  limite de memória em `DOTNET_GCHeapHardLimit`, porque .NET é um dos runtimes
+  que `ulimit -v` não consegue limitar.
+- **`docker/judge/bin/csharp-net8` e `csharp-net10`** (#358) — invocadores de
+  um SDK cada. Existem pela mesma razão do `scratch-run` e do
+  `portugol-studio`: com as duas entradas de C# começando o comando em
+  `dotnet`, o roteamento por capacidade não teria como distinguir uma máquina
+  com só um dos dois SDKs.
 - **`resources/judge-runtime/node/run.sh`** (#327) — deriva o `--stack-size`
   do V8 de três quartos do `ulimit -s` herdado, em vez de fixar um número.
 - **`resources/judge-runtime/python/sitecustomize.py`** (#327) — sobe o
@@ -326,15 +352,21 @@ revisão e batendo com `docs/specs/306-perfis-de-toolchain.md`:
 | `maratona` | 5 | 6 | 579,2 MiB |
 | `scripting` | 12 | 13 | 710,6 MiB |
 | `funcional` | 20 | 20 | 2630,7 MiB |
-| `completo` (é o que o `Dockerfile.judge` instala) | 48 | 38 | **4938,4 MiB** |
+| `completo` (é o que o `Dockerfile.judge` instala) | 49 | 39 | **5540,3 MiB** |
 
-A fronteira cara é o **GHC sozinho: 1698,0 MiB** medidos sobre a mesma base —
-34% de tudo. É degrau, não rampa.
+**O `completo` subiu 601,9 MiB desde 20/09**, e isso é o preço do .NET 10 do
+#358: `dotnet10-sdk` sozinho sobre a base mede **664,1 MiB** (contra 559,6 MiB
+do `dotnet8-sdk`), e a diferença entre os dois números é o que os dois SDKs
+compartilham. É o segundo item mais caro do catálogo.
+
+A fronteira cara continua sendo o **GHC sozinho: 1698,0 MiB** medidos sobre a
+mesma base — 31% de tudo. É degrau, não rampa.
 
 **O que estes números não são:** tamanho de imagem publicada. Deixam de fora
 as camadas de PHP e da aplicação, os artefatos baixados e os estágios
 compilados. O tamanho medido da imagem do juiz construída hoje é
-**6.071 MiB** de arquivos (`du -sm /` dentro do contêiner, `aarch64`).
+**6.686 MiB** de arquivos (`du -sm /` dentro do contêiner, `aarch64`) —
+eram 6.071 MiB em 20/09, e os ~615 MiB de diferença são o .NET 10 do #358.
 
 ## O que cada linguagem AGUENTA
 
@@ -342,7 +374,7 @@ Desde o PR #359 isto deixou de ser conhecimento de quem auditou:
 `tests/E2E/LanguageConformanceTest.php` mede **11 itens** — erro de execução,
 erro de compilação, TLE, MLE, código de saída, ponto decimal, entrada grande,
 recursão profunda, tempo de partida, stderr separado e caminho sem cgroup
-delegado — contra **todas as 48 entradas ativas**, dentro da imagem.
+delegado — contra **todas as 49 entradas ativas**, dentro da imagem.
 
 O que a tabela fixa hoje — **lido do provedor de dados da suíte, não de uma
 execução local** (numa máquina sem delegação de cgroup os itens de memória se
@@ -362,12 +394,14 @@ organizador atualizado junto.
 |---|---|---|
 | Sonda de capacidade parou de procurar `./{executable}` | #357 (#354) | As 22 entradas compiladas voltaram a ser declaradas por um judgehost remoto. A regra passou a ter um dono só, `ToolchainManifest::executableOf()`; `MachineCapabilities` delega. |
 | `opcache.ini` da aplicação comia o orçamento de `ulimit -v` | #360 (#356) | O `run_command` de `php` virou `php -d opcache.enable_cli=0 -d memory_limit={memory}M {source}`. PHP dentro do orçamento recebia `RE`. |
-| Matriz de conformidade por linguagem | #359 | 11 itens × 48 entradas, medidos na imagem. Derrubou duas afirmações: `clj` e `portugol_studio` **não** aguentam recursão de dez mil níveis. |
+| Matriz de conformidade por linguagem | #359 | 11 itens × 49 entradas, medidos na imagem. Derrubou duas afirmações: `clj` e `portugol_studio` **não** aguentam recursão de dez mil níveis. |
 | CI passou a construir a imagem da **aplicação** | #361 (#355) | Fechou o buraco que deixou a #302 e a #352 passarem. É a linha nova da tabela dos dois caminhos. |
 | Declarações de licença passaram a ter de concordar | #362 (#266) | — |
 | `ob_flush()` do event feed | #363 (#252) | — |
 | Desativação da BEAM deixou de valer só no catálogo | #364 (#339) | O `ToolchainVersionsMatchCatalogTest` ainda exercitava o `erl` porque a tabela dele era escrita à mão e não filtrada pelo catálogo. Custo da BEAM agora guardado por teste. |
-| Perfis de toolchain | #365 (#306) | O custo de cada recorte virou número medido. Corrigiu o "~1,0 GB" da #306: o catálogo ativo manda instalar 4,9 GiB só de `apk`. |
+| Perfis de toolchain | #365 (#306) | O custo de cada recorte virou número medido. Corrigiu o "~1,0 GB" da #306: o catálogo ativo manda instalar 5,5 GiB só de `apk`. |
+| O portão da imagem da aplicação perdeu a exceção nomeada | #366 (#355) | O job `app-image` deixou de ter caso especial no filtro de caminhos. |
+| .NET 10 LTS ao lado do 8 | #358 (#305) | **A 49ª entrada ativa**, `cs_dotnet10`. Dois invocadores novos (`csharp-net8`, `csharp-net10`), porque dois comandos começando em `dotnet` não permitiriam distinguir uma máquina com só um SDK. E `+601,9 MiB` no `completo`. |
 
 **Dois achados da revisão anterior foram FECHADOS, e os dois pelo PR #353:**
 
@@ -376,26 +410,30 @@ organizador atualizado junto.
   compilar `ExecutaPortugol.java` e a escrever o mesmo invocador do juiz.
   Medido hoje pelos md5 idênticos, acima. A #352 está fechada.
 - *"`libstdc++` está fixado no `Dockerfile` e no `Dockerfile.dev` e NÃO no
-  `Dockerfile.judge`."* Fechado: `libstdc++=15.2.0-r5` está nos três, e a
-  única mudança de pino do `Dockerfile.judge` entre 20 e 21/09 foi
-  exatamente essa linha (conferido por diff dos pinos).
+  `Dockerfile.judge`."* Fechado: `libstdc++=15.2.0-r5` está nos três. O
+  `Dockerfile.judge` teve **duas** mudanças de pino entre 20 e 21/09, e as
+  duas são acréscimos: esta linha (pelo #353) e o `dotnet10-sdk=10.0.303-r0`
+  (pelo #358). **Nenhuma versão já existente se moveu** — conferido por diff
+  dos pinos, e é o que sustenta a coluna "Runtime medido" da tabela acima.
 
-**Um achado da revisão anterior CONTINUA ABERTO, e piorou de escopo:**
+**O terceiro achado da revisão anterior FECHOU nesta passagem, em duas mãos:**
 
-- **O comentário sobre o `default-jvm` está errado, e agora em dois
-  arquivos.** `Dockerfile.judge` diz que "o `kotlinc` e o Portugol Studio
-  seguem usando o `default-jvm`, que continua sendo o 21", e
-  `ToolchainManifest::provenance()` repete ("o `default-jvm` do Alpine
-  (hoje o 21)", e mapeia `java` → `openjdk21-jdk`). Medido nas duas imagens
-  de hoje: `/usr/lib/jvm/default-jvm -> java-25-openjdk`, `java -version`
-  responde `25.0.4`, e `kotlinc -version` responde
-  `kotlinc-jvm 2.4.20 (JRE 25.0.4+7-alpine-r0)`. O `run_command` de `kt` é
-  `java -jar`, ou seja **JVM 25**. Funciona — qualquer JDK roda o jar, e a
-  lista de instalação que o manifesto produz continua correta —, mas o
-  **motivo escrito** está errado, e comentário que mente é como rótulo que
-  mente. Não foi consertado aqui porque mexer no mapeamento `java` →
-  `openjdk21-jdk` muda a lista de instalação dos perfis da #306 e merece
-  decisão própria.
+- **O comentário sobre o `default-jvm` dizia 21, e o medido é 25.** O #358
+  corrigiu a afirmação no `Dockerfile.judge` — e deixou de pé a última cópia
+  velha dela, em `ToolchainManifest::provenance()`. Esta revisão corrige essa
+  cópia. Medido nas duas imagens de hoje:
+  `/usr/lib/jvm/default-jvm -> java-25-openjdk`, `java -version` responde
+  `25.0.4`, e `kotlinc -version` responde
+  `kotlinc-jvm 2.4.20 (JRE 25.0.4+7-alpine-r0)`. O `apk` aponta o link para o
+  maior JDK instalado, e ele se moveu quando o 25 entrou.
+
+  **O que NÃO mudou, de propósito:** a exigência continua sendo
+  `openjdk21-jdk`. Ela responde *"o que instalar para que `java` exista"*, e
+  o 21 é o suficiente mais barato; qualquer JDK roda o jar que o `kotlinc`
+  produz. Quem precisa de uma versão **específica** é o catálogo, e ele pede
+  por caminho absoluto desde a #303. Trocar o mapeamento mudaria a lista de
+  instalação dos perfis da #306 sem corrigir nada — o que estava errado era o
+  motivo escrito, e comentário que mente é como rótulo que mente.
 
 ## Como refazer
 
@@ -435,7 +473,8 @@ done
 for img in helium-judge:audit helium-app:audit; do
   docker run --rm --network none "$img" \
     md5sum /usr/local/bin/portugol-studio /usr/local/bin/portugol-studio-check \
-           /usr/local/bin/scratch-run
+           /usr/local/bin/scratch-run /usr/local/bin/csharp-net8 \
+           /usr/local/bin/csharp-net10
 done
 
 # o custo de um perfil, sem construir imagem

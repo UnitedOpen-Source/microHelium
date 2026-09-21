@@ -18,9 +18,15 @@ use PHPUnit\Framework\TestCase;
  * repositorio: quantas linguagens o catalogo oferece, com que pino cada
  * toolchain entra, o que vem de onde. Enquanto ele morou no corpo de uma
  * issue, a unica coisa que o mantinha verdadeiro era alguem lembrar de
- * reconferir -- e entre 19 e 21/09/2026 os tres Dockerfiles e o catalogo
- * mudaram sete vezes. Um inventario desatualizado e pior que nenhum, porque
+ * reconferir -- e de 19 a 21/09/2026 os tres Dockerfiles e o catalogo
+ * mudaram NOVE vezes. Um inventario desatualizado e pior que nenhum, porque
  * ele parece medido.
+ *
+ * A nona foi apanhada por este arquivo, antes de ele ser mesclado: o #358
+ * (.NET 10) entrou com o documento ja escrito, e o CI reprovou com "a
+ * entrada ativa `cs_dotnet10` nao esta citada no inventario", mais o pino
+ * que faltava e tres contagens deslocadas. Cinco asserções, cada uma
+ * apontando para uma linha diferente que precisava mudar.
  *
  * Entao a regra deste arquivo e a mesma do
  * JudgeToolchainProfileCommandTest (#365) sobre a spec da #306: o documento
