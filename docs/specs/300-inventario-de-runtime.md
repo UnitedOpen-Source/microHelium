@@ -1,7 +1,8 @@
 # Issue #300 — inventário das dependências de runtime do auto-judge
 
-**Revisão de 21/09/2026.** Medido contra o `master` de hoje (`9cdbc0a`), nas
-imagens `helium-judge:rev21c` e `helium-app:rev21c`, construídas deste commit.
+**Revisão de 21/09/2026.** Medido contra o `master` de hoje (`fd98b93`), nas
+imagens `helium-judge:rev21c` e `helium-app:rev21c`, construídas de `9cdbc0a`
+— o último commit que tocou um Dockerfile, conferido por `git log`.
 Nada aqui foi copiado da revisão anterior: cada número foi remedido, e os que
 mudaram estão marcados na seção *O que mudou desde 20/09*.
 
@@ -283,19 +284,41 @@ a ERTS aborta. Quem decide é a CPU do host.
 (`sysconf(_SC_MINSIGSTKSZ)`, `erlang/otp#11376`, mesclada em `maint` em
 10/08) **saiu na OTP-29.1, de 16/09/2026**. Conferido pelo conteúdo do
 arquivo em cada ref, e não por comparação de árvore: `OTP-29.1` tem;
-`OTP-28.5.0.6`, `OTP-27.3.4.17`, `maint-27` e `maint-28` **não têm**. E
-conferido no `APKINDEX` de hoje (`v3.24` **e** `edge`, `community`,
-`x86_64`): existem `erlang27` `27.3.4.17-r0` e `erlang28` `28.5.0.6-r0`, e
-**`erlang29` não existe em nenhum dos dois**. Ou seja: a release que carrega
-a correção não é a que o Alpine publica, e a imagem do juiz é Alpine. O
-bloqueio **deixou de ser upstream e passou a ser empacotamento**.
+`OTP-28.5.0.6`, `OTP-27.3.4.17`, `maint-27` e `maint-28` **não têm**.
+
+**E o que o Alpine publica, conferido no `APKINDEX` de hoje** — `x86_64`, nos
+três repositórios, porque olhar só o `community` é como esta revisão errou de
+primeira e o #369 corrigiu:
+
+| Repositório | `erlang27` | `erlang28` | `erlang29` |
+|---|---|---|---|
+| `v3.24/main`, `v3.24/community` | `27.3.4.17-r0` | `28.5.0.6-r0` | — |
+| `v3.24/testing` | — | — | não existe (sem `APKINDEX`) |
+| `edge/main`, `edge/community` | `27.3.4.17-r0` | `28.5.0.6-r0` | — |
+| **`edge/testing`** | — | — | **`29.0.6-r0`** |
+
+**Existe um `erlang29`, e ele não serve** — `29.0.6` é anterior à `29.1`, que
+é a primeira release a carregar a correção. Esta é a armadilha exata que o
+#369 desarmou: quem lesse "espere o `erlang29` do Alpine", achasse um
+`erlang29` e reativasse cairia de volta no `sys_sigaltstack()` intermitente.
+**O nome do pacote não responde nada; quem responde é o pino**, e desde o #369
+quem compara é `ReativarABeamExigeOtpCorrigidaTest`, não um humano lendo um
+comentário.
+
+O bloqueio, portanto, **deixou de ser upstream e é empacotamento**: a release
+que carrega a correção não é nenhuma das que o Alpine publica, e a imagem do
+juiz é Alpine.
 
 **Os pacotes continuam na imagem de propósito**, ao custo medido de
 **+85,8 MiB** (`apk add --simulate` sobre o perfil `completo`: 5540,3 MiB
-sem a BEAM, 5626,1 MiB com ela). Desde o PR #364 a desativação deixou de
-valer só no catálogo: `tests/Unit/Judge/CatalogoBeamDesativadaTest.php`
-reprova na suíte rápida se as duas linhas virarem `true` antes de o bloqueio
-cair, e diz na mensagem o que conferir no Alpine antes de virar.
+sem a BEAM, 5626,1 MiB com ela). E a desativação deixou de valer só no
+catálogo, em dois passos: o #364 pôs
+`tests/Unit/Judge/CatalogoBeamDesativadaTest.php` para reprovar na suíte
+rápida se as duas linhas virarem `true`, e o #369 trocou o roteiro escrito em
+comentário por **comparação de versão** em
+`ReativarABeamExigeOtpCorrigidaTest` — no dia em que alguém religar, ele exige
+que os três Dockerfiles fixem uma OTP `>= 29.1` e nomeia cada um que não fixa,
+com um controle positivo que o impede de ficar verde por estar vazio.
 
 ## Ajudas que nós mesmos escrevemos
 
@@ -399,6 +422,8 @@ organizador atualizado junto.
 | Declarações de licença passaram a ter de concordar | #362 (#266) | — |
 | `ob_flush()` do event feed | #363 (#252) | — |
 | Desativação da BEAM deixou de valer só no catálogo | #364 (#339) | O `ToolchainVersionsMatchCatalogTest` ainda exercitava o `erl` porque a tabela dele era escrita à mão e não filtrada pelo catálogo. Custo da BEAM agora guardado por teste. |
+| Existe um `erlang29` no Alpine, e ele não serve | #369 (#339) | **Corrigiu uma afirmação que esta revisão também tinha errado**: o `erlang29` existe, no `edge/testing`, em `29.0.6-r0` — anterior à `29.1`. O critério de reativação deixou de ser prosa e virou comparação de versão. |
+| Prometer uma versão e rodar outra reprova na suíte rápida | #367 (#305) | — |
 | Perfis de toolchain | #365 (#306) | O custo de cada recorte virou número medido. Corrigiu o "~1,0 GB" da #306: o catálogo ativo manda instalar 5,5 GiB só de `apk`. |
 | O portão da imagem da aplicação perdeu a exceção nomeada | #366 (#355) | O job `app-image` deixou de ter caso especial no filtro de caminhos. |
 | .NET 10 LTS ao lado do 8 | #358 (#305) | **A 49ª entrada ativa**, `cs_dotnet10`. Dois invocadores novos (`csharp-net8`, `csharp-net10`), porque dois comandos começando em `dotnet` não permitiriam distinguir uma máquina com só um SDK. E `+601,9 MiB` no `completo`. |
