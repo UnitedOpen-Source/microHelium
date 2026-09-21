@@ -11,8 +11,8 @@ mudaram estão marcados na seção *O que mudou desde 20/09*.
 > `app/Models/Language.php` ou um dos três Dockerfiles muda, e de 19 a
 > 21/09/2026 isso aconteceu **oito vezes** (PRs #336, #344, #345, #346, #351,
 > #353, #360 e #364 — contado por `git log` sobre esses quatro arquivos, e não
-> de memória). Um corpo de issue não pode ser
-> guardado por teste; um arquivo pode. Quem guarda este é
+> de memória). Um corpo de issue não pode ser guardado por teste; um arquivo
+> pode. Quem guarda este é
 > `tests/Unit/Judge/InventarioDeRuntimeTest.php`, e ele reprova quando o
 > repositório e este texto discordam. A #309, ao contrário, descreve estado
 > de repositório **de terceiro**, que nenhum teste daqui pode conferir — e
