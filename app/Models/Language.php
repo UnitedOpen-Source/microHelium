@@ -282,7 +282,49 @@ class Language extends Model
             // 279 MB passam, e o ramo do pico de RSS responde `MLE` antes.
             // A correcao de orcamento e a correcao de veredito sao a mesma
             // linha, e nao duas.
-            ['name' => 'PHP 8.3', 'extension' => 'php', 'file_ext' => 'php', 'compile_command' => 'php -l {source}', 'run_command' => 'php -d memory_limit={memory}M {source}', 'is_active' => true, 'category' => 'interpreted'],
+            //
+            // Issue #356 -- `-d opcache.enable_cli=0` porque o php.ini da
+            // APLICACAO chegava ao interpretador da SUBMISSAO.
+            //
+            // O Dockerfile da aplicacao instala `docker/php/opcache.ini` em
+            // `/usr/local/etc/php/conf.d/`, e ali ele vale para TODA SAPI:
+            // `opcache.enable_cli=1` com `opcache.memory_consumption=256`.
+            // O sandbox monta `/usr` read-only (`autojudge.sandbox_paths`),
+            // entao esse conf.d entra no bwrap junto com o binario, e o
+            // `php` que roda o codigo da equipe mapeia 256 MB de memoria
+            // compartilhada ANTES da primeira linha do programa.
+            //
+            // Onde nao ha cgroup v2 delegado -- que e o caminho da FILA,
+            // porque `docker/php/entrypoint.sh` nao delega e o contêiner da
+            // aplicacao serve HTTP --, `addressSpaceLimitKbFor()` aplica
+            // `ulimit -v` de limite+64 MB. Num problema de 256 MB sao
+            // 320 MB de espaco de enderecamento, dos quais o opcache ja
+            // levou 256: sobram ~44 MB para a equipe.
+            //
+            // Medido na imagem da aplicacao (`Dockerfile`), com
+            // `--privileged`, mesmo commit e mesma montagem:
+            //
+            //     antes  160 MB num problema de 256 MB -> RE
+            //            "mmap() failed: [12] Out of memory"
+            //     antes  programa que estoura           -> RE (pico 10 MB,
+            //            morre no mmap antes de o pico de RSS decidir)
+            //     depois 160 MB num problema de 256 MB -> AC
+            //     depois programa que estoura           -> MLE
+            //
+            // O JIT nao entra na conta: `opcache.jit_buffer_size=256M` esta
+            // no mesmo arquivo, mas a imagem tambem instala o pcov, que
+            // sobrescreve `zend_execute_ex()`, e o PHP responde "JIT is
+            // incompatible with third party extensions [...] JIT disabled"
+            // e nao reserva o buffer. Era o que deixava um `a+b` passar e
+            // so os dois casos de memoria reprovarem.
+            //
+            // Desligar aqui, e nao no arquivo `.ini`, porque a chave existe
+            // para o `queue:work` da APLICACAO, que e um processo longo e
+            // se beneficia dela. Quem nao pode herda-la e o processo de UMA
+            // submissao. E vale para qualquer operador: um `php.ini` de
+            // terceiro com opcache grande quebraria este juiz do mesmo
+            // jeito, e o catalogo viaja com o sistema.
+            ['name' => 'PHP 8.3', 'extension' => 'php', 'file_ext' => 'php', 'compile_command' => 'php -l {source}', 'run_command' => 'php -d opcache.enable_cli=0 -d memory_limit={memory}M {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Ruby 3.4', 'extension' => 'rb', 'file_ext' => 'rb', 'compile_command' => 'ruby -c {source}', 'run_command' => 'ruby {source}', 'is_active' => true, 'category' => 'interpreted'],
             ['name' => 'Perl 5', 'extension' => 'perl', 'file_ext' => 'pl', 'compile_command' => 'perl -c {source}', 'run_command' => 'perl {source}', 'is_active' => true, 'category' => 'interpreted'],
             // Issue #305 -- `lua` e `luac` NAO existem no Alpine. O pacote

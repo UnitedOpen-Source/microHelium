@@ -11,6 +11,7 @@ use App\Models\Run;
 use App\Models\Site;
 use App\Models\TestCase as ProblemTestCase;
 use App\Services\AutoJudgeService;
+use App\Services\CgroupMemoryLimiter;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -181,6 +182,53 @@ class LanguageVerdictFidelityTest extends TestCase
             (bool) $run->answer?->is_accepted,
             "um programa PHP que usa 160 MB num problema de 256 MB recebeu '{$run->answer?->short_name}'.\n"
             ."Isso e o teto de 128 MB do interpretador, e nao o limite do problema.\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+    }
+
+    /**
+     * Issue #356 -- o mesmo programa, pelo caminho da FILA.
+     *
+     * O teste acima roda com o cgroup que a imagem do juiz delega, e ali
+     * `addressSpaceLimitKbFor()` devolve `null`: nenhum `ulimit -v` e
+     * aplicado e a tabela `memory_grace_mb` fica inerte. O caminho da fila
+     * -- `docker-compose.yml` roda a imagem da aplicacao nos servicos
+     * `queue` e `scheduler`, e `docker/php/entrypoint.sh` nao delega cgroup
+     * nenhum, porque esse contêiner serve HTTP -- e o outro: la o `ulimit
+     * -v` de `limite + folga` e a unica barreira, e era ele que matava o
+     * PHP no `mmap` antes do programa rodar.
+     *
+     * Forcar o cgroup para fora e o que faz este caso medir alguma coisa;
+     * a receita e a mesma de
+     * `JudgeSandboxPerLanguageTest::test_sem_cgroup_...`, que faz isso para
+     * um `a+b` de cada linguagem. O que faltava era um programa que USA o
+     * orcamento do problema -- um `a+b` passa com a barreira errada.
+     */
+    public function test_o_limite_de_memoria_do_problema_chega_ao_php_tambem_sem_cgroup_delegado()
+    {
+        config(['autojudge.cgroup_root' => sys_get_temp_dir().'/mh-356-sem-cgroup-'.getmypid()]);
+        app()->forgetInstance(CgroupMemoryLimiter::class);
+        app()->forgetInstance(AutoJudgeService::class);
+
+        $this->assertFalse(
+            app(CgroupMemoryLimiter::class)->isAvailable(),
+            'o cgroup continua disponivel, entao o ulimit -v nem sera aplicado e este caso nao mede nada'
+        );
+
+        $fonte = "<?php\n"
+            ."fscanf(STDIN, \"%d %d\", \$a, \$b);\n"
+            ."\$blocos = [];\n"
+            ."for (\$i = 0; \$i < 20; \$i++) { \$blocos[] = str_repeat('x', 8 * 1024 * 1024); }\n"
+            ."echo count(\$blocos) === 20 ? \$a + \$b : 0, \"\\n\";\n";
+
+        $run = $this->judgeSolution('php', 'solution.php', $fonte);
+
+        $this->assertTrue(
+            (bool) $run->answer?->is_accepted,
+            "um programa PHP que usa 160 MB num problema de 256 MB recebeu '{$run->answer?->short_name}' "
+            ."numa maquina SEM cgroup delegado -- que e o caminho da fila.\n"
+            ."Ou a barreira de espaco de enderecamento de config/autojudge.php nao cabe o orcamento do\n"
+            ."problema, ou o interpretador esta reservando espaco por causa de um php.ini que nao e dele.\n"
             ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
         );
     }
