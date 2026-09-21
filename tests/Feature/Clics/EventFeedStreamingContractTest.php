@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Clics;
 
+use App\Http\Controllers\Clics\ContestApiController;
 use App\Models\Answer;
 use App\Models\Contest;
 use App\Models\Language;
@@ -10,6 +11,8 @@ use App\Models\Run;
 use App\Models\Site;
 use App\Services\Clics\ContestEventRecorder;
 use Helium\User;
+use ReflectionMethod;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 /**
@@ -24,15 +27,35 @@ use Tests\TestCase;
  *     consumidor e nos guarda a resposta inteira ate o fim;
  *  2. o `ob_flush()`/`flush()` por linha.
  *
- * O (2) continua sem teste automatizado, e isso e uma limitacao real: o
- * teste le o corpo inteiro depois que a resposta fecha, e nessa leitura um
- * feed que so entrega no final e indistinguivel de um que faz streaming. A
- * suite ficaria verde nas duas hipoteses, inclusive naquela em que o
- * resolver trava esperando a primeira linha.
+ * O (2) JA TEM teste -- e a parte dele que da para provar aqui esta provada.
+ * O cabecalho deste arquivo dizia o contrario, e o que ele dizia era
+ * verdade enquanto a unica forma de medir fosse ler o corpo inteiro depois
+ * que a resposta fecha: nessa leitura um feed que so entrega no final e
+ * mesmo indistinguivel de um que faz streaming. So que essa nao e a unica
+ * forma de medir. Consumindo a `StreamedResponse` por um buffer de saida
+ * SEM `chunk_size` -- o que, por construcao, so entrega quando alguem chama
+ * `ob_flush()` -- a diferenca entre as duas hipoteses vira uma contagem: com
+ * o `ob_flush()` no lugar o corpo chega em N entregas, e sem ele chega em
+ * UMA, depois que o laco ja terminou. Ver
+ * `test_the_first_line_reaches_the_client_before_the_last_one_is_produced`,
+ * que e o unico teste desta suite que OBSERVA essa diferenca -- os outros
+ * oito ficavam verdes com o `ob_flush()` e o `flush()` apagados do
+ * controller, e essa medicao esta na secao 7 do runbook.
  *
- * O que da para fixar daqui e o (1), mais as condicoes de infraestrutura que
- * o anulariam em silencio. Foi assim que este arquivo nasceu: medindo, e nao
- * supondo. A medicao esta em docs/runbooks/252-event-feed-streaming.md.
+ * O que continua exigindo deploy real, e esta registrado na #252 em vez de
+ * fingido aqui:
+ *
+ *  - o `X-Accel-Buffering: no` atravessando o nginx de PRODUCAO (e qualquer
+ *    CDN ou balanceador na frente dele), que nenhum teste de unidade ve;
+ *  - o `flush()` de SAPI, que so tem o que empurrar sob php-fpm: no phpunit
+ *    nao existe camada de saida do servidor para ele esvaziar, entao o que
+ *    esta suite consegue garantir sobre ele e que ele nao SUMIU
+ *    (`test_both_emitters_also_push_the_sapi_buffer`), e nao que ele
+ *    funciona;
+ *  - a cerimonia inteira contra um resolver de verdade.
+ *
+ * Foi assim que este arquivo nasceu: medindo, e nao supondo. A medicao esta
+ * em docs/runbooks/252-event-feed-streaming.md.
  *
  * ## O que a issue #328 acrescentou aqui
  *
@@ -76,6 +99,39 @@ class EventFeedStreamingContractTest extends TestCase
             'no',
             $response->headers->get('X-Accel-Buffering'),
             'sem este cabecalho o nginx guarda a resposta inteira e "streaming" vira "tudo de uma vez no final"'
+        );
+    }
+
+    /**
+     * O cabecalho so significa alguma coisa se a resposta for mesmo um
+     * stream.
+     *
+     * Um `response()->json(...)` com `X-Accel-Buffering: no` passaria no
+     * teste acima e seria uma mentira completa: o corpo ja estaria montado
+     * em memoria, e nao haveria nada para o proxy deixar de bufferizar. E
+     * uma troca plausivel -- "o feed e pequeno, junta tudo e devolve" -- que
+     * hoje nenhuma assercao impede.
+     *
+     * `getContent()` de uma `StreamedResponse` devolve `false` de proposito:
+     * nao existe corpo para ler antes de enviar. E a diferenca, dita pelo
+     * proprio Symfony, entre um feed que se produz enquanto sai e um arquivo
+     * pronto.
+     */
+    public function test_the_feed_is_a_streamed_response_and_not_a_body_built_in_memory(): void
+    {
+        $contest = Contest::factory()->create(['is_public' => true, 'is_active' => true]);
+
+        $response = $this->get("/api/clics/contests/{$contest->id}/event-feed")->assertStatus(200);
+
+        $this->assertInstanceOf(
+            StreamedResponse::class,
+            $response->baseResponse,
+            'o event feed deixou de ser uma StreamedResponse: o corpo passou a ser montado em memoria e entregue no fim'
+        );
+
+        $this->assertFalse(
+            $response->baseResponse->getContent(),
+            'a resposta tem corpo pronto antes de ser enviada, o que e o oposto de streaming'
         );
     }
 
@@ -218,6 +274,137 @@ class EventFeedStreamingContractTest extends TestCase
     }
 
     /**
+     * A prova que faltava (#252): a primeira linha SAI antes de a ultima ser
+     * produzida.
+     *
+     * Este e o teste que distingue as duas hipoteses que a issue chamava de
+     * indistinguiveis. Ele nao le o corpo depois que a resposta fecha; ele
+     * mede QUANDO cada pedaco saiu, e o instrumento e o proprio contrato do
+     * buffer de saida do PHP:
+     *
+     *   `ob_start($cb)` SEM `chunk_size` nunca entrega sozinho. O conteudo
+     *   fica acumulado ate alguem chamar `ob_flush()` -- ou ate o buffer
+     *   fechar, no fim de tudo. Entao:
+     *
+     *     com `ob_flush()` por linha  ->  N entregas, a primeira ANTES de o
+     *                                     laco terminar;
+     *     sem `ob_flush()`            ->  UMA entrega, DEPOIS de o laco
+     *                                     terminar.
+     *
+     * E essa diferenca e observavel de dentro: a callback so cria o envio
+     * quando recebe o primeiro pedaco. Se a entrega so acontecer no fim, o
+     * envio nasce depois de o laco ja ter saido e NAO TEM COMO aparecer no
+     * corpo -- a ordem "emitiu, o cliente recebeu, o mundo mudou, o feed
+     * entregou a mudanca" e o que esta sendo afirmado aqui.
+     *
+     * Por que ele nao repete o teste da #328 acima: aquele consome com
+     * `chunk_size = 1`, e um buffer com `chunk_size = 1` entrega a cada
+     * `echo` POR CONTA PROPRIA, com ou sem `ob_flush()`. Medido: com as duas
+     * chamadas apagadas do controller, os oito testes deste arquivo ficavam
+     * verdes. Este nao fica.
+     *
+     * O que ele NAO prova: que o `flush()` de SAPI empurra a linha para fora
+     * do php-fpm, e que o nginx de producao nao a segura. Ver o cabecalho
+     * deste arquivo e a #252.
+     */
+    public function test_the_first_line_reaches_the_client_before_the_last_one_is_produced(): void
+    {
+        config([
+            'clics.event_feed.poll_ms' => 5,
+            'clics.event_feed.keep_alive_seconds' => 3600,
+            // Teto baixo so para o caso vermelho nao pendurar a suite: no
+            // caso verde quem fecha o feed e o `end_of_updates`.
+            'clics.event_feed.max_seconds' => 5,
+        ]);
+
+        $contest = $this->provaComEquipe();
+
+        $criado = null;
+
+        $pedacos = $this->consumirSemPicotar($contest, function (string $pedaco, int $indice) use ($contest, &$criado) {
+            if ($criado === null) {
+                // Primeira entrega recebida. So AGORA o mundo muda.
+                $criado = $this->submeter($contest);
+
+                return;
+            }
+
+            if ($indice > 0 && str_contains($pedaco, '"submissions"')) {
+                Contest::where('id', $contest->id)->update(['finalized_at' => now()]);
+            }
+        });
+
+        $this->assertNotNull($criado, 'a callback nunca recebeu nada: o feed nao entregou pedaco nenhum');
+
+        $this->assertGreaterThan(
+            1,
+            count($pedacos),
+            'o corpo inteiro chegou numa entrega so, num buffer que so entrega quando alguem chama ob_flush(): '
+                .'o feed esta acumulando tudo e soltando no fim, que e exatamente o que trava o resolver'
+        );
+
+        $marca = '"type":"submissions","id":"'.$criado->id.'"';
+        $corpo = implode('', $pedacos);
+
+        $this->assertStringContainsString(
+            $marca,
+            $corpo,
+            'o envio criado DEPOIS da primeira entrega nao apareceu: a primeira linha nao tinha saido antes de a ultima ser produzida'
+        );
+
+        $indiceDoEnvio = null;
+
+        foreach ($pedacos as $i => $pedaco) {
+            if (str_contains($pedaco, $marca)) {
+                $indiceDoEnvio = $i;
+
+                break;
+            }
+        }
+
+        $this->assertNotNull($indiceDoEnvio);
+        $this->assertGreaterThan(
+            0,
+            $indiceDoEnvio,
+            'o envio saiu na mesma entrega da fotografia: nao houve emissao incremental'
+        );
+    }
+
+    /**
+     * O `flush()` de SAPI: guarda de REGRESSAO, e nao prova de funcionamento.
+     *
+     * Dito com todas as letras porque a confusao entre as duas coisas e o
+     * modo de falha desta casa. `ob_flush()` move a linha do buffer do PHP
+     * para a camada de saida do servidor -- isso o teste acima prova. Quem
+     * empurra dessa camada para o socket e o `flush()`, e sob o SAPI de
+     * linha de comando que roda a suite essa camada nao existe: nao ha
+     * experimento local capaz de ficar vermelho quando so o `flush()` some.
+     *
+     * Entao o que este teste faz e o pouco que e honesto fazer: impedir que
+     * ele desapareca em silencio de um dos dois emissores. Quem prova que
+     * ele funciona e o `curl -N` contra o deploy, na #252 e no runbook.
+     */
+    public function test_both_emitters_also_push_the_sapi_buffer(): void
+    {
+        foreach (['emit', 'emitKeepAlive'] as $metodo) {
+            $fonte = $this->fonteDoMetodo($metodo);
+
+            $this->assertStringContainsString(
+                'ob_flush()',
+                $fonte,
+                "{$metodo}() parou de esvaziar o buffer do PHP"
+            );
+
+            $this->assertMatchesRegularExpression(
+                '/(?<!ob_)@?flush\(\)/',
+                $fonte,
+                "{$metodo}() parou de chamar flush(): sob php-fpm a linha fica na camada de saida do servidor, "
+                    .'e o consumidor so a recebe quando a resposta fechar'
+            );
+        }
+    }
+
+    /**
      * O keep-alive da spec:
      *
      *   "The feed does not terminate under normal circumstances, so to
@@ -348,6 +535,70 @@ class EventFeedStreamingContractTest extends TestCase
         app(ContestEventRecorder::class)->submissionCreated($run->fresh());
 
         return $run->fresh();
+    }
+
+    /**
+     * O corpo de um metodo do controller, como ele esta no arquivo.
+     */
+    private function fonteDoMetodo(string $metodo): string
+    {
+        $reflexao = new ReflectionMethod(ContestApiController::class, $metodo);
+
+        $arquivo = $reflexao->getFileName();
+        $this->assertIsString($arquivo);
+
+        $linhas = file($arquivo);
+        $this->assertIsArray($linhas);
+
+        $inicio = $reflexao->getStartLine();
+        $fim = $reflexao->getEndLine();
+        $this->assertIsInt($inicio);
+        $this->assertIsInt($fim);
+
+        return implode('', array_slice($linhas, $inicio - 1, $fim - $inicio + 1));
+    }
+
+    /**
+     * Consome a resposta aberta como um cliente, mas por um buffer que NAO
+     * entrega sozinho.
+     *
+     * A diferenca para `consumir()` e o `chunk_size` ausente, e ela e o
+     * instrumento inteiro: um buffer com `chunk_size = 1` esvazia a cada
+     * `echo` por conta propria, enquanto um buffer sem `chunk_size` so
+     * esvazia quando o codigo sob teste chama `ob_flush()`. Aqui, cada
+     * entrega recebida e uma chamada de `ob_flush()` que aconteceu de
+     * verdade.
+     *
+     * @param  null|callable(string, int): void  $aoReceber
+     * @return list<string>
+     */
+    private function consumirSemPicotar(Contest $contest, ?callable $aoReceber = null): array
+    {
+        $resposta = $this->get("/api/clics/contests/{$contest->id}/event-feed")->assertStatus(200);
+
+        $pedacos = [];
+
+        ob_start(function (string $pedaco) use (&$pedacos, $aoReceber) {
+            if ($pedaco === '') {
+                return '';
+            }
+
+            $pedacos[] = $pedaco;
+
+            if ($aoReceber !== null) {
+                $aoReceber($pedaco, count($pedacos) - 1);
+            }
+
+            return '';
+        });
+
+        try {
+            $resposta->baseResponse->sendContent();
+        } finally {
+            ob_end_clean();
+        }
+
+        return $pedacos;
     }
 
     /**
