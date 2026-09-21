@@ -4,7 +4,9 @@ namespace App\Services\Judgehost;
 
 use App\Models\Language;
 use App\Support\Judge\ToolchainManifest;
+use App\Support\Judge\ToolchainVersions;
 use Illuminate\Support\Facades\Process;
+use Throwable;
 
 /**
  * Issue #117 -- what this machine can actually run, found out rather than
@@ -50,6 +52,20 @@ class MachineCapabilities
     public function __construct(private readonly ?string $searchPath = null) {}
 
     /**
+     * Issue #303 -- quanto tempo se espera um toolchain dizer a propria
+     * versao antes de desistir dele.
+     */
+    private const VERSION_PROBE_SECONDS = 20;
+
+    /**
+     * Versao ja lida, por comando. Nome proprio, e nao `$probed`: um teste
+     * deste arquivo estende a classe com um `public array $probed`.
+     *
+     * @var array<string, string|null>
+     */
+    private array $versoesLidas = [];
+
+    /**
      * The extensions this machine can run, out of the ones given.
      *
      * Takes models, plain objects, or the decoded arrays the API returns.
@@ -91,6 +107,97 @@ class MachineCapabilities
         }
 
         return $supported;
+    }
+
+    /**
+     * Issue #303 -- a versao de cada toolchain que esta maquina tem.
+     *
+     * A spec do julgamento distribuido promete que a capacidade declarada
+     * "inclui versao de linguagem"; ate aqui ela nao incluia, e dois hosts
+     * de um mesmo parque -- um com GCC 13, outro com GCC 15 -- declaravam
+     * exatamente a mesma capacidade. Numa maratona a versao do compilador e
+     * parte do edital, e um rejulgamento noutra maquina podia dar outro
+     * veredito sem que nada acusasse.
+     *
+     * Tres decisoes que valem mais que o codigo:
+     *
+     * 1. **Sonda, e nao pino do Dockerfile.** Ler `DockerfileToolchain` diria
+     *    o que o NOSSO repositorio manda instalar; o host que importa e o da
+     *    instituicao parceira, que construiu a imagem dela. Ver
+     *    {@see ToolchainVersions}.
+     *
+     * 2. **So para extensoes ja declaradas.** Recebe o resultado de
+     *    `detect()`: sondar versao de toolchain ausente e pagar um
+     *    subprocesso para ouvir "not found".
+     *
+     * 3. **Nunca reduz o que foi declarado.** Versao que nao se conseguiu
+     *    ler simplesmente nao aparece no mapa, e a extensao continua
+     *    declarada do mesmo jeito. A #354 mostrou o custo de uma lista
+     *    PARCIAL de capacidades -- pior que vazia, porque parece correta --
+     *    e por isso a versao e informacao anexa, nunca um segundo portao.
+     *
+     * O custo e real e por isso e memoizado por processo: `kotlinc -version`
+     * e `scalac -version` sobem uma JVM, e o agente re-registra a cada falha
+     * de transporte. Os toolchains de uma maquina nao mudam enquanto o
+     * processo vive -- e exatamente o contrato que `detect()` ja documenta
+     * ("corrects itself by restarting its agent") -- entao a segunda
+     * pergunta e respondida do cache.
+     *
+     * @param  list<string>  $extensions
+     * @return array<string, string>
+     */
+    public function versionsOf(array $extensions): array
+    {
+        $versions = [];
+
+        foreach ($extensions as $extension) {
+            $command = ToolchainVersions::commandFor($extension);
+
+            if ($command === null) {
+                continue;
+            }
+
+            $version = $this->probeVersion($command);
+
+            if ($version !== null) {
+                $versions[$extension] = $version;
+            }
+        }
+
+        return $versions;
+    }
+
+    /**
+     * O texto que um comando de identificacao imprime, lido uma vez por
+     * processo e por comando.
+     *
+     * Um timeout curto de proposito: a sonda roda no register, e o register
+     * e o que devolve os runs que esta maquina estava segurando. Um toolchain
+     * que trava a responder `--version` nao pode atrasar isso -- ele perde a
+     * versao, nao a vaga.
+     */
+    private function probeVersion(string $command): ?string
+    {
+        if (array_key_exists($command, $this->versoesLidas)) {
+            return $this->versoesLidas[$command];
+        }
+
+        $pendente = Process::timeout(self::VERSION_PROBE_SECONDS);
+
+        // Mesmo motivo do `exists()`: PATH injetado vai EXPLICITO para o
+        // processo filho, porque `putenv` nao vale nas duas
+        // `variables_order` -- ver o comentario do construtor.
+        if ($this->searchPath !== null) {
+            $pendente = $pendente->env(['PATH' => $this->searchPath]);
+        }
+
+        try {
+            $saida = trim($pendente->run(['sh', '-c', $command.' 2>&1'])->output());
+        } catch (Throwable $e) {
+            $saida = '';
+        }
+
+        return $this->versoesLidas[$command] = ToolchainVersions::extract($saida);
     }
 
     /**
