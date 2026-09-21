@@ -248,8 +248,8 @@ A imagem **instala** a BEAM e o catálogo **não a oferece**.
 
 | Pacote instalado | Versão medida | Entrada | Estado |
 |---|---|---|---|
-| `erlang27` | `27.3.4.17-r0` — `erl` reporta OTP 27, erts 15.2.7.13 | `erl` | `is_active => false` (#339) |
-| `elixir` | `1.19.6-r0` — Elixir 1.19.6 sobre OTP 27 | `ex` | `is_active => false` (#339) |
+| `erlang27` | `27.3.4.17-r0` — medido: `erlang:system_info/1` responde erts **15.2.7.13**, OTP **27** | `erl` | `is_active => false` (#339) |
+| `elixir` | `1.19.6-r0` — medido: `Elixir 1.19.6 (compiled with Erlang/OTP 27)` | `ex` | `is_active => false` (#339) |
 
 **Por quê.** A BEAM não sobe de forma confiável em `x86_64`:
 `sys_signal_stack.c:101:sys_sigaltstack(): Internal error: Failed to set
@@ -344,7 +344,10 @@ erro de compilação, TLE, MLE, código de saída, ponto decimal, entrada grande
 recursão profunda, tempo de partida, stderr separado e caminho sem cgroup
 delegado — contra **todas as 48 entradas ativas**, dentro da imagem.
 
-Resultado de hoje: **nenhum `DEFEITO_CONHECIDO`**, e **oito
+O que a tabela fixa hoje — **lido do provedor de dados da suíte, não de uma
+execução local** (numa máquina sem delegação de cgroup os itens de memória se
+pulam; quem a executa é o job `judge-image` do CI, com `--fail-on-skipped`):
+**nenhum `DEFEITO_CONHECIDO`**, e **oito
 `LIMITE_DA_LINGUAGEM`**, todos no item de recursão de 10⁴ níveis: `sh`,
 `tcl`, `r`, `clj`, `lisp_clisp`, `groovy`, `nim` e `portugol_studio`. Seis
 vieram da #327; **`clj` e `portugol_studio` vieram desta suíte** — a tabela
