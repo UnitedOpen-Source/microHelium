@@ -1,17 +1,21 @@
 # Homologação do streaming do event feed (issue #252)
 
 O resolver só funciona se receber a **primeira linha** do feed enquanto a prova
-acontece. Um feed que entrega tudo no fim passa em toda a suíte e trava o
-resolver, porque o teste lê o corpo inteiro **depois** que a resposta fecha —
-e nessa leitura as duas hipóteses são indistinguíveis.
+acontece. Um feed que entrega tudo no fim travaria o resolver, e passava em
+toda a suíte: o teste lia o corpo inteiro **depois** que a resposta fecha, e
+nessa leitura as duas hipóteses eram indistinguíveis.
+
+**Não são mais** — a seção 7 mostra como a diferença virou uma contagem
+observável dentro do phpunit, sem proxy e sem deploy. O que continua exigindo
+máquina de verdade ficou menor e está na seção 3.
 
 Este documento é o que fecha essa lacuna: o que já está garantido por teste, o
 que foi medido, e o que só uma máquina de verdade responde.
 
 ## 1. O que já tem guarda automatizada
 
-`tests/Feature/Clics/EventFeedStreamingContractTest.php` fixa quatro coisas, e
-cada uma foi verificada por mutação:
+`tests/Feature/Clics/EventFeedStreamingContractTest.php` fixa o que segue, e
+cada guarda foi verificada por mutação (as do lado PHP estão na seção 7):
 
 | guarda | o que a quebraria |
 |---|---|
@@ -147,3 +151,56 @@ o que homologar.
 
 Ao rodar, registre na #252 a versão do resolver e o `since_token` de onde ele
 retomou.
+
+## 7. O `ob_flush()` deixa de ser indistinguível (20/09/2026)
+
+A issue dizia que o `flush()` por linha **não tinha como** ser testado aqui,
+porque o teste lê o corpo depois que a resposta fecha. A premissa é verdadeira
+e a conclusão não: ler o corpo no fim não é a única forma de medir.
+
+O instrumento é o próprio contrato do buffer de saída do PHP. `ob_start($cb)`
+**sem `chunk_size`** nunca entrega sozinho — o conteúdo fica acumulado até
+alguém chamar `ob_flush()`, ou até o buffer fechar, no fim de tudo. Consumindo
+a `StreamedResponse` por um buffer desses, a diferença entre as duas hipóteses
+vira uma contagem:
+
+| hipótese | entregas que a callback recebe | quando a primeira chega |
+|---|---|---|
+| `ob_flush()` por linha (o código de hoje) | N, uma por `echo` | antes de o laço terminar |
+| sem `ob_flush()` | **1** | depois de o laço terminar |
+
+E a diferença é observável de dentro: a callback só cria um envio novo quando
+recebe o **primeiro** pedaço. Se a entrega só acontecesse no fim, esse envio
+nasceria depois de o laço já ter saído e não teria como aparecer no corpo. A
+afirmação que o teste faz é a ordem inteira — *emitiu, o cliente recebeu, o
+mundo mudou, a mesma resposta aberta entregou a mudança*.
+
+Isso é `test_the_first_line_reaches_the_client_before_the_last_one_is_produced`.
+
+Por que ele não repete o teste da #328: aquele consome com `chunk_size = 1`, e
+um buffer com `chunk_size = 1` entrega a cada `echo` **por conta própria**.
+Medido: com `ob_flush()` e `flush()` apagados do controller, os oito testes
+que existiam neste arquivo ficavam **todos verdes**. Era verde contra mecanismo
+que não podia funcionar, de novo.
+
+### Mutações, e o que cada uma faz ficar vermelho
+
+| mutação no controller | resultado |
+|---|---|
+| apagar `ob_flush()` **e** `flush()` | `test_the_first_line_reaches_the_client_before_the_last_one_is_produced` — *Failed asserting that 1 is greater than 1* |
+| apagar só o `ob_flush()` | o mesmo teste, a mesma falha |
+| apagar só o `flush()` | `test_both_emitters_also_push_the_sapi_buffer` |
+| remover `X-Accel-Buffering: no` | `test_the_feed_tells_the_proxy_not_to_buffer_it` |
+| trocar a `StreamedResponse` por um corpo montado em memória | `test_the_feed_is_a_streamed_response_and_not_a_body_built_in_memory` |
+
+### O que este teste NÃO prova, dito de propósito
+
+- **O `flush()` de SAPI.** `ob_flush()` move a linha do buffer do PHP para a
+  camada de saída do servidor; quem empurra dali para o socket é o `flush()`.
+  Sob o SAPI de linha de comando que roda a suíte, essa camada não existe —
+  não há experimento local capaz de ficar vermelho quando só o `flush()` some.
+  O que a suíte garante sobre ele é que ele **não sumiu**
+  (`test_both_emitters_also_push_the_sapi_buffer`), e isso é guarda de
+  regressão, não prova de funcionamento. Quem prova é a seção 3.
+- **O nginx de produção.** Continua inteiro na seção 3.
+
