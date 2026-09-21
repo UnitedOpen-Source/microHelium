@@ -409,7 +409,7 @@ jobs:
           chmod -R a+rwX storage bootstrap/cache
           chmod a+rwX .
 
-      # O ESCOPO, e o que fica de fora.
+      # O ESCOPO.
       #
       # Roda o criterio de regressao que a #355 escreve: a suite
       # multi-linguagem contra a imagem da aplicacao. Sao os dois arquivos que
@@ -420,28 +420,24 @@ jobs:
       # acrescenta ao que o job do backend ja cobre e o julgamento, e cada
       # corrida daqui paga uma construcao de ~2,2 GB.
       #
-      # DOIS TESTES FICAM DE FORA, nomeados no --exclude-filter:
+      # Do que o filtro seleciona, nada fica de fora. Ate a #356 fechar, dois
+      # testes de memoria do PHP estavam nomeados num --exclude-filter e
+      # rodavam a parte, sem poder reprovar o job:
+      # docker/php/opcache.ini entrava no sandbox junto com o binario
+      # (autojudge.sandbox_paths monta /usr) e os 256 MB do opcache saiam do
+      # orcamento da submissao, entao um programa PHP correto recebia RE. O
+      # #360 fechou a #356 desligando o opcache no run_command do catalogo, e
+      # a exclusao sai junto: portao com excecao nomeada e portao que
+      # envelhece calado -- foi exatamente assim que a #302 e a #352 passaram.
       #
-      #   LanguageVerdictFidelityTest::test_o_limite_de_memoria_do_problema_chega_ao_php
-      #   LanguageVerdictFidelityTest::test_php_que_estoura_a_memoria_recebe_mle_e_nao_re
-      #
-      # Eles nao estao fora por serem chatos: estao fora porque ESTE job
-      # nasceria vermelho com eles, e a causa e a issue #356, que nao e coisa
-      # que um arquivo de CI conserte. Medido com estas mesmas flags, neste
-      # commit: 69 testes, 2 falhas, 0 pulados -- e as duas falhas sao estas.
-      # docker/php/entrypoint.sh nao delega subtree de cgroup v2 (o
-      # docker/judge/entrypoint.sh delega), o teto de memoria cai no
-      # `ulimit -v` e um programa PHP DENTRO do orcamento do problema recebe
-      # RE. Sem elas: 67 testes, 245 assercoes, 0 pulados, ~50 s.
-      #
-      # Fechar a #356 e o que falta para trazer os dois de volta; o passo
-      # informativo logo abaixo avisa no dia em que isso acontecer.
+      # Medido na imagem da aplicacao construida deste Dockerfile, com o
+      # workspace montado, neste commit: 70 testes, 250 assercoes, 0 pulados.
       #
       # --privileged e os dois --security-opt sao os mesmos do job do juiz, de
       # proposito: assim a UNICA variavel entre os dois jobs e a imagem. Isso
       # nao afirma que a fila roda privilegiada -- o servico `queue` do
       # docker-compose.yml nao e privilegiado --; quem precisa de privilegio
-      # aqui e o bwrap do runner. Medido sem --privileged nesta maquina: os 67
+      # aqui e o bwrap do runner. Medido sem --privileged nesta maquina: os
       # testes se pulam com "bubblewrap cannot create a sandbox here".
       #
       # --fail-on-skipped pelo mesmo motivo do job do juiz: sem ele, uma
@@ -456,32 +452,7 @@ jobs:
             microhelium-app:ci \
             ./vendor/bin/phpunit --no-coverage --fail-on-skipped \
               --testsuite E2E \
-              --filter 'MultiLanguageJudging|LanguageVerdictFidelity' \
-              --exclude-filter 'o_limite_de_memoria_do_problema_chega_ao_php|php_que_estoura_a_memoria_recebe_mle_e_nao_re'
-
-      # Os dois testes que o passo acima exclui, rodados a parte e sem poder
-      # reprovar o job. Nao e um `|| true` mudo: o passo IMPRIME o resultado
-      # dos dois nos dois casos. Enquanto a #356 estiver aberta eles falham e
-      # o log mostra a falha em vez de escondê-la; no dia em que passarem, o
-      # aviso abaixo e o lembrete de apagar o --exclude-filter e traze-los
-      # para dentro do portao -- que e o unico jeito de a exclusao nao virar
-      # permanente por esquecimento.
-      - name: Fora do portão por causa da #356 (informativo)
-        run: |
-          if docker run --rm --privileged \
-              --security-opt apparmor=unconfined \
-              --security-opt seccomp=unconfined \
-              -v "$PWD":/var/www/html \
-              -w /var/www/html \
-              microhelium-app:ci \
-              ./vendor/bin/phpunit --no-coverage \
-                --testsuite E2E \
-                --filter 'o_limite_de_memoria_do_problema_chega_ao_php|php_que_estoura_a_memoria_recebe_mle_e_nao_re'
-          then
-            echo "::warning::Os dois testes de memoria do PHP PASSARAM na imagem da aplicacao: a #356 parece resolvida. Remova o --exclude-filter do passo anterior para que o portao volte a cobri-los."
-          else
-            echo "Falharam, como a #356 descreve -- o veredito de memoria do PHP diverge entre o juiz e a fila. O portao acima segue sem eles ate a #356 fechar."
-          fi
+              --filter 'MultiLanguageJudging|LanguageVerdictFidelity'
 
   frontend:
     name: Frontend
