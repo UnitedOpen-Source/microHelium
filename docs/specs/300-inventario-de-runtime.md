@@ -10,12 +10,14 @@ mudaram estão marcados na seção *O que mudou desde 20/09*.
 > O conteúdo desta página é **derivado do repositório** — contagem de
 > linguagens, pinos de versão, procedência. Ele apodrece no minuto em que
 > `app/Models/Language.php` ou um dos três Dockerfiles muda, e de 19 a
-> 21/09/2026 isso aconteceu **nove vezes** (PRs #336, #344, #345, #346, #351,
-> #353, #358, #360 e #364 — contado por `git log` sobre esses quatro arquivos,
-> e não de memória). A nona foi descoberta **pelo guard deste arquivo**: o
-> #358 entrou enquanto esta revisão era escrita, e o CI reprovou com *"a
-> entrada ativa `cs_dotnet10` não está citada no inventário"*. É o mecanismo
-> funcionando na primeira oportunidade que teve.
+> 21/09/2026 isso aconteceu **onze vezes** (PRs #336, #344, #345, #346, #351,
+> #353, #358, #360, #364, #367 e #369 — contado por `git log` sobre esses
+> quatro arquivos, e não de memória). **Três delas entraram enquanto esta
+> revisão era escrita**, e as três foram apanhadas por mecanismo e não por
+> atenção: o #358 fez o CI reprovar com *"a entrada ativa `cs_dotnet10` não
+> está citada no inventário"* e mais quatro asserções; o #367 e o #369
+> chegaram no rebase seguinte, e o #369 ainda corrigiu uma medição deste texto
+> que tinha consultado o repositório errado do Alpine.
 >
 > Um corpo de issue não pode ser guardado por teste; um arquivo
 > pode. Quem guarda este é
