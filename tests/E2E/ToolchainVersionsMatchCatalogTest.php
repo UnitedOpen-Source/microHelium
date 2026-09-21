@@ -42,7 +42,14 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
      * cobertura no fim da classe, que falha se alguem prometer uma versao
      * nova sem dizer como conferi-la.
      *
-     * @return array<string, array{0: string, 1: string, 2: string}>
+     * O quarto campo e o rotulo do catalogo COPIADO. Copia nao conferida
+     * envelhece, e envelhecida ela deixa este teste verde conferindo a
+     * versao que o catalogo ja nao promete -- por isso
+     * tests/Unit/Judge/PromessaDeVersaoTest.php exige, na suite de todo PR,
+     * que ele continue sendo o `name` da entrada e que o `promised` seja
+     * coerente com o numero desse rotulo.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
      */
     public static function versionedLanguages(): array
     {

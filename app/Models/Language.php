@@ -77,6 +77,20 @@ class Language extends Model
             //
             // `java17` segue INATIVA porque o `openjdk17-jdk` nao esta
             // instalado; a diferenca e que agora ela falha em vez de mentir.
+            // O pacote EXISTE no Alpine 3.24 (`openjdk17-jdk-17.0.20_p8-r0`,
+            // reconferido em 21/09/2026), entao liga-la e um `apk add` nas
+            // TRES imagens -- mais ~326 MiB medidos na #305 -- e as linhas
+            // que toda linguagem ligada precisa ter: procedencia no
+            // ToolchainManifest, identificador em ClicsLanguageIdentifiers,
+            // `memory_grace_mb` em config/autojudge.php, fixture em
+            // MultiLanguageJudgingTest e linha em LanguageConformanceTest.
+            // O que falta nao e o pacote: e a medicao dentro da imagem que
+            // essas duas ultimas exigem.
+            //
+            // E o caminho absoluto de cada uma e guardado por
+            // tests/Unit/Judge/PromessaDeVersaoTest.php: apontar `java17`
+            // para `java-21-openjdk` reprova na suite de todo PR, sem
+            // precisar de JDK instalado.
             ['name' => 'Java (OpenJDK 25 LTS)', 'extension' => 'java25', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-25-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-25-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Java (OpenJDK 21 LTS)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-21-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => false, 'category' => 'compiled'],
@@ -98,10 +112,10 @@ class Language extends Model
             ['name' => 'Python 3 (PyPy)', 'extension' => 'pypy3', 'file_ext' => 'py', 'compile_command' => 'pypy3 -m py_compile {source}', 'run_command' => 'pypy3 {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Python 2.7', 'extension' => 'py2', 'file_ext' => 'py', 'compile_command' => 'python2 -m py_compile {source}', 'run_command' => 'python2 {source}', 'is_active' => false, 'category' => 'interpreted'],
 
-            // JavaScript / Node.js -- the container only installs a single
-            // Node runtime (the current LTS, via Alpine's `nodejs` package),
-            // so only one Node entry is real; the others are kept in the
-            // catalog for a future multi-version (nvm-based) setup.
+            // JavaScript / Node.js -- a imagem instala UM unico Node (a LTS
+            // corrente, pelo pacote `nodejs` do Alpine), entao so uma destas
+            // entradas e real; as outras duas ficam no catalogo como a
+            // promessa que a #305 quer cumprir, e nao como oferta.
             //
             // Issue #303 -- a razao escrita aqui antes estava ERRADA, e a
             // medicao a desmentiu. Dizia que seleciona-las hoje "would
@@ -110,10 +124,30 @@ class Language extends Model
             // silencio. Isso e pior do que falhar, e e exatamente o motivo
             // de as entradas de Java acima terem passado a caminho absoluto.
             //
-            // Node nao tem a mesma saida: o Alpine publica um unico pacote
-            // `nodejs`, sem prefixo por versao. Enquanto nao houver
-            // instalacao paralela, estas continuam inativas -- agora pelo
-            // motivo certo, e nao por um que a medicao derrubou.
+            // Node NAO TEM a mesma saida, e o motivo e mais forte do que
+            // "o Alpine nao publica um pacote por versao". Medido em
+            // 21/09/2026 numa `php:8.3-cli-alpine` (Alpine 3.24.2, aarch64):
+            //
+            //   apk search -x nodejs nodejs-current
+            //     -> nodejs-24.18.1-r0
+            //        nodejs-current-26.5.1-r0     (nao ha nodejs20/nodejs22)
+            //   apk info --provides nodejs-current
+            //     -> nodejs
+            //        cmd:node=26.5.1-r0
+            //   apk add --simulate nodejs nodejs-current
+            //     -> (6/6) Installing nodejs-current (26.5.1-r0)   [so um]
+            //
+            // O Alpine modela o Node como um unico PROVEDOR de `cmd:node`:
+            // pedir os dois instala um, e o outro some sem erro. Ou seja, a
+            // mesma falha silenciosa da #305, uma camada abaixo. Node lado a
+            // lado e Lote D (artefato de fora do Alpine, fixado por versao e
+            // por hash, como Kotlin/Scala/Dart ja sao) -- nao e `apk add`.
+            //
+            // Enquanto isso, o que impede a armadilha de ser armada de novo
+            // e tests/Unit/Judge/PromessaDeVersaoTest.php: ligar `js_node20`
+            // ou `js_node22` ao lado do `js_node24` sem antes dar a cada um
+            // um comando que distinga a versao reprova na suite de todo PR.
+            //
             // Issue #327 -- o `node` passa por
             // `resources/judge-runtime/node/run.sh`, que acrescenta um
             // `--stack-size` DERIVADO do `ulimit -s` do host. Uma recursao
