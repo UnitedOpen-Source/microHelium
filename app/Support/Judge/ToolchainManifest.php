@@ -342,12 +342,19 @@ final class ToolchainManifest
      * As chaves do manifesto que um comando usa: o executavel com que ele
      * comeca, mais os scripts de `{judge_runtime}` que ele cita.
      *
-     * A regra do executavel e a mesma do roteamento por capacidade
-     * (MachineCapabilities): pula prefixos `VAR=valor` e fica no primeiro
-     * token de verdade. Com uma diferenca deliberada -- aqui um token que
-     * CONTEM `{` e descartado em qualquer posicao, e nao so no comeco, para
-     * que `./{executable}` (o binario que a propria compilacao acabou de
-     * produzir) nao seja lido como um programa a instalar.
+     * A regra do executavel e UMA so, e mora aqui: pula prefixos
+     * `VAR=valor`, e um token que CONTEM `{` em qualquer posicao encerra a
+     * leitura, para que `./{executable}` (o binario que a propria
+     * compilacao acabou de produzir) nao seja lido como um programa.
+     *
+     * Ela nasceu como uma "diferenca deliberada" em relacao ao roteamento
+     * por capacidade (MachineCapabilities), que descartava apenas o token
+     * COMECADO por `{`. A #354 mostrou que a diferenca nao era uma escolha:
+     * era o defeito. `./{executable}` comeca com ponto, entao a sonda ia
+     * procurar o molde, falhava, e as 22 linguagens compiladas sumiam da
+     * lista declarada -- um judgehost remoto recusava C, C++, Rust e Go.
+     * Desde entao o `MachineCapabilities` delega para ca, porque duas
+     * copias da regra foi exatamente como elas passaram a discordar.
      *
      * @return list<string>
      */

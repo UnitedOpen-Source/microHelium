@@ -30,6 +30,22 @@
 # two judging paths with different postures. Closing it properly means
 # deciding whether judging should happen in the queue container at all,
 # which is a larger change than making the uid safe.
+#
+# Issue #356 -- and it is not free, so it has a price that has to be paid
+# somewhere. With no cgroup, AutoJudgeService applies `ulimit -v` of
+# `problem limit + memory_grace_mb` instead, and that barrier caps the
+# ADDRESS SPACE of the whole interpreter, not the memory the submission
+# touches. So anything this image makes the interpreter reserve at startup
+# is taken straight out of the contestant's budget: opcache.ini sets
+# `opcache.enable_cli=1` with `opcache.memory_consumption=256`, and
+# /usr/local/etc/php/conf.d rides into the sandbox with the binary
+# (autojudge.sandbox_paths binds /usr), which left ~44 MB of a 256 MB
+# problem for a PHP submission -- measured as `RE` with "mmap() failed:
+# [12] Out of memory" on a CORRECT program. The catalog's PHP run_command
+# now turns opcache off for the submission, and
+# tests/Unit/Judge/PhpDaSubmissaoNaoHerdaOIniDaAplicacaoTest.php is what
+# keeps the arithmetic honest when either file changes. Whatever is added
+# to these .ini files answers to that test.
 
 set -u
 
