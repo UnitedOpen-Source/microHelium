@@ -109,6 +109,29 @@ final class ToolchainManifest
             'racket' => [ToolchainRequirement::apk('racket')],
 
             // ---------------------------------------------------------
+            // BEAM -- declarada mesmo com `erl` e `ex` DESLIGADAS (#339)
+            // ---------------------------------------------------------
+            // Este arquivo responde "de onde sai este programa", e nao "esta
+            // linguagem esta ligada": quem responde a segunda e o `is_active`
+            // do catalogo, e o teste de paridade so percorre as ligadas. As
+            // tres imagens instalam `elixir` e `erlang27` hoje (+86 MiB por
+            // imagem, medido no comentario do Dockerfile.judge), entao a
+            // procedencia existe de fato -- omiti-la era o unico lugar em que
+            // a desativacao da #339 tinha resvalado para dentro do manifesto.
+            //
+            // A diferenca e pratica, e foi medida antes de escrever isto: sem
+            // estas tres linhas, religar `erl`/`ex` reprovava tres casos da
+            // paridade dizendo "o manifesto nao exige nada para esta
+            // linguagem, o que so pode ser engano" e "declare a procedencia".
+            // Vermelho que manda a proxima pessoa ACRESCENTAR estas linhas e
+            // seguir reativando -- ou seja, um guard que aponta para o reparo
+            // errado. Quem tem de reprovar ali, com o motivo certo, e
+            // tests/Unit/Judge/CatalogoBeamDesativadaTest.php.
+            'erlc' => [ToolchainRequirement::apk('erlang27')],
+            'erl' => [ToolchainRequirement::apk('erlang27')],
+            'elixir' => [ToolchainRequirement::apk('elixir')],
+
+            // ---------------------------------------------------------
             // Compilados do Alpine
             // ---------------------------------------------------------
             'rustc' => [ToolchainRequirement::apk('rust')],

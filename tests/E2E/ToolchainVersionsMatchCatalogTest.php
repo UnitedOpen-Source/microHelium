@@ -31,9 +31,12 @@ use Tests\TestCase;
 class ToolchainVersionsMatchCatalogTest extends TestCase
 {
     /**
-     * Para cada entrada `is_active` cujo nome promete um numero de versao:
+     * Para cada entrada do catalogo cujo nome promete um numero de versao:
      * o comando que o proprio toolchain usa para se identificar, e o prefixo
      * de versao que o rotulo promete.
+     *
+     * Esta tabela e a RECEITA e inclui linguagem desligada; quem escolhe o
+     * que roda e `activeVersionedLanguages()`.
      *
      * Uma linguagem ativa que NAO aparece aqui e coberta pelo teste de
      * cobertura no fim da classe, que falha se alguem prometer uma versao
@@ -78,6 +81,12 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             // confere uma coisa e a submissao roda outra.
             'clj' => ['clj', 'clojure-run -e "(println (clojure-version))"', '1.12', 'Clojure 1.12'],
             'r' => ['r', 'Rscript --vanilla -e "cat(R.version.string)"', '4.6', 'R 4.6'],
+            // Issue #339 -- as duas linhas da BEAM ficam aqui DE PROPOSITO,
+            // mesmo com `erl` e `ex` desligadas no catalogo. Elas sao a
+            // receita pronta para o dia da reativacao; quem decide se o caso
+            // roda e `activeVersionedLanguages()`, logo abaixo. Apagar as
+            // duas faria a conferencia de versao ter de ser reescrita do zero
+            // quando o Alpine publicar um erlang com o erlang/otp#11376.
             'ex' => ['ex', 'elixir -e "IO.puts(System.version())"', '1.19', 'Elixir 1.19'],
             // O rotulo promete a OTP (que e o que uma equipe escolhe), e
             // nao a versao do erts.
@@ -116,7 +125,49 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
         ];
     }
 
-    #[DataProvider('versionedLanguages')]
+    /**
+     * Issue #339 -- a tabela acima e a RECEITA; quem manda e o catalogo.
+     *
+     * A desativacao de `erl` e `ex` (PR #346) parou no `is_active` e nao
+     * chegou aqui. O efeito foi medido, e nao suposto: as tres imagens
+     * continuam instalando `erlang27` e `elixir`, entao o `exists()` do caso
+     * responde "sim" dentro da imagem do juiz e o teste roda
+     * `erl -noshell -eval ...` -- exatamente o comando cuja falha
+     * (`sys_sigaltstack(): Failed to set alternate signal stack`) motivou a
+     * desativacao. Num runner afetado, a linguagem que decidimos NAO oferecer
+     * pinta de vermelho o job de um PR que nao tem relacao nenhuma com ela.
+     * Foi assim que a #339 nasceu: dos quatro testes que ela derrubou no CI
+     * do #315, dois eram deste arquivo.
+     *
+     * O PR #349 tratou o mesmo problema no teste das vinte partidas, que
+     * passou a exigir 20/20 so se oferecermos a linguagem. Aqui e a mesma
+     * regra pela mesma razao: conferir a versao prometida de uma linguagem
+     * que o formulario de envio nao oferece nao mede nada que uma equipe
+     * possa usar.
+     *
+     * Filtrar (e nao pular): `markTestSkipped` seria vermelho igual, porque
+     * o job do juiz roda com `--fail-on-skipped` de proposito. Um caso que
+     * nao existe nao e um caso que se pula.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
+     */
+    public static function activeVersionedLanguages(): array
+    {
+        $ativas = [];
+
+        foreach (Language::getDefaultLanguages() as $language) {
+            if (($language['is_active'] ?? false) === true) {
+                $ativas[(string) $language['extension']] = true;
+            }
+        }
+
+        return array_filter(
+            self::versionedLanguages(),
+            fn (array $caso) => isset($ativas[$caso[0]])
+        );
+    }
+
+    #[DataProvider('activeVersionedLanguages')]
     public function test_the_installed_toolchain_is_the_version_the_catalog_promises(
         string $extension,
         string $command,
@@ -167,6 +218,34 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
         $this->assertEmpty(
             $prometem,
             'linguagens ativas que anunciam versao no nome e ninguem confere: '.implode(', ', $prometem)
+        );
+    }
+
+    /**
+     * O filtro de `activeVersionedLanguages()` nao pode virar um sumidouro.
+     *
+     * Ele descarta silenciosamente todo caso cuja extensao nao esteja ativa
+     * -- inclusive uma extensao que nao existe mais, ou que alguem digitou
+     * errado. Sem este caso, renomear `py3` no catalogo faria a conferencia
+     * de versao do Python evaporar sem ninguem ver: o provedor pararia de
+     * gerar o caso e o teste de cobertura logo acima reclamaria de `py3`
+     * ausente da tabela apontando para uma linha que ESTA la, escrita com o
+     * nome velho.
+     */
+    public function test_a_tabela_so_nomeia_extensoes_que_existem_no_catalogo()
+    {
+        $catalogo = collect(Language::getDefaultLanguages())->pluck('extension')->all();
+
+        $fantasmas = array_values(array_diff(array_keys(self::versionedLanguages()), $catalogo));
+
+        $aviso = <<<'TXT'
+
+            Uma linha orfa aqui e conferencia que nunca roda: o provedor a descarta em silencio.
+            TXT;
+
+        $this->assertEmpty(
+            $fantasmas,
+            'a tabela confere a versao de extensoes que o catalogo nao tem: '.implode(', ', $fantasmas).$aviso
         );
     }
 
