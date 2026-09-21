@@ -123,6 +123,81 @@ RUN npm install --no-audit --no-fund && npx webpack
 
 RUN test -s /src/dist/index.js
 
+# ---------------------------------------------------------------------------
+# G-Portugol (issue #296) -- construido do fonte, e o build e o resultado
+# principal desta issue.
+#
+# A #296 registrava TRES bloqueios medidos, e os tres viviam do mesmo fato:
+# o `gpt` nao construia. "Alpine nao empacota ANTLR", "no Debian o `make`
+# morre em `Token stream error reading grammar(s)`" e "so ha binario
+# x86_64". Os tres caem aqui, e o que os derrubou foi uma variavel:
+#
+#   O `runantlr` e `java -cp antlr.jar antlr.Tool`, e o ANTLR 2.7.7 (de
+#   2006) le o arquivo de gramatica no CHARSET PADRAO DA JVM. Num contêiner
+#   sem `LANG`, esse padrao e ASCII. E `lexer.g` declara as palavras-chave
+#   ACENTUADAS do portugol (`algoritmo`, `funcao` com cedilha, `inicio` com
+#   acento), entao o `í` de `algorítmos` chega como `0xFFFD` e o leitor para:
+#
+#     ./lexer.g:55:10: unexpected char: 'r'
+#     TokenStreamException: unexpected char: 0xFFFD
+#
+#   Com `-Dfile.encoding=UTF-8` as SEIS gramaticas do projeto passam e o
+#   `make` vai ao fim. Nao e a gramatica, nao sao os bytes do arquivo (sao
+#   UTF-8 validos nos dois lados do commit que a issue suspeitava): e o
+#   ambiente em que o ANTLR foi chamado. A medicao anterior concluiu o
+#   contrario porque foi feita num shell que ja tinha `LANG` UTF-8.
+#
+# E o runtime C++ do ANTLR 2.7, que o Alpine realmente nao empacota, compila
+# em musl sem um patch -- so precisa de um `config.sub`/`config.guess` deste
+# seculo, porque o de 2006 responde "cannot guess build type" em aarch64.
+#
+# Resultado: o `gpt` e construido NA IMAGEM, em aarch64 e em x86_64. Isso
+# tira a dependencia do unico binario publicado pelo upstream (x86_64) e
+# fecha o bloqueio que a #53 abriria num parque arm64.
+#
+# Custo medido: ~4 min de estagio, e 1,2 MB instalados (`/opt/gportugol`).
+# O JDK/JRE e o ANTLR ficam AQUI -- nada disso viaja na imagem final.
+FROM php:8.3-fpm-alpine AS gportugol-builder
+
+# Versao E hash (issue #304). O tarball do ANTLR 2.7.7 vem de antlr2.org, e
+# o sha256 foi conferido contra o download em 21/09/2026.
+ARG ANTLR2_VERSION=2.7.7
+ARG ANTLR2_SHA256=853aeb021aef7586bda29e74a6b03006bcb565a755c86b66032d8ec31b67dbb9
+RUN set -eux; \
+    apk add --no-cache build-base autoconf automake libtool pcre2-dev bison flex openjdk17-jre-headless; \
+    wget -q "https://www.antlr2.org/download/antlr-${ANTLR2_VERSION}.tar.gz" -O /tmp/antlr.tar.gz; \
+    echo "${ANTLR2_SHA256}  /tmp/antlr.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/antlr-src; \
+    tar -xzf /tmp/antlr.tar.gz -C /tmp/antlr-src --strip-components=1; \
+    cd /tmp/antlr-src; \
+    cp /usr/share/automake-*/config.sub /usr/share/automake-*/config.guess scripts/; \
+    ./configure --prefix=/usr/local --disable-examples; \
+    make -C lib/cpp install; \
+    install -m 0755 scripts/antlr-config /usr/local/bin/antlr-config; \
+    install -m 0644 antlr.jar /usr/local/share/antlr.jar; \
+    printf '#!/bin/sh\nexec java -Dfile.encoding=UTF-8 -cp /usr/local/share/antlr.jar antlr.Tool "$@"\n' > /usr/local/bin/runantlr; \
+    chmod 0755 /usr/local/bin/runantlr; \
+    test -f /usr/local/lib/libantlr.a; \
+    test -x /usr/local/bin/antlr-config
+
+# COMMIT, e nao tag: e a tag `1.2.0`, e ela pode se mover. O `-t` (traducao
+# para C) e o `EXIT_FAILURE` em erro de analise -- os dois fatos de que esta
+# linguagem depende -- foram medidos NESTE commit.
+ARG GPORTUGOL_COMMIT=f324b698c851c9455337043452c52bfd10cb1efa
+RUN set -eux; \
+    apk add --no-cache git; \
+    git clone --no-checkout https://github.com/gportugol/gpt.git /tmp/gpt-src; \
+    cd /tmp/gpt-src; \
+    git fetch --depth 1 origin "${GPORTUGOL_COMMIT}"; \
+    git checkout --detach "${GPORTUGOL_COMMIT}"; \
+    autoreconf -fi; \
+    ./configure --prefix=/opt/gportugol; \
+    make; \
+    make install; \
+    strip /opt/gportugol/bin/gpt; \
+    test -x /opt/gportugol/bin/gpt; \
+    test -s /opt/gportugol/lib/gpt/base.gpt
+
 # MicroHelium Dockerfile
 # PHP 8.3 with required extensions for Laravel 12
 
@@ -433,6 +508,57 @@ RUN set -eux; \
 #
 # `/opt` ja esta em config/autojudge.php -> sandbox_paths, entao isto fica
 # visivel dentro do sandbox sem bind novo.
+
+# G-Portugol (issue #296). O compilador vem do estagio acima; aqui entram o
+# diretorio, o invocador e a prova de fumaca.
+#
+# `/opt` ja esta em config/autojudge.php -> sandbox_paths.
+#
+# O invocador existe pela regra de sempre: `MachineCapabilities` sonda o
+# PRIMEIRO TOKEN do comando com `command -v`, e um comando escrito com o
+# caminho absoluto nao anunciaria capacidade nenhuma util.
+#
+# Dependencias de execucao, medidas com `ldd`: libstdc++, libgcc e pcre2 --
+# as tres ja estao na imagem. E o `gcc`, que a lista de pacotes ja instala
+# para C, porque a SEGUNDA etapa da compilacao desta linguagem e ele.
+#
+# A prova de fumaca tem QUATRO metades, e nenhuma e decorativa:
+#
+#   1. `a+b` correto compila e imprime 8 -- o controle positivo.
+#   2. erro de sintaxe SAI != 0 (e nao 0, que e o que o `gpt -i` faz). Sem
+#      isto a linguagem repetiria a #301: programa que nem analisa viraria
+#      WA em vez de CE.
+#   3. o CE veio da ANALISE, e nao do gcc. Sem esta metade a mutacao que
+#      troca `gpt -t` por `gpt -i` passa VERDE: o `-i` sai com 0, o script
+#      segue para o gcc, o gcc falha por nao achar o C que nunca foi
+#      escrito, e o codigo de saida final volta a ser != 0 pelo motivo
+#      errado. Medido -- a mutacao foi feita e passou, e e por isso que
+#      esta linha existe.
+#   4. o executavel gerado e da ARQUITETURA DESTA MAQUINA. E a metade que
+#      pega o `gpt -o`: com nasm instalado ele sai com 0 e escreve um ELF
+#      i386 em aarch64; nesta imagem, que nao tem nasm, ele nem chega la.
+#      Medido -- a mutacao para `gpt -o` foi feita, e esta metade a pegou.
+COPY --from=gportugol-builder /opt/gportugol /opt/gportugol
+COPY resources/judge-runtime/gportugol/compile.sh /tmp/fumaca-gportugol/compile.sh
+RUN set -eux; \
+    printf '#!/bin/sh\nexec /opt/gportugol/bin/gpt "$@"\n' > /usr/local/bin/gpt; \
+    chmod 755 /usr/local/bin/gpt; \
+    cd /tmp/fumaca-gportugol; \
+    printf 'algoritmo fumaca;\n\nvari\303\241veis\n  a : inteiro;\n  b : inteiro;\nfim-vari\303\241veis\n\nin\303\255cio\n  a := leia();\n  b := leia();\n  imprima(a + b);\nfim\n' > fumaca.gpt; \
+    sh compile.sh fumaca.gpt fumaca; \
+    test "$(printf '3 5\n' | ./fumaca)" = "8"; \
+    printf 'algoritmo quebrado;\n\nin\303\255cio\n  isto nao e g-portugol @@@\nfim\n' > quebrado.gpt; \
+    if sh compile.sh quebrado.gpt quebrado > saida.txt 2> erro.txt; then \
+        echo "o gpt saiu 0 num erro de sintaxe -- a #301 de novo, em outra linguagem" >&2; exit 1; \
+    fi; \
+    grep -q 'quebrado.gpt:4' erro.txt; \
+    if grep -q 'defeito do compilador' erro.txt; then \
+        echo "o CE veio do gcc falhando por falta de C, e nao da analise do gpt (o compile.sh esta usando o interpretador?)" >&2; exit 1; \
+    fi; \
+    test ! -s saida.txt; \
+    test "$(od -An -tx1 -j18 -N2 fumaca | tr -d ' ')" = "$(od -An -tx1 -j18 -N2 /bin/busybox | tr -d ' ')"; \
+    cd /; \
+    rm -rf /tmp/fumaca-gportugol
 
 # Scratch (issue #268). O invocador existe porque
 # `MachineCapabilities::executableOf()` olha o PRIMEIRO TOKEN do comando e o

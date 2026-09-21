@@ -193,6 +193,48 @@ class Language extends Model
             // `ResultadoExecucao`.
             ['name' => 'Portugol Studio', 'extension' => 'portugol_studio', 'file_ext' => 'por', 'compile_command' => 'portugol-studio-check {source}', 'run_command' => 'portugol-studio {source}', 'is_active' => true, 'category' => 'interpreted'],
 
+            // Issue #296, parte B -- G-Portugol (.gpt), o OUTRO dialeto de
+            // portugol, compilado e com tipos declarados.
+            //
+            // A issue nasceu registrando TRES bloqueios medidos, e os tres
+            // caiam juntos se o compilador nao construisse: o Alpine nao
+            // empacota ANTLR, o build no Debian morria em "Token stream
+            // error reading grammar(s)", e o unico binario publicado pelo
+            // upstream e x86_64. Nenhum dos tres sobreviveu a medicao nova,
+            // e o que os derrubou foi UMA variavel de ambiente:
+            //
+            //   o `runantlr` roda o ANTLR 2.7.7 na JVM, e o ANTLR 2.7.7 le
+            //   as gramaticas no CHARSET PADRAO DA JVM. Num contêiner sem
+            //   `LANG`, esse padrao e ASCII -- e `lexer.g` tem `algoritmo`
+            //   com acento dentro. Dai o `0xFFFD` do diagnostico. Com
+            //   `-Dfile.encoding=UTF-8` (ou qualquer `LANG` UTF-8) as seis
+            //   gramaticas passam e o `make` vai ao fim.
+            //
+            // Com o build funcionando, o resto saiu junto: o runtime C++ do
+            // ANTLR 2.7 compila em musl (so precisa de um `config.sub` deste
+            // seculo, porque o de 2006 nao conhece `aarch64`), e dai o `gpt`
+            // e construido NA PROPRIA IMAGEM, em aarch64 e em x86_64 -- o
+            // que resolve tambem a #53, sem depender do binario oficial.
+            //
+            // O COMPILE_COMMAND E DE DUAS ETAPAS, E ISSO E OBRIGATORIO.
+            // O `gpt` sabe gerar executavel sozinho (`-o`), e nao pode: o
+            // backend dele emite NASM de 32 bits sem olhar a arquitetura.
+            // Medido em aarch64 com nasm instalado -- SAI COM 0 e escreve um
+            // `ELF 32-bit Intel i386` que estoura com SIGSEGV; e sem nasm,
+            // que e o caso da imagem, morre com `nasm: not found`.
+            // Compilacao que passa e binario que morre e todo AC virando RE,
+            // e a segunda forma nao julgaria nada. O `gpt -t` traduz para
+            // C, o `gcc` da imagem compila, e o alvo passa a ser o da
+            // maquina. O resto esta em resources/judge-runtime/gportugol/.
+            //
+            // E o CE sai de graca, sem o contorno que o Portugol Studio
+            // precisou: `src/main.cpp:271` e `return success ? EXIT_SUCCESS
+            // : EXIT_FAILURE`, e medido, erro de sintaxe sai com 1 e escreve
+            // `solution.gpt:4 - ...` em stderr. (O `gpt -i`, esse, tem o
+            // defeito da familia da #301: MEDIDO, erro de sintaxe SAI COM 0.
+            // Por isso a compilacao e o `-t`, e nao o interpretador.)
+            ['name' => 'G-Portugol (1.2)', 'extension' => 'gportugol', 'file_ext' => 'gpt', 'compile_command' => 'bash {judge_runtime}/gportugol/compile.sh {source} {output}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
+
             // JVM Languages
             ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
             // Issue #305, Lote D -- Scala e Groovy, as duas linguagens do

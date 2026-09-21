@@ -151,6 +151,11 @@ class ClicsLanguageIdentifiers
         // Fora da distribuicao padrao (#305) e esotericas
         'scratch' => 'scratch',
         'portugol_studio' => 'portugol',
+        // Issue #296 -- identificador PROPRIO, e nao `portugol`: os dois
+        // dialetos nao sao a mesma linguagem (um e interpretado na JVM, o
+        // outro compila para binario nativo), e a suite ja proibe dois
+        // slugs com o mesmo id.
+        'gportugol' => 'gportugol',
         'dart' => 'dart',
         'cr' => 'crystal',
         'bf' => 'brainfuck',
