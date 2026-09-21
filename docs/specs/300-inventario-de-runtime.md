@@ -408,11 +408,34 @@ php artisan judge:toolchain-profile                 # os perfis que existem
 php artisan judge:toolchain-profile completo --apk  # a lista de instalação
 
 # todo executável que o catálogo promete existe nas DUAS imagens?
-# (a lista sai do catálogo, não de um rol escrito à mão)
-BINS=$(php -r '…ToolchainManifest::executableOf de cada comando ativo…')
+# A lista sai do catálogo pela MESMA regra que a sonda de capacidade usa, e
+# não de um rol escrito à mão -- era o rol à mão que fazia a auditoria
+# conferir 40 nomes quando o catálogo pede 54.
+BINS=$(php -r 'require "vendor/autoload.php";
+  $a = require "bootstrap/app.php";
+  $a->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+  $b = [];
+  foreach (App\Models\Language::getDefaultLanguages() as $l) {
+      if (! $l["is_active"]) { continue; }
+      foreach (["compile_command", "run_command"] as $f) {
+          $e = App\Support\Judge\ToolchainManifest::executableOf((string) ($l[$f] ?? ""));
+          if ($e !== null) { $b[$e] = 1; }
+      }
+  }
+  ksort($b);
+  echo implode(" ", array_keys($b));')
+
 for img in helium-judge:audit helium-app:audit; do
+  echo -n "$img: "
   docker run --rm --network none "$img" sh -c \
-    "for t in $BINS; do command -v \"\$t\" >/dev/null || echo AUSENTE:\$t; done"
+    "for t in $BINS; do command -v \"\$t\" >/dev/null || echo AUSENTE:\$t; done; echo ok"
+done
+
+# presente não é igual: o conteúdo dos invocadores tem de bater entre as duas
+for img in helium-judge:audit helium-app:audit; do
+  docker run --rm --network none "$img" \
+    md5sum /usr/local/bin/portugol-studio /usr/local/bin/portugol-studio-check \
+           /usr/local/bin/scratch-run
 done
 
 # o custo de um perfil, sem construir imagem
