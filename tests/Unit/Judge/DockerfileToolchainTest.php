@@ -214,8 +214,8 @@ class DockerfileToolchainTest extends TestCase
 
     public function test_o_executavel_de_um_comando_e_o_que_o_roteamento_veria(): void
     {
-        // A mesma regra do MachineCapabilities, com a diferenca deliberada do
-        // ultimo caso.
+        // A regra do roteamento por capacidade e esta mesma: desde a #354 o
+        // MachineCapabilities delega para ca, e o ultimo caso e o motivo.
         $this->assertSame('gcc', ToolchainManifest::executableOf('gcc -static -O2 -o {output} {source} -lm'));
         $this->assertSame('python3', ToolchainManifest::executableOf('PYTHONPATH={judge_runtime}/python python3 {source}'));
         $this->assertSame('bash', ToolchainManifest::executableOf('bash {judge_runtime}/node/run.sh {memory} {source}'));
