@@ -45,6 +45,9 @@ cada uma vem e o que está fixado. Este arquivo é esse lugar.
 - **36** pacotes `apk` exigidos por linguagem ativa, mais **2** de
   infraestrutura (`bubblewrap`, `libstdc++`) = **38** — que é exatamente a
   lista do perfil `completo` de `docs/specs/306-perfis-de-toolchain.md`
+- **40** pacotes fixados no estágio final do `Dockerfile.judge`. A diferença
+  para os 38 acima são exatamente `erlang27` e `elixir`: instalados, fixados,
+  e **não oferecidos** (#339) — ver a seção própria
 
 O conjunto de extensões ativas **não mudou** desde a revisão de 20/09
 (conferido por diff do catálogo entre `383b0ba` e `ab94d7c`: as 48 são as

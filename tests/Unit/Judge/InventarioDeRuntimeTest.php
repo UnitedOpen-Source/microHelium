@@ -269,6 +269,19 @@ class InventarioDeRuntimeTest extends TestCase
             $texto,
             'A contagem de pacotes de infraestrutura mudou; o inventario ainda diz outra.',
         );
+
+        // E o total FIXADO, que e maior que os dois somados: o estagio final
+        // fixa tambem `erlang27` e `elixir`, instalados de proposito e nao
+        // oferecidos (#339). Sem esta asserção, um pacote novo fixado por
+        // alguem que nao passou por aqui nao apareceria em lugar nenhum.
+        $imagem = DockerfileToolchain::fromFile(self::raiz().'/Dockerfile.judge', self::raiz());
+        $fixados = array_filter($imagem->apkPackages(), static fn (?string $pin): bool => $pin !== null);
+
+        self::assertMatchesRegularExpression(
+            '/\*\*'.count($fixados).'\*\* pacotes fixados no estágio final do `Dockerfile\.judge`/u',
+            $texto,
+            'O numero de pacotes fixados no Dockerfile.judge mudou; o inventario ainda diz outro.',
+        );
     }
 
     /**
