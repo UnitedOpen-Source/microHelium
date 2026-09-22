@@ -354,6 +354,9 @@ class LanguageConformanceTest extends TestCase
         'sh' => 'line 2',
         'pas' => 'solution.pas(3,',
         'portugol' => 'Linha: 3',
+        // Issue #296. O `gpt` cita `arquivo:linha`, e o lixo do programa
+        // deste teste esta na linha 4 (o `algoritmo` e o `inicio` vem antes).
+        'gportugol' => 'solution.gpt:4',
         // Um `.sb3` é um ZIP com um JSON dentro: não tem linha de fonte
         // para apontar, e o diagnóstico do `scratch-run` é o erro de
         // validação do esquema.
@@ -729,6 +732,22 @@ class LanguageConformanceTest extends TestCase
                 self::ITEM_STDERR => self::NAO_SE_APLICA,
                 self::ITEM_MLE => self::NAO_MEDIDO,
             ])],
+
+            // Issue #296 -- G-Portugol, e ele NAO herda os limites do irmao.
+            //
+            // O contraste com a linha de cima e o resultado mais util desta
+            // entrada: os dois dialetos se chamam "portugol", e um deles
+            // compila para binario nativo. Dai o G-Portugol passar nos dois
+            // itens que o Portugol Studio nao alcanca -- a recursao de 10^4
+            // (medido: 50005000, sem estourar pilha) e o MLE (medido: morto
+            // com SIGKILL sob cgroup de 256 MiB, porque `matriz` grande
+            // nasce no BSS e e tocada de verdade). O que ele NAO tem sao as
+            // duas primitivas que nenhum dos dois tem: codigo de saida e
+            // canal de erro.
+            'gportugol' => ['familia' => 'gportugol', 'itens' => array_merge($tudoConforme, [
+                self::ITEM_SAIDA => self::NAO_SE_APLICA,
+                self::ITEM_STDERR => self::NAO_SE_APLICA,
+            ])],
         ];
     }
 
@@ -940,6 +959,16 @@ class LanguageConformanceTest extends TestCase
                 self::ITEM_STDERR => 'o projeto Scratch não escolhe o canal de saída; quem escreve em stderr '
                     .'é o próprio `scratch-run` (é o motivo do conserto da #268).',
             ],
+            'gportugol' => [
+                self::ITEM_SAIDA => 'G-Portugol não tem primitiva de código de saída. O `main` que o `gpt -t` '
+                    .'gera termina SEMPRE em `cleanup(); return EXIT_SUCCESS;` -- lido no C traduzido, e não '
+                    .'suposto --, e a linguagem não oferece `encerre(n)` nem equivalente. Não há programa '
+                    .'G-Portugol que imprima a saída certa e saia com código diferente de zero. (O código de '
+                    .'saída do COMPILADOR, esse, está certo, e é o que faz o item de CE passar.)',
+                self::ITEM_STDERR => 'G-Portugol tem uma única função de saída, `imprima`, e ela escreve em '
+                    .'stdout: o C traduzido a implementa com `printf`. Não existe `imprima_erro`, e a '
+                    .'submissão não alcança o descritor 2.',
+            ],
             'portugol_studio' => [
                 self::ITEM_SAIDA => 'Portugol Studio não tem primitiva de código de saída; quem devolve o '
                     .'código é o console que o invoca -- e é justamente o que a #301 mostra estar quebrado.',
@@ -1025,6 +1054,11 @@ class LanguageConformanceTest extends TestCase
             'pas' => ['solution.pas', "program Solution;\nvar a, b: integer;\nbegin\n  readln(a, b);\n  writeln(a + b);\nend.\n"],
             'scratch' => ['solution.sb3', file_get_contents(ScratchProject::sumOfTwoTokens())],
             'portugol' => ['solution.por', "programa {\n  funcao inicio() {\n    inteiro a, b\n    leia(a)\n    leia(b)\n    escreva(a + b, \"\\n\")\n  }\n}\n"],
+            // Issue #296. `leia()` do G-Portugol nao recebe argumento e le por
+            // `scanf("%d")` no C traduzido, entao os dois valores podem vir na
+            // MESMA linha -- medido. Por isso esta familia nao precisa da
+            // entrada por linha que o `portugol_studio` exige em provaDoItem().
+            'gportugol' => ['solution.gpt', "algoritmo somaab;\n\nvari\u{e1}veis\n  a : inteiro;\n  b : inteiro;\nfim-vari\u{e1}veis\n\nin\u{ed}cio\n  a := leia();\n  b := leia();\n  imprima(a + b);\nfim\n"],
 
             // Issue #305, Lote C. São, DE PROPÓSITO, as mesmas fontes que
             // MultiLanguageJudgingTest já usa: ali elas provam que a
@@ -1101,6 +1135,7 @@ class LanguageConformanceTest extends TestCase
             'pas' => self::programasPascal(),
             'scratch' => self::programasScratch(),
             'portugol' => self::programasPortugol(),
+            'gportugol' => self::programasGportugol(),
 
             // Issue #305, Lote C -- as dezenove famílias que os PRs #307 e
             // #310 acrescentaram ao catálogo. Cada programa abaixo foi
@@ -1781,6 +1816,178 @@ FONTE],
             self::ITEM_ENTRADA => [$arquivo, "programa {\n  funcao inicio() {\n    inteiro i, x\n    inteiro s = 0\n    para (i = 0; i < 100000; i++) {\n      leia(x)\n      s = s + x\n    }\n    escreva(s, \"\\n\")\n  }\n}\n"],
             self::ITEM_RECURSAO => [$arquivo, "programa {\n  funcao inteiro f(inteiro n) {\n    se (n == 0) {\n      retorne 0\n    }\n    retorne n + f(n - 1)\n  }\n  funcao inicio() {\n    escreva(f(10000), \"\\n\")\n  }\n}\n"],
             self::ITEM_PARTIDA => [$arquivo, "programa {\n  funcao inicio() {\n    escreva(8, \"\\n\")\n  }\n}\n"],
+        ];
+    }
+
+    /**
+     * G-Portugol 1.2 (issue #296) -- `gpt -t` traduz para C, `gcc` compila,
+     * e o que roda é um binário nativo. Todos os programas abaixo foram
+     * compilados e executados com o `compile_command` EXATO do catálogo,
+     * numa imagem Alpine construída pelo estágio `gportugol-builder`, antes
+     * de entrarem aqui.
+     *
+     * MEDIÇÃO QUE MUDOU O PROGRAMA (item de erro de execução): `a / b` com
+     * `b` lido como zero NÃO serve. Em x86_64 a divisão inteira por zero
+     * dispara SIGFPE, mas em aarch64 ela é definida e devolve 0 -- medido,
+     * o programa imprime `0` e SAI COM 0, o que viraria WA num judgehost
+     * arm64 e RE num x86_64. Um item cujo veredito depende da arquitetura
+     * do judgehost não mede nada. `a / (b - b)` tem divisor zero CONSTANTE,
+     * o gcc emite `__builtin_trap`, e o processo morre por sinal nas duas
+     * arquiteturas: medido, 132 (SIGILL/`ud2`) em x86_64 e 133 (SIGTRAP/
+     * `brk`) em aarch64. É a mesma forma que a família `portugol` usa.
+     *
+     * MEDIÇÃO QUE MUDOU O PROGRAMA (item de recursão): a primeira versão
+     * do item de RE era recursão infinita, e ela NÃO estoura a pilha -- o
+     * `gcc -O2` reconhece a chamada terminal (e a acumuladora, `1 + f(...)`)
+     * e transforma as duas em laço. O que sai é TLE, não RE. A recursão de
+     * 10^4 do item próprio, essa, vale: ela TERMINA e a soma sai certa
+     * (50005000), então mede o que promete.
+     *
+     * E note o que NÃO está aqui: o `enquanto verdadeiro` do item de TLE
+     * sobrevive ao `-O2` (medido: morto pelo limite, e não removido), e por
+     * isso ele não precisou de `volatile` como o da família C.
+     */
+    private static function programasGportugol(): array
+    {
+        $arquivo = 'solution.gpt';
+
+        return [
+            self::ITEM_RE => [$arquivo, <<<'FONTE'
+algoritmo erroexec;
+
+variáveis
+  a : inteiro;
+  b : inteiro;
+fim-variáveis
+
+início
+  a := leia();
+  b := leia();
+  imprima(a / (b - b));
+fim
+
+FONTE],
+            // O lixo está na LINHA 4, e a agulha de
+            // AGULHA_DA_LINHA_DO_ERRO depende disso.
+            self::ITEM_CE => [$arquivo, <<<'FONTE'
+algoritmo compilacao;
+
+início
+  isto nao e g-portugol @@@
+fim
+
+FONTE],
+            self::ITEM_TLE => [$arquivo, <<<'FONTE'
+algoritmo tempo;
+
+variáveis
+  x : inteiro;
+fim-variáveis
+
+início
+  x := 0;
+  enquanto verdadeiro faça
+    x := x + 1;
+  fim-enquanto
+  imprima(x);
+fim
+
+FONTE],
+            // 67 108 864 inteiros = 256 MiB, exatamente o limite da prova.
+            // A matriz é GLOBAL (nasce no BSS) e o laço escreve em toda
+            // ela: sem escrever, a página nunca é tocada e o processo
+            // terminaria dentro do limite sem nunca ter usado a memória --
+            // o mesmo engano que a família C registra com o clang.
+            self::ITEM_MLE => [$arquivo, <<<'FONTE'
+algoritmo memoria;
+
+variáveis
+  v : matriz[67108864] de inteiros;
+  i : inteiro;
+  s : inteiro;
+fim-variáveis
+
+início
+  s := 0;
+  para i de 0 até 67108863 faça
+    v[i] := i + 1;
+    s := s + 1;
+  fim-para
+  se s <> 0 então
+    imprima(8);
+  senão
+    imprima(9);
+  fim-se
+fim
+
+FONTE],
+            // `imprima` de um `real` sai com DUAS casas e ponto -- é o
+            // `printf("%.2f")` do C traduzido, e não uma escolha de locale.
+            self::ITEM_PONTO => [$arquivo, <<<'FONTE'
+algoritmo ponto;
+
+variáveis
+  x : real;
+fim-variáveis
+
+início
+  x := 3.14159;
+  imprima(x);
+fim
+
+FONTE],
+            self::ITEM_ENTRADA => [$arquivo, <<<'FONTE'
+algoritmo entradagrande;
+
+variáveis
+  i : inteiro;
+  x : inteiro;
+  s : inteiro;
+fim-variáveis
+
+início
+  s := 0;
+  para i de 1 até 100000 faça
+    x := leia();
+    s := s + x;
+  fim-para
+  imprima(s);
+fim
+
+FONTE],
+            // As funções vêm DEPOIS do bloco principal: o parser exige
+            // `algoritmo`, `variáveis`, `início`...`fim` e só então as
+            // declarações de função. Escrito porque as duas outras ordens
+            // que parecem naturais dão erro de sintaxe.
+            self::ITEM_RECURSAO => [$arquivo, <<<'FONTE'
+algoritmo recursao;
+
+variáveis
+  r : inteiro;
+fim-variáveis
+
+início
+  r := f(10000);
+  imprima(r);
+fim
+
+função f(n: inteiro) : inteiro
+início
+  se n = 0 então
+    retorne 0;
+  fim-se
+  retorne n + f(n - 1);
+fim
+
+FONTE],
+            self::ITEM_PARTIDA => [$arquivo, <<<'FONTE'
+algoritmo partida;
+
+início
+  imprima(8);
+fim
+
+FONTE],
         ];
     }
 
@@ -4972,7 +5179,12 @@ FONTE],
                 // transborda. Então a prova dele soma 10^5 UNS, que cabe em
                 // 32 bits e mede a mesma coisa -- o custo de ler 10^5
                 // valores com E/S ingênua.
-                if ($extension === 'portugol_studio') {
+                // Issue #296 -- o `inteiro` do G-Portugol tambem e de 32
+                // bits, e pelo mesmo motivo: o C traduzido declara `int`.
+                // Medido, ele devolve os MESMOS 705082704. A prova dele e a
+                // mesma do irmao, e mede a mesma coisa -- o custo de ler
+                // 10^5 valores com E/S ingenua.
+                if ($extension === 'portugol_studio' || $extension === 'gportugol') {
                     return [
                         'entrada' => str_repeat("1\n", 100000),
                         'saida' => "100000\n",

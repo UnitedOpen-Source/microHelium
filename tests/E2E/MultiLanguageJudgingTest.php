@@ -309,6 +309,15 @@ class MultiLanguageJudgingTest extends TestCase
                 'source' => "programa {\n  funcao inicio() {\n    inteiro a, b\n    leia(a)\n    leia(b)\n    escreva(a + b, \"\\n\")\n  }\n}\n",
                 'input' => "3\n5\n",
             ],
+
+            // Issue #296 -- G-Portugol, e sem o `input` em duas linhas do
+            // irmao acima. O `leia()` daqui nao recebe argumento e vira
+            // `scanf("%d")` no C traduzido, entao "3 5" numa linha so
+            // funciona: medido, e nao herdado da entrada do Portugol Studio.
+            'gportugol' => [
+                'file' => 'solution.gpt',
+                'source' => "algoritmo somaab;\n\nvari\u{e1}veis\n  a : inteiro;\n  b : inteiro;\nfim-vari\u{e1}veis\n\nin\u{ed}cio\n  a := leia();\n  b := leia();\n  imprima(a + b);\nfim\n",
+            ],
         ];
 
         $active = collect(Language::getDefaultLanguages())->where('is_active', true)->pluck('extension');
@@ -432,6 +441,62 @@ class MultiLanguageJudgingTest extends TestCase
      * Sem ele, o teste acima passaria igual se a etapa de verificacao
      * recusasse todo programa.
      */
+    /**
+     * Issue #296 -- o MESMO par de testes, para o outro portugol, e aqui
+     * ele nao precisou de contorno nenhum.
+     *
+     * O `portugol-studio-check` acima existe porque o console do Portugol
+     * Studio nao analisa sem executar. O `gpt` analisa: `gpt -t` traduz e
+     * SAI COM 1 quando a analise falha (`src/main.cpp:271` -- `return
+     * success ? EXIT_SUCCESS : EXIT_FAILURE`). Entao o CE sai do codigo de
+     * saida, sem invocador escrito por nos.
+     *
+     * A MUTACAO QUE ESTE TESTE PEGA, e ela nao e hipotetica: trocar o
+     * `gpt -t` do compile.sh pelo `gpt -i` (o interpretador embutido, que
+     * parece o caminho obvio e dispensa o gcc). Medido -- o `-i` imprime o
+     * mesmo diagnostico e SAI COM 0. Este teste deixa de dar CE.
+     */
+    public function test_a_gportugol_syntax_error_is_a_compilation_error_and_not_a_wrong_answer()
+    {
+        $run = $this->judgeSolution(
+            'gportugol',
+            'solution.gpt',
+            "algoritmo compilacao;\n\nin\u{ed}cio\n  isto nao e g-portugol @@@\nfim\n",
+            "3 5\n"
+        );
+
+        $this->assertSame(
+            'CE',
+            $run->answer?->short_name,
+            "erro de sintaxe nao virou CE: veredito '{$run->answer?->short_name}'\n"
+            ."stdout: {$run->auto_judge_stdout}\nstderr: {$run->auto_judge_stderr}"
+        );
+
+        // E a equipe recebe ONDE consertar, com o nome do arquivo que ELA
+        // enviou -- e nao o do C intermediario que o `gpt -t` gera.
+        $this->assertStringContainsString(
+            'solution.gpt:4',
+            (string) $run->auto_judge_stderr,
+            'o CE saiu sem dizer o arquivo e a linha do erro'
+        );
+    }
+
+    /**
+     * O controle positivo do teste acima: sem ele, um `compile.sh` que
+     * recusasse TODO programa passaria igual.
+     */
+    public function test_a_valid_gportugol_program_is_not_a_compilation_error()
+    {
+        $run = $this->judgeSolution(
+            'gportugol',
+            'solution.gpt',
+            "algoritmo somaab;\n\nvari\u{e1}veis\n  a : inteiro;\n  b : inteiro;\nfim-vari\u{e1}veis\n\nin\u{ed}cio\n  a := leia();\n  b := leia();\n  imprima(a + b);\nfim\n",
+            "3 5\n"
+        );
+
+        $this->assertTrue($run->answer->is_accepted, "programa valido virou '{$run->answer?->short_name}'");
+    }
+
     public function test_a_valid_portugol_program_is_not_a_compilation_error()
     {
         $run = $this->judgeSolution(

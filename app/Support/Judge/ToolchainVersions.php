@@ -126,6 +126,16 @@ final class ToolchainVersions
             // `gplc --version` escreve a versao no stderr e sai com codigo
             // 1; o `2>&1` ja traz o texto, e quem le so le o texto.
             'prolog_gnu' => 'gplc --version 2>&1',
+            // Issue #296. O `gpt -v` escreve tres linhas em portugues, e a
+            // versao vem na segunda (`Versao  : 1.2.0`).
+            //
+            // PELO CAMINHO ABSOLUTO DO INVOCADOR, e nao por `gpt` solto: o
+            // nome colide. O macOS traz um `/usr/sbin/gpt` que e a
+            // ferramenta de tabela de particao GUID, e com o nome solto o
+            // `exists()` o encontra, deixa de pular o caso e compara a
+            // versao do compilador com o `usage:` de OUTRO programa. O
+            // caminho e o que os tres Dockerfiles instalam.
+            'gportugol' => '/usr/local/bin/gpt -v 2>&1',
         ];
     }
 

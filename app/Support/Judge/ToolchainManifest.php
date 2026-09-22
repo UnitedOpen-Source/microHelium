@@ -348,6 +348,20 @@ final class ToolchainManifest
                 ToolchainRequirement::repoFile('resources/judge-runtime/python/sitecustomize.py'),
                 ToolchainRequirement::apk('python3'),
             ],
+
+            // Issue #296 -- G-Portugol. O comando do catalogo chama `bash
+            // {judge_runtime}/gportugol/compile.sh`, e o script chama DOIS
+            // programas: o `gpt`, que vem do estagio, e o `gcc`, que compila
+            // o C que ele traduz. Os dois ficam declarados aqui porque
+            // nenhum dos dois aparece no comando do catalogo -- e um
+            // Dockerfile que copiasse o `gpt` sem o `gcc` compilaria a
+            // imagem e reprovaria toda submissao.
+            'gportugol/compile.sh' => [
+                ToolchainRequirement::repoFile('resources/judge-runtime/gportugol/compile.sh'),
+                ToolchainRequirement::stage('gportugol-builder'),
+                ToolchainRequirement::invoker('gpt'),
+                ToolchainRequirement::apk('gcc', 'a segunda etapa: o C traduzido pelo `gpt -t` e compilado pelo gcc da imagem'),
+            ],
         ];
     }
 

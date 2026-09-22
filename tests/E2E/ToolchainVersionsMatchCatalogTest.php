@@ -108,6 +108,7 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'cob' => ['3.2', 'COBOL (GnuCOBOL 3.2)'],
             'prolog_swi' => ['10', 'Prolog (SWI-Prolog 10)'],
             'prolog_gnu' => ['1.5', 'Prolog (GNU Prolog 1.5)'],
+            'gportugol' => ['1.2', 'G-Portugol (1.2)'],
         ];
     }
 
