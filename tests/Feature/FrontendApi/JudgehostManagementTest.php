@@ -117,6 +117,45 @@ class JudgehostManagementTest extends TestCase
     }
 
     /**
+     * Issue #303 -- a divergencia entre duas maquinas do parque e VISTA.
+     *
+     * Este e o motivo de a versao ser guardada. Ela nao roteia nada (ver
+     * `Judgehost::canJudge()`): o que ela muda e que o organizador ve, na
+     * tela dos judgehosts, que a `judge-01` compila com GCC 15 e a
+     * `judge-02` com GCC 13 -- em vez de descobrir isso num rejulgamento
+     * que mudou de veredito no meio da maratona.
+     *
+     * `language_versions` omite a extensao sem versao de proposito: ausente
+     * quer dizer "este host nao disse", e nunca "nao tem" -- a linguagem
+     * continua listada em `languages`.
+     */
+    public function test_a_tela_mostra_com_que_versao_cada_maquina_julga(): void
+    {
+        Judgehost::issue('judge-01')[0]->declareCapabilities(
+            ['c_gcc13', 'sh'],
+            ['c_gcc13' => '15.2.0']
+        );
+
+        Judgehost::issue('judge-02')[0]->declareCapabilities(
+            ['c_gcc13', 'sh'],
+            ['c_gcc13' => '13.2.1']
+        );
+
+        $items = collect($this->actingAs($this->admin())->getJson('/api/frontend/judgehosts')->json('data.items'))
+            ->keyBy('name');
+
+        $this->assertSame(['c_gcc13' => '15.2.0'], $items['judge-01']['language_versions']);
+        $this->assertSame(['c_gcc13' => '13.2.1'], $items['judge-02']['language_versions']);
+
+        $this->assertSame(
+            $items['judge-01']['languages'],
+            $items['judge-02']['languages'],
+            'as duas maquinas declaram a MESMA lista de extensoes -- e era so isso que a tela '
+            .'mostrava antes da #303, com as duas parecendo intercambiaveis'
+        );
+    }
+
+    /**
      * The whole point of issuing from the interface: the token that comes
      * back has to be a working credential, not a string the API is willing
      * to print. That is the shape of defect #159 was -- an issuance path

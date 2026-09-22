@@ -69,6 +69,17 @@ class WorkController extends Controller
             // here means a host repeatedly taking work it cannot do.
             'languages' => ['sometimes', 'array', 'max:100'],
             'languages.*' => ['string', 'max:20'],
+            // Issue #303 -- com que versao, quando o agente souber dizer.
+            //
+            // Mapa `extensao => versao`, deliberadamente SEPARADO da lista e
+            // deliberadamente opcional: um agente anterior a #303 manda so
+            // `languages`, e o que se guarda dele e `null`, que e a verdade.
+            // A versao nunca decide se o host julga (ver
+            // Judgehost::canJudge()); ela existe para que um rejulgamento em
+            // outra maquina do parque possa ser explicado em vez de
+            // descoberto.
+            'language_versions' => ['sometimes', 'array', 'max:100'],
+            'language_versions.*' => ['string', 'max:40'],
             // Reported, never acted on. An organiser is told when judge
             // machines diverge instead of the server compensating for it:
             // the ICPC CCS requirements describe auto-judging machines
@@ -79,7 +90,7 @@ class WorkController extends Controller
         ]);
 
         if (array_key_exists('languages', $data)) {
-            $judgehost->declareCapabilities($data['languages']);
+            $judgehost->declareCapabilities($data['languages'], $data['language_versions'] ?? []);
         }
 
         if (isset($data['cpu_count']) || isset($data['memory_mb'])) {
@@ -97,6 +108,12 @@ class WorkController extends Controller
                 'reclaimed' => $this->queue->giveBack($judgehost),
                 'lease_seconds' => (int) config('judgehost.lease_seconds', 600),
                 'languages' => $judgehost->capabilities()->pluck('extension')->all(),
+                // Issue #303 -- devolvido para que o log do agente diga o que
+                // o SERVIDOR guardou, e nao o que a maquina achou que mandou.
+                'language_versions' => $judgehost->capabilities()
+                    ->whereNotNull('version')
+                    ->pluck('version', 'extension')
+                    ->all(),
             ],
         ]);
     }

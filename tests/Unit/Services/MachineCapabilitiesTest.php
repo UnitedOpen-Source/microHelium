@@ -209,6 +209,127 @@ class MachineCapabilitiesTest extends TestCase
     }
 
     /**
+     * Issue #303 -- a versao vem do toolchain, e nao do pino do Dockerfile.
+     *
+     * A maquina hipotetica aqui e um GCC de mentira que responde `15.2.0` a
+     * `-dumpversion`, que e literalmente o comando que a receita de producao
+     * manda usar para `c_gcc13`. O que se prova: a sonda RODA o comando da
+     * tabela e le o numero da saida.
+     *
+     * A mutacao que este caso pega e a barata e tentadora: trocar a sonda
+     * por `DockerfileToolchain::pinFor('gcc')`. O host que importa no
+     * julgamento distribuido e o da instituicao parceira, que construiu a
+     * imagem DELA -- ler o nosso Dockerfile descreveria com muita confianca
+     * uma maquina que ninguem consultou.
+     */
+    public function test_a_versao_declarada_e_a_que_o_toolchain_respondeu(): void
+    {
+        $falso = $this->binFalsoQueResponde(['gcc' => 'echo 15.2.0']);
+
+        try {
+            $versoes = (new MachineCapabilities($falso.':/bin:/usr/bin'))->versionsOf(['c_gcc13']);
+        } finally {
+            $this->removeBinFalso($falso);
+        }
+
+        $this->assertSame(['c_gcc13' => '15.2.0'], $versoes);
+    }
+
+    /**
+     * Toolchain que nao se identifica nao ganha versao -- e nao perde a vaga.
+     *
+     * Duas metades, e a segunda e a que importa: `versionsOf()` nunca pode
+     * reduzir o que `detect()` declarou. A #354 mostrou o custo de uma lista
+     * de capacidades PARCIAL, que e pior que uma vazia porque parece
+     * correta; uma versao ilegivel nao pode virar uma extensao que sumiu.
+     */
+    public function test_um_toolchain_que_nao_diz_a_versao_nao_e_declarado_sem_extensao(): void
+    {
+        // Um `gcc` que existe (entao `detect()` o declara) e que nao imprime
+        // numero nenhum.
+        $falso = $this->binFalsoQueResponde(['gcc' => 'echo sem numero aqui']);
+
+        try {
+            $sonda = new MachineCapabilities($falso.':/bin:/usr/bin');
+
+            $detectadas = $sonda->detect([
+                $this->language('c_gcc13', 'gcc -o {executable} {source}', './{executable}'),
+            ]);
+
+            $versoes = $sonda->versionsOf($detectadas);
+        } finally {
+            $this->removeBinFalso($falso);
+        }
+
+        $this->assertSame(['c_gcc13'], $detectadas, 'a versao ilegivel custou a CAPACIDADE, que e o que nunca pode acontecer');
+        $this->assertSame([], $versoes);
+    }
+
+    /**
+     * Extensao que a receita nao conhece nao vira um subprocesso.
+     */
+    public function test_uma_extensao_sem_receita_nao_e_sondada(): void
+    {
+        $this->assertSame([], (new MachineCapabilities)->versionsOf(['extensao_inventada']));
+    }
+
+    /**
+     * O mesmo comando e perguntado uma vez so por processo.
+     *
+     * Nao e microotimizacao: `kotlinc -version` e `scalac -version` sobem uma
+     * JVM, o perfil completo tem 46 linguagens, e o agente RE-REGISTRA a cada
+     * falha de transporte (JudgehostAgent::run). Sem memoizacao, uma rede
+     * instavel viraria uma tempestade de JVMs na maquina que deveria estar
+     * julgando.
+     *
+     * O contador e um `gcc` de mentira que grava uma linha por invocacao: se
+     * a memoizacao sumir, ele e chamado duas vezes -- uma por cada uma das
+     * duas entradas de C que compartilham `gcc -dumpversion`.
+     */
+    public function test_o_mesmo_comando_nao_e_perguntado_duas_vezes(): void
+    {
+        $marcas = sys_get_temp_dir().'/mh-versao-'.getmypid().'-'.bin2hex(random_bytes(4));
+        $falso = $this->binFalsoQueResponde(['gcc' => 'echo x >> '.escapeshellarg($marcas).'; echo 15.2.0']);
+
+        try {
+            $sonda = new MachineCapabilities($falso.':/bin:/usr/bin');
+
+            $versoes = $sonda->versionsOf(['c_gcc13', 'c99_gcc']);
+            $sonda->versionsOf(['c_gcc13']);
+
+            $invocacoes = is_file($marcas) ? count(file($marcas) ?: []) : 0;
+        } finally {
+            @unlink($marcas);
+            $this->removeBinFalso($falso);
+        }
+
+        $this->assertSame(['c_gcc13' => '15.2.0', 'c99_gcc' => '15.2.0'], $versoes);
+        $this->assertSame(1, $invocacoes, 'o mesmo comando de versao foi rodado mais de uma vez no mesmo processo');
+    }
+
+    /**
+     * Um diretorio de binarios de mentira que RESPONDEM alguma coisa.
+     *
+     * O `binFalsoCom()` cria programas que so saem com 0, que e tudo que a
+     * sonda de PRESENCA precisa. A de versao (#303) le a saida, entao aqui
+     * cada nome vem com o corpo do script.
+     *
+     * @param  array<string, string>  $binarios
+     */
+    private function binFalsoQueResponde(array $binarios): string
+    {
+        $dir = sys_get_temp_dir().'/mh-cap-'.getmypid().'-'.bin2hex(random_bytes(4));
+        mkdir($dir, 0o700, true);
+
+        foreach ($binarios as $nome => $corpo) {
+            file_put_contents($dir.'/'.$nome, "#!/bin/sh\n".$corpo."\n");
+            chmod($dir.'/'.$nome, 0o755);
+        }
+
+        return $dir;
+    }
+
+    /**
      * Um diretorio com executaveis de mentira, para montar maquinas
      * hipoteticas sem depender do que a maquina de verdade tem instalado.
      *

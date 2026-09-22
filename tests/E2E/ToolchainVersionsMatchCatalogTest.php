@@ -3,6 +3,8 @@
 namespace Tests\E2E;
 
 use App\Models\Language;
+use App\Support\Judge\ToolchainVersions;
+use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -32,116 +34,108 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
 {
     /**
      * Para cada entrada do catalogo cujo nome promete um numero de versao:
-     * o comando que o proprio toolchain usa para se identificar, e o prefixo
-     * de versao que o rotulo promete.
+     * o prefixo de versao que o rotulo promete, e o rotulo COPIADO.
      *
-     * Esta tabela e a RECEITA e inclui linguagem desligada; quem escolhe o
-     * que roda e `activeVersionedLanguages()`.
+     * Issue #303 -- o COMANDO saiu daqui. Ele mora em
+     * {@see ToolchainVersions}, porque o agente de um
+     * judgehost tambem precisa dele para declarar a versao junto da
+     * capacidade, e codigo de teste nao e autoloadado em producao. Duas
+     * copias da mesma receita e como elas vieram a discordar -- foi a licao
+     * da #354, e o remedio foi o mesmo: um dono so. Os comentarios que
+     * explicam POR QUE cada comando e aquele foram junto com eles.
+     *
+     * O que fica aqui e o que e mesmo assunto de teste: a PROMESSA do
+     * catalogo. Quem garante que as duas metades continuam cobrindo as
+     * mesmas extensoes e tests/Unit/Judge/PromessaDeVersaoTest, na suite de
+     * todo PR.
+     *
+     * A tabela e a RECEITA e inclui linguagem desligada; quem escolhe o que
+     * roda e `activeVersionedLanguages()`.
      *
      * Uma linguagem ativa que NAO aparece aqui e coberta pelo teste de
      * cobertura no fim da classe, que falha se alguem prometer uma versao
      * nova sem dizer como conferi-la.
      *
-     * O quarto campo e o rotulo do catalogo COPIADO. Copia nao conferida
-     * envelhece, e envelhecida ela deixa este teste verde conferindo a
-     * versao que o catalogo ja nao promete -- por isso
-     * tests/Unit/Judge/PromessaDeVersaoTest.php exige, na suite de todo PR,
-     * que ele continue sendo o `name` da entrada e que o `promised` seja
-     * coerente com o numero desse rotulo.
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function promessas(): array
+    {
+        return [
+            // extensao => [versao prometida pelo rotulo, rotulo copiado]
+            'c_gcc13' => ['15', 'C (GCC 15)'],
+            'c99_gcc' => ['15', 'C99 (GCC 15)'],
+            'cpp_gpp13' => ['15', 'C++ (G++ 15)'],
+            'cpp14_gpp' => ['15', 'C++14 (G++ 15)'],
+            'cpp17_gpp' => ['15', 'C++17 (G++ 15)'],
+            'c_clang17' => ['22', 'C (Clang 22)'],
+            'cpp_clang' => ['22', 'C++ (Clang 22)'],
+            'java21' => ['21', 'Java (OpenJDK 21 LTS)'],
+            'java25' => ['25', 'Java (OpenJDK 25 LTS)'],
+            'py3' => ['3.14', 'Python 3.14'],
+            'js_node24' => ['24', 'JavaScript (Node 24 LTS)'],
+            'ts' => ['24', 'TypeScript (Node 24)'],
+            'rs' => ['1.96', 'Rust (1.96)'],
+            'go' => ['1.26', 'Go (1.26)'],
+            'rb' => ['3.4', 'Ruby 3.4'],
+            'php' => ['8.3', 'PHP 8.3'],
+            'kt' => ['2.4', 'Kotlin (2.4)'],
+            'cs_dotnet' => ['8.0', 'C# (.NET 8 LTS)'],
+            'cs_dotnet10' => ['10.0', 'C# (.NET 10 LTS)'],
+            'pas_fpc' => ['3.2.2', 'Pascal (FPC)'],
+            'perl' => ['5', 'Perl 5'],
+            'lua' => ['5.4', 'Lua 5.4'],
+            'awk' => ['5.3', 'AWK (GAWK 5.3)'],
+            'clj' => ['1.12', 'Clojure 1.12'],
+            'r' => ['4.6', 'R 4.6'],
+            'ex' => ['1.19', 'Elixir 1.19'],
+            'erl' => ['27', 'Erlang/OTP 27'],
+            'f90' => ['15', 'Fortran (GFortran 15)'],
+            'f77' => ['15', 'Fortran 77 (GFortran 15)'],
+            'adb' => ['15', 'Ada (GNAT 15)'],
+            'lisp_sbcl' => ['2.6', 'Common Lisp (SBCL 2.6)'],
+            'lisp_clisp' => ['2.49', 'Common Lisp (CLISP 2.49)'],
+            'scm' => ['3.0', 'Scheme (Guile 3.0)'],
+            'rkt' => ['9.2', 'Racket 9.2'],
+            'zig' => ['0.16', 'Zig 0.16'],
+            'nim' => ['2.2', 'Nim 2.2'],
+            'cr' => ['1.20', 'Crystal 1.20'],
+            'd_ldc' => ['1.42', 'D (LDC 1.42)'],
+            'hs' => ['9.10', 'Haskell (GHC 9.10)'],
+            'ml' => ['4.14', 'OCaml 4.14'],
+            'scala' => ['3.3', 'Scala 3 (3.3 LTS)'],
+            'groovy' => ['4.0', 'Groovy 4'],
+            'dart' => ['3.13', 'Dart 3.13'],
+            'cob' => ['3.2', 'COBOL (GnuCOBOL 3.2)'],
+            'prolog_swi' => ['10', 'Prolog (SWI-Prolog 10)'],
+            'prolog_gnu' => ['1.5', 'Prolog (GNU Prolog 1.5)'],
+        ];
+    }
+
+    /**
+     * A promessa do catalogo somada ao comando que a confere.
      *
      * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
      */
     public static function versionedLanguages(): array
     {
-        return [
-            // extensao => [comando, versao prometida pelo rotulo, rotulo]
-            'c_gcc13' => ['c_gcc13', 'gcc -dumpversion', '15', 'C (GCC 15)'],
-            'c99_gcc' => ['c99_gcc', 'gcc -dumpversion', '15', 'C99 (GCC 15)'],
-            'cpp_gpp13' => ['cpp_gpp13', 'g++ -dumpversion', '15', 'C++ (G++ 15)'],
-            'cpp14_gpp' => ['cpp14_gpp', 'g++ -dumpversion', '15', 'C++14 (G++ 15)'],
-            'cpp17_gpp' => ['cpp17_gpp', 'g++ -dumpversion', '15', 'C++17 (G++ 15)'],
-            'c_clang17' => ['c_clang17', 'clang -dumpversion', '22', 'C (Clang 22)'],
-            'cpp_clang' => ['cpp_clang', 'clang++ -dumpversion', '22', 'C++ (Clang 22)'],
-            'java21' => ['java21', '/usr/lib/jvm/java-21-openjdk/bin/javac -version 2>&1', '21', 'Java (OpenJDK 21 LTS)'],
-            'java25' => ['java25', '/usr/lib/jvm/java-25-openjdk/bin/javac -version 2>&1', '25', 'Java (OpenJDK 25 LTS)'],
-            'py3' => ['py3', 'python3 -c "import sys;print(\'%d.%d\' % sys.version_info[:2])"', '3.14', 'Python 3.14'],
-            'js_node24' => ['js_node24', 'node --version', '24', 'JavaScript (Node 24 LTS)'],
-            // O rotulo de TypeScript promete o NODE, e nao o tsc -- e o tsc
-            // e justamente o que a #303 fixou por versao no Dockerfile.
-            'ts' => ['ts', 'node --version', '24', 'TypeScript (Node 24)'],
-            'rs' => ['rs', 'rustc --version', '1.96', 'Rust (1.96)'],
-            'go' => ['go', 'go version', '1.26', 'Go (1.26)'],
-            'rb' => ['rb', 'ruby -e "print RUBY_VERSION"', '3.4', 'Ruby 3.4'],
-            'php' => ['php', 'php -r "echo PHP_VERSION;"', '8.3', 'PHP 8.3'],
-            'kt' => ['kt', 'kotlinc -version 2>&1', '2.4', 'Kotlin (2.4)'],
-            // Issue #305 -- o INVOCADOR, e nao `dotnet --version`.
-            //
-            // Com os dois SDKs instalados, `dotnet --version` fora de um
-            // projeto responde sempre o maior: medido, 10.0.303 numa imagem
-            // com 8.0.131 ao lado. O comando antigo passaria a reprovar a
-            // entrada do .NET 8 dizendo que o rotulo mente -- quando quem
-            // mentia era a pergunta.
-            //
-            // `csharp-netN --version` faz a mesma selecao por `global.json`
-            // que o compile.sh faz, entao o que este teste confere e o que a
-            // submissao vai usar.
-            'cs_dotnet' => ['cs_dotnet', 'csharp-net8 --version', '8.0', 'C# (.NET 8 LTS)'],
-            'cs_dotnet10' => ['cs_dotnet10', 'csharp-net10 --version', '10.0', 'C# (.NET 10 LTS)'],
-            'pas_fpc' => ['pas_fpc', 'fpc -iV', '3.2.2', 'Pascal (FPC)'],
-            'perl' => ['perl', 'perl -e "print substr($^V,1)"', '5', 'Perl 5'],
+        $casos = [];
 
-            // Issue #305, Lote C. Cada comando aqui foi rodado dentro da
-            // imagem antes de entrar, e o `promised` e o prefixo que o
-            // rotulo do catalogo anuncia.
-            'lua' => ['lua', 'lua5.4 -v', '5.4', 'Lua 5.4'],
-            'awk' => ['awk', 'gawk --version', '5.3', 'AWK (GAWK 5.3)'],
-            // O invocador, e nao `java -cp ...`: o mesmo binario que o
-            // catalogo chama e o que responde a versao, senao o teste
-            // confere uma coisa e a submissao roda outra.
-            'clj' => ['clj', 'clojure-run -e "(println (clojure-version))"', '1.12', 'Clojure 1.12'],
-            'r' => ['r', 'Rscript --vanilla -e "cat(R.version.string)"', '4.6', 'R 4.6'],
-            // Issue #339 -- as duas linhas da BEAM ficam aqui DE PROPOSITO,
-            // mesmo com `erl` e `ex` desligadas no catalogo. Elas sao a
-            // receita pronta para o dia da reativacao; quem decide se o caso
-            // roda e `activeVersionedLanguages()`, logo abaixo. Apagar as
-            // duas faria a conferencia de versao ter de ser reescrita do zero
-            // quando o Alpine publicar um erlang com o erlang/otp#11376.
-            'ex' => ['ex', 'elixir -e "IO.puts(System.version())"', '1.19', 'Elixir 1.19'],
-            // O rotulo promete a OTP (que e o que uma equipe escolhe), e
-            // nao a versao do erts.
-            'erl' => ['erl', 'erl -noshell -eval "io:format(erlang:system_info(otp_release)), halt()."', '27', 'Erlang/OTP 27'],
-            // As duas entradas de Fortran sao o mesmo gfortran; o numero
-            // do rotulo e o do COMPILADOR, e o "77" ao lado e o padrao da
-            // linguagem.
-            'f90' => ['f90', 'gfortran -dumpversion', '15', 'Fortran (GFortran 15)'],
-            'f77' => ['f77', 'gfortran -dumpversion', '15', 'Fortran 77 (GFortran 15)'],
-            'adb' => ['adb', 'gnatmake --version', '15', 'Ada (GNAT 15)'],
-            'lisp_sbcl' => ['lisp_sbcl', 'sbcl --version', '2.6', 'Common Lisp (SBCL 2.6)'],
-            'lisp_clisp' => ['lisp_clisp', 'clisp --version', '2.49', 'Common Lisp (CLISP 2.49)'],
-            'scm' => ['scm', 'guile --version', '3.0', 'Scheme (Guile 3.0)'],
-            'rkt' => ['rkt', 'racket --version', '9.2', 'Racket 9.2'],
-            'zig' => ['zig', 'zig version', '0.16', 'Zig 0.16'],
-            'nim' => ['nim', 'nim --version', '2.2', 'Nim 2.2'],
-            'cr' => ['cr', 'crystal --version', '1.20', 'Crystal 1.20'],
-            'd_ldc' => ['d_ldc', 'ldc2 --version', '1.42', 'D (LDC 1.42)'],
-            'hs' => ['hs', 'ghc --numeric-version', '9.10', 'Haskell (GHC 9.10)'],
-            'ml' => ['ml', 'ocamlopt -version', '4.14', 'OCaml 4.14'],
-            // Issue #305, Lote D -- as seis que vieram de fora do Alpine.
-            //
-            // Aqui o rotulo nao anuncia so "a versao que o distro calhou de
-            // ter": cada uma destas e um artefato ESCOLHIDO e fixado por
-            // sha256 no Dockerfile. Se alguem subir o pino e esquecer o
-            // rotulo (ou o contrario), este teste e quem avisa.
-            'scala' => ['scala', 'scalac -version 2>&1', '3.3', 'Scala 3 (3.3 LTS)'],
-            'groovy' => ['groovy', 'groovy --version 2>&1', '4.0', 'Groovy 4'],
-            'dart' => ['dart', 'dart --version 2>&1', '3.13', 'Dart 3.13'],
-            'cob' => ['cob', 'cobc --version 2>&1', '3.2', 'COBOL (GnuCOBOL 3.2)'],
-            'prolog_swi' => ['prolog_swi', 'swipl --version 2>&1', '10', 'Prolog (SWI-Prolog 10)'],
-            // `gplc --version` escreve a versao no stderr e sai com codigo
-            // 1; o `2>&1` do comando ja traz o texto, e o teste so le o
-            // texto.
-            'prolog_gnu' => ['prolog_gnu', 'gplc --version 2>&1', '1.5', 'Prolog (GNU Prolog 1.5)'],
-        ];
+        foreach (self::promessas() as $extensao => [$prometida, $rotulo]) {
+            $comando = ToolchainVersions::commandFor($extensao);
+
+            if ($comando === null) {
+                // Nao ha caso possivel sem comando, e descartar em silencio
+                // seria conferencia que evapora. O teste de simetria da
+                // suite rapida reprova antes disto, dizendo o porque.
+                throw new LogicException(
+                    "ToolchainVersions nao sabe perguntar a versao de '{$extensao}'"
+                );
+            }
+
+            $casos[$extensao] = [$extensao, $comando, $prometida, $rotulo];
+        }
+
+        return $casos;
     }
 
     /**
@@ -211,6 +205,29 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             "o catalogo anuncia '{$label}' para '{$extension}', mas o toolchain instalado responde:\n"
             ."  {$command}\n  => {$reported}\n"
             .'Corrija o rotulo em Language::getDefaultLanguages() ou o pin no Dockerfile -- os dois nao podem discordar.'
+        );
+
+        // Issue #303 -- e o extrator de PRODUCAO tem de saber ler esta saida.
+        //
+        // `ToolchainVersions::extract()` e uma heuristica declarada ("o
+        // primeiro numero de versao do texto"), e o judgehost a usa para
+        // declarar a versao junto da capacidade. Exerce-la aqui e de graca:
+        // a saida de verdade de cada toolchain ativo ja esta na mao, dentro
+        // da imagem. Uma linha da receita cuja saida ela nao souber ler
+        // reprova neste job, em vez de o judgehost declarar `null` em
+        // silencio numa maratona.
+        $extraida = ToolchainVersions::extract($reported);
+
+        $this->assertNotNull(
+            $extraida,
+            "{$extension}: ToolchainVersions::extract() nao achou versao nenhuma em:\n  {$reported}"
+        );
+
+        $this->assertMatchesVersion(
+            $promised,
+            (string) $extraida,
+            "{$extension}: o toolchain respondeu '{$reported}', o rotulo promete {$promised}, "
+            ."e ToolchainVersions::extract() leu '{$extraida}' -- e essa a versao que o judgehost declararia."
         );
     }
 

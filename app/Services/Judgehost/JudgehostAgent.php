@@ -89,6 +89,25 @@ class JudgehostAgent
             $this->say('warn', "Nao foi possivel descobrir as linguagens desta maquina: {$e->getMessage()}");
         }
 
+        // Issue #303 -- a versao vai junto da capacidade.
+        //
+        // Num `try` proprio de proposito: perder a versao nao pode custar a
+        // lista. Se a sonda de versao falhar inteira, este host declara
+        // exatamente as mesmas linguagens que declarava antes desta
+        // mudanca, e o servidor guarda `null` -- que e a verdade sobre uma
+        // versao que ninguem conseguiu ler.
+        if (isset($described['languages'])) {
+            try {
+                $versions = $this->machine->versionsOf($described['languages']);
+
+                if ($versions !== []) {
+                    $described['language_versions'] = $versions;
+                }
+            } catch (Throwable $e) {
+                $this->say('warn', "Nao foi possivel descobrir as versoes desta maquina: {$e->getMessage()}");
+            }
+        }
+
         return $described;
     }
 

@@ -578,6 +578,123 @@ class JudgehostPullTest extends TestCase
         $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))->assertNoContent();
     }
 
+    /**
+     * Issue #303 -- a versao vai junto da capacidade.
+     *
+     * A spec do julgamento distribuido ja prometia isto ("DTO de claim
+     * inclui ... versao de linguagem") e o codigo declarava so a extensao:
+     * dois judgehosts de um parque, um com GCC 13 e outro com GCC 15,
+     * declaravam capacidade IDENTICA. Numa maratona a versao do compilador e
+     * parte do edital, e um rejulgamento na outra maquina podia dar outra
+     * resposta sem que nada acusasse.
+     */
+    public function test_um_host_declara_a_versao_junto_da_capacidade(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', [
+            'languages' => ['c_gcc13', 'py3'],
+            'language_versions' => ['c_gcc13' => '15.2.0', 'py3' => '3.14'],
+        ], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.language_versions.c_gcc13', '15.2.0');
+
+        $this->assertSame(
+            ['c_gcc13' => '15.2.0', 'py3' => '3.14'],
+            $host->fresh()->capabilities->pluck('version', 'extension')->all()
+        );
+    }
+
+    /**
+     * E um host que reconstruiu a imagem corrige a versao ao re-registrar.
+     *
+     * Esta e a linha do tempo inteira da #303 em um teste: a mesma maquina,
+     * a mesma linguagem, outra imagem. Antes, nada no sistema mudava.
+     */
+    public function test_reconstruir_a_imagem_atualiza_a_versao_declarada(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', [
+            'languages' => ['c_gcc13'],
+            'language_versions' => ['c_gcc13' => '13.2.1'],
+        ], $this->as($token))->assertOk();
+
+        $this->postJson('/api/remote-judges/v1/register', [
+            'languages' => ['c_gcc13'],
+            'language_versions' => ['c_gcc13' => '15.2.0'],
+        ], $this->as($token))->assertOk();
+
+        $this->assertSame(
+            ['c_gcc13' => '15.2.0'],
+            $host->fresh()->capabilities->pluck('version', 'extension')->all()
+        );
+    }
+
+    /**
+     * Um agente anterior a #303 nao manda versao nenhuma, e nao pode perder
+     * nada por isso.
+     *
+     * `null` quer dizer "este host nao disse", que e a verdade sobre ele. O
+     * que nao pode acontecer e a ausencia da versao mexer na CAPACIDADE --
+     * a #354 mostrou o que custa uma lista de capacidades parcial.
+     */
+    public function test_um_agente_que_nao_manda_versao_declara_as_mesmas_linguagens(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', ['languages' => ['kt', 'py']], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.languages', ['kt', 'py'])
+            ->assertJsonPath('data.language_versions', []);
+
+        $this->assertSame(
+            ['kt' => null, 'py' => null],
+            $host->fresh()->capabilities->pluck('version', 'extension')->all()
+        );
+
+        $run = $this->otherLanguageRun('kt');
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.run_id', $run->id);
+    }
+
+    /**
+     * Issue #303 -- a versao e REGISTRO, e nunca um segundo portao.
+     *
+     * Rotear por versao exigiria que alguem dissesse qual versao um contest
+     * exige, e hoje nada no sistema diz isso. Uma regra dessas falha do pior
+     * jeito: um parque inteiro deixando de receber trabalho porque o numero
+     * nao bateu, com a fila parecendo simplesmente vazia.
+     *
+     * As duas metades: versao declarada nao tira trabalho de quem tem a
+     * extensao, e versao declarada tambem nao DA trabalho a quem nao tem.
+     */
+    public function test_a_versao_declarada_nao_decide_quem_julga(): void
+    {
+        [$host, $token] = $this->host();
+
+        $this->postJson('/api/remote-judges/v1/register', [
+            'languages' => ['kt'],
+            // Uma versao que ninguem pediu, e de um numero que nao casa com
+            // nada: continua sendo so a extensao que manda.
+            'language_versions' => ['kt' => '1.0.0-inventada', 'py' => '3.14'],
+        ], $this->as($token))->assertOk();
+
+        $this->assertSame(
+            ['kt'],
+            $host->fresh()->capabilities->pluck('extension')->all(),
+            'uma versao no mapa deu capacidade a uma extensao que o host NAO declarou'
+        );
+
+        $run = $this->otherLanguageRun('kt');
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.run_id', $run->id);
+    }
+
     public function test_the_local_worker_is_never_capability_filtered(): void
     {
         $this->otherLanguageRun('kt');
