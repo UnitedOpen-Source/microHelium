@@ -673,7 +673,23 @@ class LanguageConformanceTest extends TestCase
             'awk' => ['familia' => 'awk', 'itens' => $tudoConforme],
             'tcl' => ['familia' => 'tcl', 'itens' => array_merge($tudoConforme, $recursaoLimitada)],
             'r' => ['familia' => 'r', 'itens' => array_merge($tudoConforme, $recursaoLimitada)],
-            'clj' => ['familia' => 'clj', 'itens' => array_merge($tudoConforme, $recursaoLimitada)],
+            // Issue #386 -- `clj` SAIU do rol da recursao limitada. O
+            // `clojure-run` passou a dar `-Xss8m`, e o quadro caro do Clojure
+            // (despacho por `IFn.invoke`, aritmetica boxeada) deixa de
+            // estourar em 10^4 niveis: medido em linux/amd64, `-Xss1024k`
+            // (o padrao) estoura e `-Xss2048k` ja devolve 50005000.
+            //
+            // O texto que este arquivo carregava dizia que um `-Xss` ali era
+            // "candidato a conserto do nosso lado, e nao foi medido -- quem
+            // for medir, saiba que este teste fica vermelho quando
+            // funcionar". Foi medido, ficou vermelho, e esta linha e o
+            // conserto da tabela.
+            //
+            // O `groovy` CONTINUA limitado, e de proposito: ele nao passa por
+            // este conserto (`groovy {source}` chama o launcher da propria
+            // distribuicao, nao um `java` nosso), e com 800 niveis medidos no
+            // padrao nem 8 MB o levariam a 10^4.
+            'clj' => ['familia' => 'clj', 'itens' => $tudoConforme],
             // `erl` e `ex` saíram de `is_active` no #346 (a BEAM não sobe de
             // forma confiável em x86_64 -- #339). As linhas FICAM: o
             // provedor de dados filtra por `is_active`, então elas não
@@ -842,24 +858,6 @@ class LanguageConformanceTest extends TestCase
             // tabela afirmava CONFORME para as duas, o juiz respondeu RE, e
             // o teste ficou vermelho -- que é exatamente o que ele existe
             // para fazer. O que segue é a tabela corrigida para o medido.
-            'clj' => [
-                self::ITEM_RECURSAO => [
-                    'veredito' => 'RE',
-                    'porque' => '`Execution error (StackOverflowError) at user/f (solution.clj:2).` A '
-                        .'recursão deste item é `(+ n (f (dec n)))`, que NÃO é de cauda -- `recur` não se '
-                        .'aplica a ela, e o que o item mede é o que um competidor escreve. O controle que '
-                        .'torna isto uma afirmação sobre a IMPLEMENTAÇÃO e não sobre a JVM é o `scala`, que '
-                        .'na MESMA JVM faz os 10^4 níveis e devolve 50005000: o que é caro é o quadro do '
-                        .'Clojure (despacho por `IFn.invoke` e aritmética boxeada em `clojure.lang.Numbers`), '
-                        .'como no `groovy`. Dos três da JVM, só o Scala passa. NÃO medimos o corte exato nem '
-                        .'o tamanho da pilha padrão. O que está verificado no repositório é que '
-                        .'`docker/judge/bin/clojure-run` é `java -cp /usr/share/clojure/clojure.jar '
-                        .'clojure.main`, SEM `-Xss`: a pilha é a padrão da JVM. Um `-Xss` ali é candidato a '
-                        .'conserto do nosso lado, e não foi medido -- quem for medir, saiba que este teste '
-                        .'fica vermelho quando funcionar, e é assim que se descobre.',
-                    'onde' => 'docs/manuais/organizador.md, tabela de profundidade por linguagem',
-                ],
-            ],
             'portugol_studio' => [
                 self::ITEM_RECURSAO => [
                     'veredito' => 'RE',

@@ -23,4 +23,17 @@
 # capacidade (`MachineCapabilities::executableOf()`) olha o PRIMEIRO TOKEN
 # do comando, e um comando comecando em `java` anunciaria a capacidade
 # "java" -- toda maquina com JDK diria saber julgar Clojure.
-exec java -cp /usr/share/clojure/clojure.jar clojure.main "$@"
+# Issue #386 -- `-Xss` explicito, pelo mesmo motivo do catalogo.
+#
+# O padrao do HotSpot em linux x86_64 e 1024 KB, e o quadro de Clojure e
+# caro. Medido num conteiner `linux/amd64` com o Alpine e o clojure.jar
+# desta imagem, na recursao de 10^4 niveis do teste de conformidade:
+#
+#     -Xss1024k (o padrao)  StackOverflowError
+#     -Xss2048k             50005000
+#     -Xss4096k e acima     50005000
+#
+# O `LanguageConformanceTest` dava `clj` como `RE` no item de recursao e
+# anotava na propria linha que um `-Xss` aqui era "candidato a conserto do
+# nosso lado, e nao foi medido". Foi medido; o item passa a conforme.
+exec java -Xss8m -cp /usr/share/clojure/clojure.jar clojure.main "$@"
