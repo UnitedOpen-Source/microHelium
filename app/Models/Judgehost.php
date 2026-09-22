@@ -64,9 +64,25 @@ class Judgehost extends Model
      * removed corrects itself by restarting its agent rather than by
      * someone remembering to edit a list.
      *
+     * Issue #303 -- e com que versao, quando o agente souber dizer.
+     *
+     * As versoes sao um mapa `extensao => versao` a PARTE da lista, e nao um
+     * formato novo de lista, por tres razoes:
+     *
+     * 1. **A lista continua sendo a lista.** Quem decide se o host julga e
+     *    `canJudge()`, por presenca. Uma versao que nao chegou nao pode
+     *    virar uma extensao que sumiu -- a #354 mostrou que uma lista de
+     *    capacidades PARCIAL e pior que uma vazia, porque parece correta.
+     * 2. **O agente velho nao muda.** Ele manda `languages` e nada mais; a
+     *    versao fica `null`, que e exatamente a verdade sobre ele.
+     * 3. **Versao de quem nao foi declarado e descartada em silencio.** O
+     *    mapa vem da mesma sonda, mas o que manda e a lista: ninguem ganha
+     *    capacidade por aparecer no mapa de versoes.
+     *
      * @param  list<string>  $extensions
+     * @param  array<string, string|null>  $versions
      */
-    public function declareCapabilities(array $extensions): void
+    public function declareCapabilities(array $extensions, array $versions = []): void
     {
         $extensions = collect($extensions)
             ->filter(fn ($extension) => is_string($extension) && $extension !== '')
@@ -77,7 +93,18 @@ class Judgehost extends Model
         $this->capabilities()->whereNotIn('extension', $extensions)->delete();
 
         foreach ($extensions as $extension) {
-            $this->capabilities()->firstOrCreate(['extension' => $extension]);
+            $version = $versions[$extension] ?? null;
+            $version = is_string($version) && $version !== ''
+                ? mb_substr($version, 0, 40)
+                : null;
+
+            // updateOrCreate, e nao firstOrCreate: um host que reconstruiu a
+            // imagem re-registra com a mesma extensao e OUTRA versao, e esse
+            // e precisamente o evento que esta coluna existe para registrar.
+            $this->capabilities()->updateOrCreate(
+                ['extension' => $extension],
+                ['version' => $version],
+            );
         }
 
         $this->unsetRelation('capabilities');
@@ -91,6 +118,15 @@ class Judgehost extends Model
      * work instead would take a judge offline on upgrade, and #125 already
      * makes the failure visible and bounded: it gives the run back with a
      * reason, and a run refused enough times stops being offered.
+     *
+     * Issue #303 -- a VERSAO declarada nao entra nesta decisao, de proposito.
+     * Ela e registro, nao roteamento. Rotear por versao exigiria que alguem
+     * dissesse qual versao um contest exige (hoje nada no sistema diz isso),
+     * e a falha de uma regra dessas e silenciosa do pior jeito: um parque
+     * inteiro parando de receber trabalho porque o numero nao bateu. O que
+     * muda com a versao declarada e que o organizador VE a divergencia
+     * (JudgehostController::describe) em vez de descobri-la num
+     * rejulgamento que mudou de resposta.
      */
     public function canJudge(?string $extension): bool
     {

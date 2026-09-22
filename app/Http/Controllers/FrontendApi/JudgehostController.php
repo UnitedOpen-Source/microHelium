@@ -203,6 +203,16 @@ class JudgehostController extends Controller
             // the interface must not render that as "can judge nothing".
             'languages' => $host->capabilities->pluck('extension')->sort()->values()->all(),
             'declares_languages' => $host->capabilities->isNotEmpty(),
+            // Issue #303 -- a versao que cada maquina declarou, para que a
+            // divergencia entre dois judgehosts de um parque seja VISTA aqui
+            // em vez de descoberta num rejulgamento que mudou de resposta.
+            // Ausente quer dizer "este host nao disse" (agente anterior a
+            // #303, ou toolchain que nao se identificou), e nunca "nao tem".
+            'language_versions' => $host->capabilities
+                ->filter(fn ($capability) => $capability->version !== null)
+                ->sortBy('extension')
+                ->pluck('version', 'extension')
+                ->all(),
             'holding' => $held->map(fn (Run $run) => [
                 'run_id' => $run->id,
                 'run_number' => $run->run_number,

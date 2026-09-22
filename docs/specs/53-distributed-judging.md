@@ -17,6 +17,24 @@ API separada `/api/remote-judges/v1` autenticada por token por máquina, fora da
 
 Claim e conclusão são atômicos. Heartbeat estende lease apenas do proprietário atual. Re-registro identifica sessão/geração nova; agente antigo não pode finalizar após perda do lease. Report idempotente por run+attempt+token; resultado tardio409, sem sobrescrever score/balloons. Restart/cancelamento terminam processo local e servidor reconcilia lease expirado. Não presumir entrega exatamente uma vez pela rede: garantir efeitos finais idempotentes.
 
+### Versão junto da capacidade (#303, entregue)
+
+A promessa acima de que o DTO inclui "versão de linguagem" estava na spec e não no código: `MachineCapabilities::detect()` devolvia só extensões, e dois judgehosts de um parque — um com GCC 13, outro com GCC 15 — declaravam capacidade **idêntica**.
+
+O que passou a existir:
+
+- `App\Support\Judge\ToolchainVersions` é o dono único de *como se pergunta a versão* de cada toolchain (a receita morava em `tests/E2E/`, onde o agente não podia alcançá-la).
+- O agente **sonda** a versão na própria máquina, no `register`, e a envia em `language_versions` (mapa `extensão => versão`), ao lado de `languages`.
+- O servidor guarda em `judgehost_capabilities.version`, e a tela de judgehosts mostra a divergência entre máquinas do parque.
+
+Três limites deliberados:
+
+1. **Sonda, não pino do Dockerfile.** O pino diz o que o *nosso* repositório manda instalar; a máquina que importa é a da instituição parceira, que construiu a imagem dela.
+2. **A versão é registro, nunca roteamento.** `canJudge()` continua decidindo por presença da extensão. Rotear por versão exigiria alguém dizendo qual versão um contest exige — hoje nada no sistema diz isso — e a falha dessa regra seria um parque inteiro parando de receber trabalho com a fila parecendo vazia.
+3. **Ausente significa "não disse".** Um agente anterior a #303, ou um toolchain que não se identificou a tempo, declara as mesmas extensões de sempre com `version = null`.
+
+**O que ainda falta:** o DTO de *claim* continua sem a versão, e nenhuma coluna de `runs` guarda com que versão aquela submissão foi julgada. O que existe hoje é a versão que cada host declara **agora**, que um re-registro sobrescreve; comparar dois julgamentos da mesma submissão ainda depende de olhar o host no momento certo.
+
 Capacidades são compatibilidades efetivas de linguagem/runtime, não permissões. **Sem downgrade automático que retire isolamento ou mude a semântica do julgamento.** Se nenhum executor compatível existir, manter pending com motivo e alerta operacional. Credencial de um concurso/site não recebe runs fora do escopo; agente não acessa endpoints administrativos/participantes.
 
 ## Impacto de frontend

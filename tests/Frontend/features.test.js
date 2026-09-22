@@ -50,6 +50,27 @@ test('judge machines: an undeclared language list is not rendered as "judges not
     assert.match(document.body.textContent, /cpp, py/);
 });
 
+// Issue #303. A versao que cada maquina declara aparece junto da linguagem:
+// e assim que o organizador ve que duas maquinas do parque nao sao
+// intercambiaveis, em vez de descobrir isso num rejulgamento que mudou de
+// veredito no meio da maratona.
+test('judge machines: the declared language shows the version it judges with', async () => {
+    await mount('JudgeMachines', {
+        items: [
+            { id: 1, name: 'judge-01', enabled: true, state: 'idle', languages: ['c_gcc13', 'sh'], language_versions: { c_gcc13: '15.2.0' }, declares_languages: true, holding: [] },
+            { id: 2, name: 'judge-02', enabled: true, state: 'idle', languages: ['c_gcc13', 'sh'], language_versions: { c_gcc13: '13.2.1' }, declares_languages: true, holding: [] },
+        ],
+        meta: { total: 2, enabled: 2, judging: 0, stale: 0, lease_seconds: 600, stale_after_seconds: 90 },
+        capabilities: { can_manage_judges: true },
+    });
+
+    assert.match(document.body.textContent, /c_gcc13 15\.2\.0/);
+    assert.match(document.body.textContent, /c_gcc13 13\.2\.1/);
+    // E a linguagem sem versao continua listada: ausente e "nao disse", e
+    // nunca "nao tem".
+    assert.match(document.body.textContent, /sh/);
+});
+
 test('judge machines: the one-time token is shown once and disappears for good', async () => {
     await mount('JudgeMachines', {
         items: [],

@@ -501,18 +501,24 @@ class Language extends Model
             //       OTP-27.3.4.17          ss.ss_size = SIGSTKSZ     nao tem
             //       maint-28 / maint-27    o backport ainda nao saiu
             //
-            //     APKINDEX, x86_64, community, v3.24 E edge
-            //       erlang27  27.3.4.17-r0
-            //       erlang28  28.5.0.6-r0
-            //       erlang29  NAO EXISTE em nenhum dos dois
+            //     APKINDEX, x86_64 -- reconferido em 21/09/2026
+            //       community, v3.24 e edge:  erlang27 27.3.4.17-r0
+            //                                 erlang28 28.5.0.6-r0
+            //       edge/testing:             erlang29 29.0.6-r0
             //
-            // Ou seja: a unica release que carrega a correcao nao e publicada
-            // pelo Alpine, e a imagem do juiz e Alpine. A condicao correta
-            // para reativar passou a ser "o Alpine publicar um erlang que
-            // carregue o erlang/otp#11376" -- hoje isso quer dizer um
-            // `erlang29`, ou o backport para o `erlang28` que a equipe do OTP
-            // prometeu ("hopefully within a month or so", 07/09/2026) e ainda
-            // nao entregou.
+            // CUIDADO com o nome: existe um `erlang29`, e ele NAO SERVE.
+            // 29.0.6 e anterior a 29.1, que e a primeira release com a
+            // correcao. Quem lesse "espere o erlang29 do Alpine" reativaria
+            // para dentro do mesmo defeito. Quem decide e o PINO, nunca o
+            // nome do pacote.
+            //
+            // A condicao correta para reativar e "o Alpine publicar um
+            // erlang cujo PINO seja >= 29.1" -- um `erlang29` atualizado, ou
+            // o backport para o `erlang28` que a equipe do OTP prometeu
+            // ("hopefully within a month or so", 07/09/2026) e ainda nao
+            // entregou. O criterio esta em
+            // tests/Unit/Judge/ReativarABeamExigeOtpCorrigidaTest.php, que o
+            // confere por comparacao de versao em vez de por leitura.
             //
             // Desativar e reversivel; deixar ligado nao e. Linguagem
             // intermitente e pior que linguagem ausente: ausente, a equipe nao

@@ -95,10 +95,13 @@ class CatalogoBeamDesativadaTest extends TestCase
             em 20/09/2026; se a data acima estiver velha, meca de novo):
 
               1. O Alpine publica um pacote `erlang` que carregue a correcao?
-                 `apk search -x 'erlang*'`, ou o APKINDEX de `community`.
-                 Em 20/09/2026, em v3.24 E em edge: erlang27 (27.3.4.17-r0) e
-                 erlang28 (28.5.0.6-r0). `erlang29` NAO EXISTE em nenhum dos
-                 dois, e a imagem do juiz e Alpine.
+                 `apk search -x 'erlang*'`, e olhe TODOS os repositorios,
+                 nao so `community`. Reconferido em 21/09/2026:
+                 community (v3.24 e edge) tem erlang27 (27.3.4.17-r0) e
+                 erlang28 (28.5.0.6-r0); edge/testing tem erlang29
+                 (29.0.6-r0). O `erlang29` EXISTE e mesmo assim NAO SERVE --
+                 29.0.6 e anterior a 29.1. O nome do pacote nao responde
+                 nada; quem responde e o pino.
               2. A release empacotada tem mesmo a correcao? Confira pelo
                  CONTEUDO, e nao pelo numero:
                  `erts/emulator/sys/unix/sys_signal_stack.c` tem de conter

@@ -532,6 +532,50 @@ SH);
         $this->assertSame('pending', $run->fresh()->status);
     }
 
+    /**
+     * Issue #303 -- o agente declara a versao junto da capacidade, e ela
+     * chega ao banco.
+     *
+     * Ponta a ponta de verdade, e e o unico jeito de este caso valer: a
+     * sonda roda `php -r "echo PHP_VERSION;"` -- que e literalmente a linha
+     * de `App\Support\Judge\ToolchainVersions` para a extensao `php` --
+     * contra o PHP que esta rodando a suite, o payload vai pelo router de
+     * verdade e o que se le no fim e a linha de `judgehost_capabilities`.
+     *
+     * `php` e a escolha obvia de linguagem aqui porque e a unica do catalogo
+     * que existe com certeza onde quer que esta suite rode, incluindo a
+     * imagem da aplicacao, onde o toolchain de nenhuma outra esta instalado.
+     */
+    public function test_o_agente_declara_a_versao_do_toolchain_que_tem(): void
+    {
+        Language::factory()->create([
+            'contest_id' => $this->contest->id,
+            'extension' => 'php',
+            'name' => 'PHP (agente)',
+            'compile_command' => 'php -l {source}',
+            'run_command' => 'php {source}',
+        ]);
+
+        [$host, $token] = Judgehost::issue('judge-01');
+        $this->fakeServerAsThisApp();
+
+        $this->agentFor($token)->register();
+
+        $declaradas = $host->fresh()->capabilities->pluck('version', 'extension')->all();
+
+        $this->assertArrayHasKey('php', $declaradas, 'o agente nao declarou a capacidade de PHP');
+        $this->assertSame(
+            PHP_VERSION,
+            $declaradas['php'],
+            'o agente declarou a extensao e perdeu a versao: e exatamente o estado que a #303 existe para acabar'
+        );
+
+        // E a linguagem sem receita de versao continua declarada, sem versao:
+        // perder a versao nunca pode custar a capacidade (#354).
+        $this->assertArrayHasKey('sh', $declaradas);
+        $this->assertNull($declaradas['sh']);
+    }
+
     public function test_two_agents_never_judge_the_same_run(): void
     {
         [, $first] = Judgehost::issue('judge-01');
