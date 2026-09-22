@@ -95,9 +95,40 @@ class Language extends Model
             // tests/Unit/Judge/PromessaDeVersaoTest.php: apontar `java17`
             // para `java-21-openjdk` reprova na suite de todo PR, sem
             // precisar de JDK instalado.
-            ['name' => 'Java (OpenJDK 25 LTS)', 'extension' => 'java25', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-25-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-25-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'Java (OpenJDK 21 LTS)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-21-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
-            ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
+            // Issue #386 -- `-Xss` explicito, porque o padrao da plataforma
+            // nao cabe.
+            //
+            // O HotSpot fixa `ThreadStackSize` por plataforma
+            // (`os_cpu/<so>_<arch>/globals_*.hpp`), e em **linux x86_64 o
+            // valor e 1024 KB** -- metade do que aarch64 usa (2040/2048 KB).
+            // Uma recursao de 10^4 niveis, o item que esta suite mede em
+            // toda linguagem, pede POUCO MAIS que isso. Medido num conteiner
+            // `linux/amd64`, com o `a+b` recursivo do proprio teste:
+            //
+            //     sem -Xss (1024k)   0/10 corretas, StackOverflowError
+            //     -Xss1024k          0/5
+            //     -Xss1280k          5/5
+            //     -Xss1536k e acima  5/5
+            //
+            // A margem no padrao e ~zero, e e dai que vem a intermitencia: o
+            // `java21` derrubou o CI do #371 e passou na re-execucao do MESMO
+            // commit. Nossa medicao local nunca reproduziu porque e toda em
+            // aarch64, que tem o dobro da folga -- a mesma assimetria que a
+            // #339 registra.
+            //
+            // 8 MB e o `ulimit -s` do conteiner, ou seja a pilha que o SO da
+            // a um programa NATIVO. O criterio e esse: uma recursao que o C++
+            // aguenta nao deve reprovar so por estar em Java. Nao e numero
+            // arbitrario nem margem inventada.
+            //
+            // Nao custa memoria real: `-Xss` reserva espaco de ENDERECAMENTO
+            // por thread, e `addressSpaceLimitKbFor()` ja devolve null para a
+            // JVM (grace explicitamente nula em config/autojudge.php), entao
+            // nao ha `ulimit -v` para esbarrar. O veredito de memoria vem do
+            // pico de RSS.
+            ['name' => 'Java (OpenJDK 25 LTS)', 'extension' => 'java25', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-25-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-25-openjdk/bin/java -Xss8m -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Java (OpenJDK 21 LTS)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-21-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-21-openjdk/bin/java -Xss8m -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xss8m -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
 
             // Python
             // Issue #327 -- o `PYTHONPATH` poe
@@ -274,7 +305,7 @@ class Language extends Model
             ['name' => 'G-Portugol (1.2)', 'extension' => 'gportugol', 'file_ext' => 'gpt', 'compile_command' => 'bash {judge_runtime}/gportugol/compile.sh {source} {output}', 'run_command' => './{executable}', 'is_active' => true, 'category' => 'compiled'],
 
             // JVM Languages
-            ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'Kotlin (2.4)', 'extension' => 'kt', 'file_ext' => 'kt', 'compile_command' => 'kotlinc {source} -include-runtime -d {output}.jar', 'run_command' => 'java -Xss8m -jar {executable}.jar', 'is_active' => true, 'category' => 'compiled'],
             // Issue #305, Lote D -- Scala e Groovy, as duas linguagens do
             // lote que a imagem ja estava a um `unzip` de ter.
             //
@@ -288,7 +319,25 @@ class Language extends Model
             // O `{classname}` de Scala e o mesmo mecanismo do Java: o
             // AutoJudgeService o substitui pelo nome do arquivo sem
             // extensao, entao `Main.scala` tem de declarar `object Main`.
-            ['name' => 'Scala 3 (3.3 LTS)', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala {classname}', 'is_active' => true, 'category' => 'compiled'],
+            // Issue #386 -- `-J-Xss8m`: o lancador do Scala tira o `-J` e
+            // repassa o resto a JVM (`addJava "${1:2}"` em `bin/scala`).
+            //
+            // Esta entrada era o CONTROLE da tabela de conformidade: o texto
+            // do `clj` dizia que o `scala` "na MESMA JVM faz os 10^4 niveis",
+            // e concluia dai que o caro era o quadro do Clojure e nao a
+            // pilha. A conclusao estava errada, e o CI a desmentiu: em
+            // 22/09/2026 o item de recursao do `scala` reprovou no job do
+            // juiz, no mesmo teste que derrubou o `java21` no dia anterior.
+            //
+            // Medido com a distribuicao 3.3.8 desta imagem:
+            //
+            //     scala Main               (2048k, aarch64)  50005000
+            //     scala -J-Xss8m Main                        50005000
+            //     scala -J-Xss1024k Main   (padrao x86_64)   StackOverflowError
+            //
+            // O controle so parecia solido porque toda medicao nossa era em
+            // aarch64, que tem o dobro da pilha padrao.
+            ['name' => 'Scala 3 (3.3 LTS)', 'extension' => 'scala', 'file_ext' => 'scala', 'compile_command' => 'scalac {source}', 'run_command' => 'scala -J-Xss8m {classname}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Groovy 4', 'extension' => 'groovy', 'file_ext' => 'groovy', 'compile_command' => 'groovyc {source}', 'run_command' => 'groovy {source}', 'is_active' => true, 'category' => 'interpreted'],
             // Issue #305, Lote C -- Clojure pelo JAR, e nao pela CLI.
             //

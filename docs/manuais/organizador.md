@@ -476,7 +476,6 @@ que cada runtime aguenta:
 | `lisp_clisp` | `RE` | passa em 3000, estoura em 5000 | pilha do CLISP 2.49 |
 | `r` | `RE` | passa em 2000, estoura em 5000 | `options(expressions)` |
 | `nim` | `RE` | 2000 | `nim c` sem `-d:release` |
-| `clj` | `RE` | corte não medido | `StackOverflowError`, quadro gordo do Clojure |
 | `portugol_studio` | `RE` | corte não medido | o próprio interpretador detecta e aborta |
 
 As duas últimas são mais novas que as outras seis, e entraram aqui pelo
@@ -484,12 +483,31 @@ caminho que este manual recomenda: a tabela de conformidade afirmava que elas
 aguentavam, a suíte rodou dentro da imagem do juiz, o juiz respondeu `RE` nas
 duas, e quem estava errado era a tabela.
 
-Dois controles que valem a pena conhecer, porque eles mostram que o problema é
-da implementação e não do programa: o `lisp_sbcl` compila **a mesma fonte** do
-`lisp_clisp`, byte a byte, e faz os 10⁴ níveis; e o `scala`, na **mesma JVM**
-do `groovy` e do `clj`, também faz — das três linguagens de JVM do catálogo,
-só o Scala passa, o que localiza o custo no quadro de cada linguagem e não na
-pilha da máquina virtual. As outras 40 linguagens ativas passam.
+Um controle que vale a pena conhecer, porque mostra que o problema é da
+implementação e não do programa: o `lisp_sbcl` compila **a mesma fonte** do
+`lisp_clisp`, byte a byte, e faz os 10⁴ níveis. As outras linguagens ativas
+passam.
+
+> **O segundo controle que este manual publicava estava errado, e a correção
+> vale mais que ele.** Até a #386, aqui se lia que o `scala`, na mesma JVM do
+> `groovy` e do `clj`, fazia os 10⁴ níveis — e daí se concluía que o custo era
+> do quadro de cada linguagem, e não da pilha da JVM. **O CI desmentiu:** o
+> `java21` reprovou neste item em 21/09/2026 e o `scala` em 22/09, no mesmo
+> teste, sem nenhuma mudança de código entre as execuções que passaram e as
+> que não passaram.
+>
+> A causa é a pilha, e ela é da plataforma: o HotSpot fixa `ThreadStackSize`
+> em **1024 KB no linux x86_64** e em ~2048 KB no aarch64. Toda medição
+> anterior deste repositório foi em aarch64, com o dobro da folga, e por isso
+> o controle parecia sólido. Medido em `linux/amd64`, 10⁴ níveis pedem pouco
+> mais que 1024 KB — a margem no padrão é praticamente zero, e qual linguagem
+> de JVM reprova em cada execução vira sorteio.
+>
+> O conserto foi dar `-Xss8m` a todo invocador de JVM do catálogo (`java17`,
+> `java21`, `java25`, `kt`, `scala` e o `clojure-run`): 8 MB é o `ulimit -s`
+> do contêiner, ou seja **a mesma pilha que o sistema dá a um programa
+> nativo** — uma recursão que o C++ aguenta não deve reprovar só por estar em
+> Java. Com isso o `clj` saiu desta tabela.
 
 O `nim` continua sendo o único dos oito com conserto **medido** do nosso lado:
 o teto de 2000 quadros é do *build de depuração*, e o mesmo programa compilado
@@ -497,12 +515,15 @@ com `nim c -d:release` devolve o resultado certo. Fica registrado aqui porque
 mudar o comando do catálogo é decisão de quem mantém a imagem, não deste
 manual.
 
-O `clj` é candidato ao mesmo tratamento, e a diferença de palavra importa:
-`docker/judge/bin/clojure-run` chama `java -cp .../clojure.jar clojure.main`
-**sem `-Xss`**, então a pilha é a padrão da JVM — mas ninguém mediu se um
-`-Xss` maior resolve, e enquanto não medir este manual não vai dizer que
-resolve. O `portugol_studio` não tem esse botão: quem barra é o próprio núcleo
-do Portugol, e não a pilha por baixo dele.
+O `clj` **era** candidato ao mesmo tratamento, e agora foi medido: com o
+`-Xss1024k` padrão a recursão estoura, com `-Xss2048k` ela devolve o resultado
+certo. O `clojure-run` passou a dar `-Xss8m` e a linguagem saiu da tabela.
+
+O `groovy` continua nela, e não por falta do mesmo botão: ele passa em 800
+níveis no padrão, e nem 8 MB o levariam a 10⁴ — ali o custo é mesmo do quadro,
+que é o que o despacho dinâmico cobra. O `portugol_studio` não tem esse botão
+de forma alguma: quem barra é o próprio núcleo do Portugol, e não a pilha por
+baixo dele.
 
 > **Se um problema seu depende de recursão profunda em Portugol, leia a
 > mensagem que a equipe recebe.** O núcleo do Portugol Studio diagnostica o
