@@ -459,6 +459,7 @@ class LanguageConformanceTest extends TestCase
         'portugol_studio' => 20000,
         'kt' => 5000,
         'cs_dotnet' => 5000,
+        'cs_dotnet10' => 5000,
         'scratch' => 5000,
         'java25' => 5000,
         'java21' => 5000,
@@ -590,6 +591,16 @@ class LanguageConformanceTest extends TestCase
             'ts' => ['familia' => 'ts', 'itens' => $tudoConforme],
             'kt' => ['familia' => 'kt', 'itens' => $tudoConforme],
             'cs_dotnet' => ['familia' => 'cs', 'itens' => $tudoConforme],
+
+            // Issue #305 -- a entrada do .NET 10 entrou no catalogo neste mesmo
+            // PR, e esta linha e uma AFIRMACAO, nao uma medicao local: a de que
+            // o .NET 10 se comporta como o 8 nos onze itens. Quem a mede sao os
+            // 510 casos que esta suite roda DENTRO da imagem -- se o 10 divergir
+            // em qualquer item, o job do juiz fica vermelho nomeando qual, que e
+            // exatamente o servico que esta tabela existe para prestar. Foi assim
+            // que `clj` e `portugol_studio` cairam do item de recursao.
+            // Compila a mesma fonte C#, entao a familia e a mesma.
+            'cs_dotnet10' => ['familia' => 'cs', 'itens' => $tudoConforme],
             'rs' => ['familia' => 'rs', 'itens' => $tudoConforme],
             'go' => ['familia' => 'go', 'itens' => $tudoConforme],
             // INVERTIDO nesta revisão: o item de memória era

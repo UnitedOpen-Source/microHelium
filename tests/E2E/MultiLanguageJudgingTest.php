@@ -124,7 +124,24 @@ class MultiLanguageJudgingTest extends TestCase
             // installed globally) just to read stdin in a strict-mode file.
             'ts' => ['file' => 'solution.ts', 'source' => "declare function require(name: string): any;\nconst data: number[] = require('fs').readFileSync(0, 'utf8').trim().split(/\\s+/).map(Number);\nconsole.log(data[0] + data[1]);\n"],
             'kt' => ['file' => 'solution.kt', 'source' => "fun main() {\n    val (a, b) = readLine()!!.trim().split(\" \").map { it.toInt() }\n    println(a + b)\n}\n"],
-            'cs_dotnet' => ['file' => 'solution.cs', 'source' => "using System;\nclass Program {\n  static void Main() {\n    var p = Console.ReadLine().Split(' ');\n    Console.WriteLine(int.Parse(p[0]) + int.Parse(p[1]));\n  }\n}\n"],
+            // Issue #305 -- as duas LTS de C#, e a fonte CONFERE em qual
+            // runtime esta rodando.
+            //
+            // Aqui nao vale o que vale para o Java ao lado. As duas
+            // entradas de Java se distinguem pelo caminho absoluto do JDK,
+            // que esta escrito no proprio comando do catalogo; as duas de
+            // C# chamam o mesmo `dotnet`, e o que as separa e um
+            // `global.json` escrito em tempo de compilacao -- invisivel no
+            // comando e facil de quebrar sem ninguem notar.
+            //
+            // Com o a+b puro, um `csharp-net10` que caisse no SDK 8
+            // compilaria, imprimiria 8 e receberia AC: verde provando o
+            // contrario do que a entrada promete. Com o `Environment.Version`
+            // no meio, o AC destas duas linhas E a afirmacao de que cada
+            // entrada rodou no seu runtime -- medido, .NET 8.0.31 e .NET
+            // 10.0.12 nesta imagem.
+            'cs_dotnet' => ['file' => 'solution.cs', 'source' => "using System;\nclass Program {\n  static void Main() {\n    var p = Console.ReadLine().Split(' ');\n    if (Environment.Version.Major != 8) { Console.WriteLine(\"runtime errado: \" + Environment.Version); return; }\n    Console.WriteLine(int.Parse(p[0]) + int.Parse(p[1]));\n  }\n}\n"],
+            'cs_dotnet10' => ['file' => 'solution.cs', 'source' => "using System;\nclass Program {\n  static void Main() {\n    var p = Console.ReadLine().Split(' ');\n    if (Environment.Version.Major != 10) { Console.WriteLine(\"runtime errado: \" + Environment.Version); return; }\n    Console.WriteLine(int.Parse(p[0]) + int.Parse(p[1]));\n  }\n}\n"],
             'rs' => ['file' => 'solution.rs', 'source' => "use std::io::*;\nfn main() {\n    let mut s = String::new();\n    stdin().read_line(&mut s).unwrap();\n    let v: Vec<i64> = s.trim().split_whitespace().map(|x| x.parse().unwrap()).collect();\n    println!(\"{}\", v[0] + v[1]);\n}\n"],
             'go' => ['file' => 'solution.go', 'source' => "package main\nimport \"fmt\"\nfunc main() {\n  var a, b int\n  fmt.Scan(&a, &b)\n  fmt.Println(a + b)\n}\n"],
             'php' => ['file' => 'solution.php', 'source' => "<?php\nfscanf(STDIN, \"%d %d\", \$a, \$b);\necho \$a + \$b, PHP_EOL;\n"],

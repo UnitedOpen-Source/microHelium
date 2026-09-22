@@ -77,6 +77,20 @@ class Language extends Model
             //
             // `java17` segue INATIVA porque o `openjdk17-jdk` nao esta
             // instalado; a diferenca e que agora ela falha em vez de mentir.
+            // O pacote EXISTE no Alpine 3.24 (`openjdk17-jdk-17.0.20_p8-r0`,
+            // reconferido em 21/09/2026), entao liga-la e um `apk add` nas
+            // TRES imagens -- mais ~326 MiB medidos na #305 -- e as linhas
+            // que toda linguagem ligada precisa ter: procedencia no
+            // ToolchainManifest, identificador em ClicsLanguageIdentifiers,
+            // `memory_grace_mb` em config/autojudge.php, fixture em
+            // MultiLanguageJudgingTest e linha em LanguageConformanceTest.
+            // O que falta nao e o pacote: e a medicao dentro da imagem que
+            // essas duas ultimas exigem.
+            //
+            // E o caminho absoluto de cada uma e guardado por
+            // tests/Unit/Judge/PromessaDeVersaoTest.php: apontar `java17`
+            // para `java-21-openjdk` reprova na suite de todo PR, sem
+            // precisar de JDK instalado.
             ['name' => 'Java (OpenJDK 25 LTS)', 'extension' => 'java25', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-25-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-25-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Java (OpenJDK 21 LTS)', 'extension' => 'java21', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-21-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'Java (OpenJDK 17 LTS)', 'extension' => 'java17', 'file_ext' => 'java', 'compile_command' => '/usr/lib/jvm/java-17-openjdk/bin/javac {source}', 'run_command' => '/usr/lib/jvm/java-17-openjdk/bin/java -Xmx{memory}m {classname}', 'is_active' => false, 'category' => 'compiled'],
@@ -98,10 +112,10 @@ class Language extends Model
             ['name' => 'Python 3 (PyPy)', 'extension' => 'pypy3', 'file_ext' => 'py', 'compile_command' => 'pypy3 -m py_compile {source}', 'run_command' => 'pypy3 {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'Python 2.7', 'extension' => 'py2', 'file_ext' => 'py', 'compile_command' => 'python2 -m py_compile {source}', 'run_command' => 'python2 {source}', 'is_active' => false, 'category' => 'interpreted'],
 
-            // JavaScript / Node.js -- the container only installs a single
-            // Node runtime (the current LTS, via Alpine's `nodejs` package),
-            // so only one Node entry is real; the others are kept in the
-            // catalog for a future multi-version (nvm-based) setup.
+            // JavaScript / Node.js -- a imagem instala UM unico Node (a LTS
+            // corrente, pelo pacote `nodejs` do Alpine), entao so uma destas
+            // entradas e real; as outras duas ficam no catalogo como a
+            // promessa que a #305 quer cumprir, e nao como oferta.
             //
             // Issue #303 -- a razao escrita aqui antes estava ERRADA, e a
             // medicao a desmentiu. Dizia que seleciona-las hoje "would
@@ -110,10 +124,30 @@ class Language extends Model
             // silencio. Isso e pior do que falhar, e e exatamente o motivo
             // de as entradas de Java acima terem passado a caminho absoluto.
             //
-            // Node nao tem a mesma saida: o Alpine publica um unico pacote
-            // `nodejs`, sem prefixo por versao. Enquanto nao houver
-            // instalacao paralela, estas continuam inativas -- agora pelo
-            // motivo certo, e nao por um que a medicao derrubou.
+            // Node NAO TEM a mesma saida, e o motivo e mais forte do que
+            // "o Alpine nao publica um pacote por versao". Medido em
+            // 21/09/2026 numa `php:8.3-cli-alpine` (Alpine 3.24.2, aarch64):
+            //
+            //   apk search -x nodejs nodejs-current
+            //     -> nodejs-24.18.1-r0
+            //        nodejs-current-26.5.1-r0     (nao ha nodejs20/nodejs22)
+            //   apk info --provides nodejs-current
+            //     -> nodejs
+            //        cmd:node=26.5.1-r0
+            //   apk add --simulate nodejs nodejs-current
+            //     -> (6/6) Installing nodejs-current (26.5.1-r0)   [so um]
+            //
+            // O Alpine modela o Node como um unico PROVEDOR de `cmd:node`:
+            // pedir os dois instala um, e o outro some sem erro. Ou seja, a
+            // mesma falha silenciosa da #305, uma camada abaixo. Node lado a
+            // lado e Lote D (artefato de fora do Alpine, fixado por versao e
+            // por hash, como Kotlin/Scala/Dart ja sao) -- nao e `apk add`.
+            //
+            // Enquanto isso, o que impede a armadilha de ser armada de novo
+            // e tests/Unit/Judge/PromessaDeVersaoTest.php: ligar `js_node20`
+            // ou `js_node22` ao lado do `js_node24` sem antes dar a cada um
+            // um comando que distinga a versao reprova na suite de todo PR.
+            //
             // Issue #327 -- o `node` passa por
             // `resources/judge-runtime/node/run.sh`, que acrescenta um
             // `--stack-size` DERIVADO do `ulimit -s` do host. Uma recursao
@@ -283,7 +317,28 @@ class Language extends Model
             // resolved by AutoJudgeService, not here -- this array must stay
             // callable from contexts where the app isn't booted yet (e.g.
             // PHPUnit data providers), where base_path() isn't available.
-            ['name' => 'C# (.NET 8)', 'extension' => 'cs_dotnet', 'file_ext' => 'cs', 'compile_command' => 'bash {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'bash {judge_runtime}/csharp/run.sh {executable} {memory}', 'is_active' => true, 'category' => 'compiled'],
+            //
+            // Issue #305 -- as DUAS LTS de .NET, lado a lado, e o primeiro
+            // token deixando de ser `bash`.
+            //
+            // Os dois SDKs convivem sob um `dotnet` so
+            // (`/usr/lib/dotnet/sdk/{8.0.131,10.0.303}`), e quem escolhe
+            // entre eles e o `global.json` que o compile.sh escreve -- nao
+            // ha caminho absoluto por versao como ha no Java. Isso deixava
+            // as duas entradas com comandos identicos a menos de uma
+            // variavel de ambiente, e `MachineCapabilities::executableOf()`
+            // sonda o PRIMEIRO TOKEN: com `bash` nos dois, todo host com
+            // bash anunciaria as duas e receberia trabalho que nao sabe
+            // fazer.
+            //
+            // Dai os invocadores `csharp-net8`/`csharp-net10`
+            // (docker/judge/bin/), pelo mesmo motivo que `scratch-run`,
+            // `portugol-studio` e `clojure-run` tem nome proprio. Medido
+            // numa imagem com os dois SDKs, removendo
+            // /usr/local/bin/csharp-net10: a sonda passa a anunciar
+            // `cs_dotnet` sem `cs_dotnet10`, que e a verdade daquele host.
+            ['name' => 'C# (.NET 10 LTS)', 'extension' => 'cs_dotnet10', 'file_ext' => 'cs', 'compile_command' => 'csharp-net10 {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'csharp-net10 {judge_runtime}/csharp/run.sh {executable} {memory}', 'is_active' => true, 'category' => 'compiled'],
+            ['name' => 'C# (.NET 8 LTS)', 'extension' => 'cs_dotnet', 'file_ext' => 'cs', 'compile_command' => 'csharp-net8 {judge_runtime}/csharp/compile.sh {source} {output}', 'run_command' => 'csharp-net8 {judge_runtime}/csharp/run.sh {executable} {memory}', 'is_active' => true, 'category' => 'compiled'],
             ['name' => 'C# (Mono)', 'extension' => 'cs_mono', 'file_ext' => 'cs', 'compile_command' => 'mcs -out:{output}.exe {source}', 'run_command' => 'mono {executable}.exe', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'F# (.NET 8)', 'extension' => 'fs_dotnet', 'file_ext' => 'fs', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],
             ['name' => 'Visual Basic (.NET 8)', 'extension' => 'vb', 'file_ext' => 'vb', 'compile_command' => 'dotnet build', 'run_command' => 'dotnet run', 'is_active' => false, 'category' => 'compiled'],
@@ -484,18 +539,24 @@ class Language extends Model
             //       OTP-27.3.4.17          ss.ss_size = SIGSTKSZ     nao tem
             //       maint-28 / maint-27    o backport ainda nao saiu
             //
-            //     APKINDEX, x86_64, community, v3.24 E edge
-            //       erlang27  27.3.4.17-r0
-            //       erlang28  28.5.0.6-r0
-            //       erlang29  NAO EXISTE em nenhum dos dois
+            //     APKINDEX, x86_64 -- reconferido em 21/09/2026
+            //       community, v3.24 e edge:  erlang27 27.3.4.17-r0
+            //                                 erlang28 28.5.0.6-r0
+            //       edge/testing:             erlang29 29.0.6-r0
             //
-            // Ou seja: a unica release que carrega a correcao nao e publicada
-            // pelo Alpine, e a imagem do juiz e Alpine. A condicao correta
-            // para reativar passou a ser "o Alpine publicar um erlang que
-            // carregue o erlang/otp#11376" -- hoje isso quer dizer um
-            // `erlang29`, ou o backport para o `erlang28` que a equipe do OTP
-            // prometeu ("hopefully within a month or so", 07/09/2026) e ainda
-            // nao entregou.
+            // CUIDADO com o nome: existe um `erlang29`, e ele NAO SERVE.
+            // 29.0.6 e anterior a 29.1, que e a primeira release com a
+            // correcao. Quem lesse "espere o erlang29 do Alpine" reativaria
+            // para dentro do mesmo defeito. Quem decide e o PINO, nunca o
+            // nome do pacote.
+            //
+            // A condicao correta para reativar e "o Alpine publicar um
+            // erlang cujo PINO seja >= 29.1" -- um `erlang29` atualizado, ou
+            // o backport para o `erlang28` que a equipe do OTP prometeu
+            // ("hopefully within a month or so", 07/09/2026) e ainda nao
+            // entregou. O criterio esta em
+            // tests/Unit/Judge/ReativarABeamExigeOtpCorrigidaTest.php, que o
+            // confere por comparacao de versao em vez de por leitura.
             //
             // Desativar e reversivel; deixar ligado nao e. Linguagem
             // intermitente e pior que linguagem ausente: ausente, a equipe nao

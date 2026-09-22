@@ -91,6 +91,18 @@ class ClicsLanguageIdentifiers
         'coffee' => 'coffeescript',
 
         // .NET
+        //
+        // Issue #305 -- o `csharp` sem sufixo fica com o .NET 8, e nao com
+        // a LTS nova, ao contrario do que o `java25` fez aqui em cima.
+        //
+        // Nao e descuido: a tabela do Java nasceu inteira neste arquivo, e
+        // nenhum daqueles ids tinha saido no feed antes. O `csharp` do
+        // `cs_dotnet` ja saiu, e "IDs [...] must be maintained by downstream
+        // systems" -- mover o id sem sufixo para a entrada nova trocaria o
+        // significado de um identificador ja publicado. Trocar isso e uma
+        // decisao da camada CLICS (#333), e nao um efeito colateral de
+        // acrescentar um SDK.
+        'cs_dotnet10' => 'csharp_dotnet10',
         'cs_dotnet' => 'csharp',
         'cs_mono' => 'csharp_mono',
         'fs_dotnet' => 'fsharp',

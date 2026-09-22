@@ -75,6 +75,18 @@ onMounted(carregarCalibracao);
 
 const nomeDaMaquina = id => data.value?.items?.find(host => host.id === id)?.name ?? `#${id}`;
 
+// Issue #303 -- a linguagem declarada sai com a versao com que aquela
+// maquina a julga. Duas maquinas do parque com imagens diferentes
+// declaravam exatamente a mesma linha ate aqui, e a divergencia so aparecia
+// num rejulgamento que mudou de veredito.
+//
+// Sem versao a extensao sai sozinha, de proposito: ausente quer dizer "este
+// host nao disse" (agente anterior a #303, ou toolchain que nao se
+// identificou), e nunca "nao tem".
+const linguagensDeclaradas = host => (host.languages ?? [])
+    .map(extensao => host.language_versions?.[extensao] ? `${extensao} ${host.language_versions[extensao]}` : extensao)
+    .join(', ');
+
 // Os cinco estados vem prontos do servidor, avaliados numa ordem que
 // responde "o que o operador olha primeiro" -- uma maquina desligada E
 // calada ha muito tempo e `disabled`, nao `stale`, porque dizer `stale`
@@ -168,7 +180,7 @@ async function setEnabled(host, enabled) {
                         que esta funcionando.
                     -->
                     <p class="feature-help">
-                        <template v-if="host.declares_languages">Linguagens declaradas: {{ host.languages.join(', ') }}</template>
+                        <template v-if="host.declares_languages">Linguagens declaradas: {{ linguagensDeclaradas(host) }}</template>
                         <template v-else>Não declarou linguagens — a fila trata isso como “julga qualquer uma”. Agentes anteriores ao #117 se comportam assim.</template>
                     </p>
 

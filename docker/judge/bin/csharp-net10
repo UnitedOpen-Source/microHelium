@@ -1,0 +1,33 @@
+#!/bin/sh
+# Issue #305 -- o invocador do C# sobre o .NET 10 LTS.
+#
+# O gemeo do `csharp-net8`, e o comentario longo esta la: este par existe
+# para que a sonda de capacidade (`MachineCapabilities::executableOf()`, que
+# olha o primeiro token do comando) consiga distinguir um host com o SDK 8
+# de um com o SDK 10. Com `bash` nos dois comandos ela nao distinguia.
+#
+# So estes dois valores mudam, e eles andam juntos: medido, `net10.0` com o
+# `global.json` fixando 8.0 morre com NETSDK1045 ("The current .NET SDK does
+# not support targeting .NET 10.0"), e `net8.0` sem `global.json` nenhum e
+# assumido pelo SDK 10 e morre com NU1100 por falta de rede.
+HELIUM_DOTNET_SDK=10.0.0
+HELIUM_DOTNET_TFM=net10.0
+export HELIUM_DOTNET_SDK HELIUM_DOTNET_TFM
+
+if [ "$1" = "--version" ]; then
+    dir=$(mktemp -d)
+    printf '{"sdk":{"version":"%s","rollForward":"latestFeature"}}\n' "$HELIUM_DOTNET_SDK" > "$dir/global.json"
+    # Ver o `csharp-net8`: sem `DOTNET_CLI_HOME` o SDK 10 responde "The
+    # user's home directory could not be determined" onde nao ha `HOME`, e
+    # foi assim que este invocador reprovou no primeiro E2E.
+    DOTNET_CLI_HOME="$dir"
+    export DOTNET_CLI_HOME
+    cd "$dir" || exit 1
+    dotnet --version
+    rc=$?
+    cd / || exit 1
+    rm -rf "$dir"
+    exit "$rc"
+fi
+
+exec bash "$@"
