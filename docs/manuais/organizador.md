@@ -374,6 +374,39 @@ quebra), e o Treino Livre não entra nesta fase.
 Quem não quiser Portugol numa prova desativa a linguagem em **Linguagens**,
 naquele contest.
 
+### G-Portugol (`.gpt`) — o outro portugol, e ele **não** é igual ao de cima
+
+A partir do #296 o `.gpt` do [G-Portugol](https://gportugol.github.io) também é
+julgado. Os dois se chamam "portugol" e as diferenças **mudam o enunciado** —
+lê-las como se fossem a mesma linguagem é a forma mais fácil de escrever um
+problema que só uma das duas resolve.
+
+| | Portugol Studio (`.por`) | G-Portugol (`.gpt`) |
+|---|---|---|
+| entrada | **um valor por linha** (`nextLine()`) | `3 5` **na mesma linha funciona** (`leia()` lê com `scanf`) |
+| partida | ~2,7 s de CPU (duas JVMs) — precisa de limite por linguagem | binário nativo, **abaixo de 10 ms** — limite padrão basta |
+| recursão de 10⁴ | não aguenta | aguenta (medido: `50005000`) |
+| erro de execução | vira `RE` desde o #351 | vira `RE` sem contorno nenhum |
+
+O que **muda a saída esperada**, medido:
+
+| | |
+|---|---|
+| `imprima(real)` | sempre **duas casas** e ponto: `3.14159` sai `3.14`, e `9` sai `9.00`. Não há notação científica |
+| `imprima(...)` | **sempre quebra a linha no fim**. Não existe `imprima` sem `\n` |
+| `inteiro` | **32 bits**. `1+2+...+100000` não é `5000050000`: sai `705082704`, em silêncio. Se o enunciado passa de 2³¹, ou ele muda, ou a linguagem sai daquela prova |
+| booleano | `verdadeiro` / `falso` |
+
+E uma armadilha de **sintaxe**, porque ela custa um CE a quem não sabe: as
+declarações de `função` vêm **depois** do bloco `início`…`fim` principal, e
+não antes. As duas outras ordens que parecem naturais dão erro de sintaxe.
+
+Erro de sintaxe dá **CE** e diz `arquivo:linha` — não vira "resposta errada".
+Similaridade não é oferecida para G-Portugol (responde 422, não quebra).
+
+Quem não quiser G-Portugol numa prova desativa a linguagem em **Linguagens**,
+naquele contest.
+
 ### Recursão profunda: o Bash não aguenta, e não há o que configurar
 
 Uma busca em profundidade recursiva sobre um grafo de 10 mil vértices é

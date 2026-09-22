@@ -42,8 +42,8 @@ cada uma vem e o que está fixado. Este arquivo é esse lugar.
 
 <!-- Guardados por InventarioDeRuntimeTest. Não edite sem remedir. -->
 
-- **77** entradas no catálogo `Language::getDefaultLanguages()`
-- **50** ativas (`is_active => true`)
+- **78** entradas no catálogo `Language::getDefaultLanguages()`
+- **51** ativas (`is_active => true`)
 - **27** inativas
 - **39** linguagens distintas entre as ativas — C tem três entradas, C++
   quatro, e C#, Fortran, Prolog e Common Lisp duas cada, e Java três
@@ -171,6 +171,7 @@ derivável sem construir a imagem, e por isso carrega a data.
 | `js_node24` | apk `nodejs=24.18.1-r0`, apk `bash=5.3.9-r1`, repo `resources/judge-runtime/node/run.sh` | Node v24.18.1 |
 | `ts` | apk `npm=11.12.1-r0`, npm `typescript@7.0.2`, apk `bash=5.3.9-r1`, repo `resources/judge-runtime/node/run.sh`, apk `nodejs=24.18.1-r0` | tsc 7.0.2 sobre Node 24 |
 | `scratch` | estágio `scratch-run-builder`, invocador `scratch-run`, apk `nodejs=24.18.1-r0` | scratch-run 0.1.7 (bundle webpack, 645.450 bytes) |
+| `gportugol` | apk `bash=5.3.9-r1`, repo `resources/judge-runtime/gportugol/compile.sh`, estágio `gportugol-builder`, invocador `gpt`, apk `gcc=15.2.0-r5` | o `gpt` é construído do fonte no estágio próprio; o `compile.sh` traduz para C com `gpt -t` e o gcc da imagem compila a segunda etapa |
 | `portugol_studio` | estágio `portugol-studio-builder`, repo `docker/judge/portugol/VerificaPortugol.java`, invocador `portugol-studio-check`, apk `openjdk21-jdk=21.0.12_p8-r0`, repo `docker/judge/portugol/ExecutaPortugol.java`, invocador `portugol-studio` | `portugol-console-2.7.5.jar` + 27 jars em `lib/`; nenhuma das duas etapas usa o Console |
 | `kt` | baixado `KOTLIN_VERSION`, invocador `kotlinc`, apk `openjdk21-jdk=21.0.12_p8-r0` | kotlinc-jvm 2.4.20 (JRE 25.0.4+7) |
 | `scala` | baixado `SCALA_VERSION`, invocador `scalac`, invocador `scala` | scalac 3.3.8 (LTS) |

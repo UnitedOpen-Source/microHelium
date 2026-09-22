@@ -34,6 +34,8 @@
             @hasSection('footer')<div class="auth-footer">@yield('footer')</div>@endif
         </div>
         <p class="auth-copyright">&copy; {{ date('Y') }} MicroHelium</p>
+        {{-- AGPL-3.0 secao 13: quem ve o login ja esta usando o sistema pela rede. --}}
+        <p class="auth-copyright">Software livre sob <a href="{{ config('app.source_url') }}/blob/master/LICENSE">AGPL-3.0-or-later</a> — <a href="{{ config('app.source_url') }}">código-fonte desta instalação</a></p>
     </main>
 </div>
 @yield('scripts')
