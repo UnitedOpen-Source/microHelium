@@ -36,6 +36,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Código-fonte desta instalação
+    |--------------------------------------------------------------------------
+    |
+    | Issue #266 -- o projeto passou a AGPL-3.0-or-later, e a seção 13 dessa
+    | licença obriga quem roda uma versão MODIFICADA e a oferece pela rede a
+    | oferecer também o fonte dela a quem a usa.
+    |
+    | Por isso esta é uma configuração, e não um link fixo no template: o
+    | endereço que cumpre a obrigação é o do fonte de QUEM ESTÁ RODANDO. Uma
+    | instalação que aplicou patches e aponta para o repositório de origem
+    | não está oferecendo o fonte da versão que a pessoa está usando.
+    |
+    | O padrão é o repositório canônico, que é a resposta certa para uma
+    | instalação sem modificações.
+    |
+    */
+
+    'source_url' => env('APP_SOURCE_URL', 'https://github.com/UnitedOpen-Source/microHelium'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     */

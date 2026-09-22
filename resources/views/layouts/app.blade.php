@@ -373,8 +373,13 @@
                             <a href="/ajuda" class="hover:text-foreground transition-colors">Ajuda</a>
                         </nav>
                         <p>
-                            &copy; {{ date('Y') }} <a href="https://github.com/UnitedOpen-Source/microHelium" class="hover:text-foreground transition-colors">MicroHelium</a> -
+                            &copy; {{ date('Y') }} <a href="{{ config('app.source_url') }}" class="hover:text-foreground transition-colors">MicroHelium</a> -
                             Sistema de Maratonas de Programação
+                        </p>
+                        {{-- AGPL-3.0 secao 13: a oferta de fonte para quem usa pela rede. --}}
+                        <p>
+                            Software livre sob <a href="{{ config('app.source_url') }}/blob/master/LICENSE" class="hover:text-foreground transition-colors">AGPL-3.0-or-later</a> —
+                            <a href="{{ config('app.source_url') }}" class="hover:text-foreground transition-colors">código-fonte desta instalação</a>
                         </p>
                     </div>
                 </footer>
