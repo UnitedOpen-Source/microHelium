@@ -64,6 +64,24 @@ Rodar **antes de qualquer prova**, contra o ambiente que vai rodar a prova,
 com o proxy que vai estar no meio:
 
 ```sh
+scripts/clics/verifica-streaming-deploy.sh https://SEU-DEPLOY <ID-DO-CONTEST>
+```
+
+Ele mede e **decide**: sai com 0 se o feed faz streaming, 1 se provou que não
+(com a lista do que investigar, na ordem em que costuma estar), e 2 se a
+medição não pôde ser feita. O critério não é "a primeira linha chegou rápido"
+— isso não quer dizer nada sozinho — e sim a **fração do tempo total** em que
+ela chegou: um feed bufferizado entrega a primeira e a última no mesmo
+instante (100%), e um que faz streaming entrega a primeira quase em zero.
+
+A seção 8 mede a mesma coisa contra a configuração de nginx versionada aqui,
+sem deploy; o que este script acrescenta é a camada que **não** está no
+repositório — um CDN ou balanceador na frente.
+
+O comando abaixo é o que o script faz por dentro, para quem quiser conferir
+ou adaptar:
+
+```sh
 curl -N -s "https://SEU-DEPLOY/api/clics/contests/<ID>/event-feed" \
   | perl -MTime::HiRes=time -ne 'BEGIN{$t0=time} $n++;
       printf("linha %-6d t=%.3fs\n", $n, time-$t0) if ($n==1 || $n%1000==0);
@@ -204,3 +222,83 @@ que não podia funcionar, de novo.
   regressão, não prova de funcionamento. Quem prova é a seção 3.
 - **O nginx de produção.** Continua inteiro na seção 3.
 
+
+## 8. O nginx de produção deixa de ser suposição (21/09/2026)
+
+A seção 3 pedia um deploy real para responder ao `X-Accel-Buffering`. Metade
+dessa pergunta não precisava de deploy: **a configuração do nginx de produção
+está versionada aqui** (`docker/nginx/nginx.conf` e `docker/nginx/default.conf`,
+montadas pelo `docker-compose.yml`), e o mesmo vale para o PHP
+(`docker/php/php.ini` e `docker/php/www.conf`, instalados pelo `Dockerfile`).
+Subir `nginx:alpine` e `php:8.3-fpm-alpine` com **esses mesmos arquivos** e
+medir com `curl -N` de fora responde pelo caminho inteiro — o que ficou de
+fora é o host, não a configuração.
+
+`scripts/clics/verifica-streaming-nginx.sh` é essa medição, executável.
+
+### O que foi medido
+
+20 linhas NDJSON, 250 ms entre elas (~5 s de feed), `curl -N` a partir do host.
+Uma mutação por vez, tudo o mais igual:
+
+| variante | 1ª linha | última | faz streaming? |
+|---|---|---|---|
+| **como está hoje** | **0,002 s** | 4,797 s | **sim** |
+| sem `X-Accel-Buffering: no` | 5,058 s | 5,058 s | não |
+| sem `ob_flush()` | 5,087 s | 5,087 s | não |
+| sem `flush()` | 5,039 s | 5,039 s | não |
+| `zlib.output_compression = On` (cliente com `Accept-Encoding: gzip`) | 4,999 s | 4,999 s | não |
+
+"1ª linha a ~5 s" é o feed inteiro chegando de uma vez no fim — exatamente o
+que trava o resolver.
+
+Três coisas que este repositório dava por não-prováveis localmente ficaram
+provadas:
+
+- **o `X-Accel-Buffering: no` atravessando nginx**: removê-lo bufferiza tudo.
+  O cabeçalho é carregado, e a configuração versionada o honra;
+- **o `flush()` de SAPI**: a seção 7 dizia, com razão, que sob o SAPI de linha
+  de comando não há camada de servidor para ele esvaziar, e que nenhum
+  experimento local ficaria vermelho quando só o `flush()` sumisse. Sob
+  **php-fpm** há: removendo só o `flush()`, o feed chega todo no fim;
+- **`output_buffering = 4096`** do `docker/php/php.ini` é o que torna o
+  `ob_flush()` necessário (com ele, `ob_get_level()` é 1 em produção).
+
+### O que a medição achou, e não estava procurando
+
+`config/clics.php` diz sobre `max_seconds`: *"`null` é o valor da spec: o feed
+não termina. É o default de produção."*
+
+`docker/php/www.conf` diz `request_terminate_timeout = 300s`.
+
+**As duas não podem ser verdade, e quem ganha é o php-fpm.** Medido com o
+mesmo `www.conf` e o teto baixado de 300 s para 15 s só para a medição caber
+em 15 s — um feed de 120 linhas foi cortado na linha 64, aos 15,9 s:
+
+```
+WARNING: [pool www] child 8 ... execution timed out (16.12 sec), terminating
+WARNING: [pool www] child 8 exited on signal 15 (SIGTERM) ...
+```
+
+e o `curl` saiu com **18** (`CURLE_PARTIAL_FILE`). Nenhuma linha chegou
+partida — o NDJSON não corrompe —, mas a conexão cai.
+
+Em produção, com `request_terminate_timeout = 300s`, isso é **o resolver sendo
+desconectado a cada 5 minutos durante a prova inteira**. Pela #328, o
+`ContestSource` do ICPC espera até 20 s antes de reconectar; numa prova de 5
+horas são ~60 quedas.
+
+**Este runbook não escolhe o número** — escolher é decisão de quem opera, e as
+opções (subir o teto, dar um pool próprio ao feed, ou pôr na aplicação um teto
+abaixo do do php-fpm para que a conexão feche limpa em vez de levar SIGTERM)
+têm custos diferentes. O que passou a existir é a guarda: se o número do
+`www.conf` mudar sem este runbook mudar junto, a suíte fica vermelha
+(`EventFeedDeploymentContractTest`).
+
+### O que **continua** precisando de deploy real
+
+- o host de produção propriamente dito: um CDN, um balanceador ou um
+  `proxy_buffering` numa camada **na frente** deste nginx não está neste
+  repositório e não tem como ser medido aqui. `scripts/clics/verifica-streaming-deploy.sh`
+  é o que o operador roda contra a URL real para responder isso com evidência;
+- a cerimônia inteira contra um resolver de verdade (seção 4).
