@@ -82,9 +82,28 @@ pendente do time, conforme a pergunta original.
 **Linguagens suportadas**: mapeadas em
 `App\Services\Similarity\SimilarityLanguageMap` a partir de
 `Language::getDefaultLanguages()` para os identificadores de CLI do JPlag
-v6.2.0 (cpp, java, python3, javascript, typescript, kotlin, scala, csharp,
-rust, golang, swift, rlang). Uma linguagem fora do mapa é rejeitada com 422
-em `language_id`, nunca tentada silenciosamente.
+v6.2.0 — **os que o `--help` do jar imprime**, e não os nomes da tabela do
+README: c, cpp, java, python3, javascript, typescript, kotlin, scala, csharp,
+rust, **go**, swift, rlang, scheme. Uma linguagem fora do mapa é rejeitada com
+422 em `language_id`, nunca tentada silenciosamente.
+
+A distinção entre a CLI e o README não é preciosismo: até 23/09/2026 este mapa
+trazia `golang`, que é como o README chama Go e **não é** identificador que o
+JPlag aceite — toda checagem de Go morria em `Language golang does not exists`,
+depois de a interface tê-la oferecido. Quem guarda isso agora é
+`SimilarityLanguageCoverageTest::test_todo_identificador_usado_no_mapa_existe_no_jplag_fixado`,
+que carrega a lista do `--help` da versão fixada e reprova se o pino mudar sem
+que alguém releia.
+
+Três decisões deste mapa são **medidas**, e a medição está no docblock da
+classe (JPlag 6.2.0, aarch64, 23/09/2026):
+
+| Entrada | Decisão | Medido |
+|---|---|---|
+| `c_gcc13`, `c99_gcc`, `c_clang17` | mapeadas para `c` | o parser `c` lê C17 de maratona sem um erro de ANTLR (inicializador designado, VLA, `restrict`, `_Generic`, `_Static_assert`) e separa cópia renomeada (1.000) de solução alheia (0.000) |
+| as mesmas, via `cpp` | recusada | o parser C++ falha no inicializador designado (`extraneous input '.'`) e recupera com menos tokens — seria a escolha pior |
+| `scm` (Guile) | mapeada para `scheme` | mesma discriminação, 33 tokens de casamento mais longo |
+| `rkt` (Racket) | **fora, de propósito** | o parser `scheme` só lê `.scm`/`.ss`, e o motor grava `submission.rkt` → `Nothing to parse` em todos e `Not enough valid submissions!`; renomeado, `#lang racket` é erro léxico na linha 1 |
 
 **Exclusão de envios de prática**: não implementada — é um no-op. A tabela
 `runs` ainda não tem uma coluna que distinga um envio de prática de um de
