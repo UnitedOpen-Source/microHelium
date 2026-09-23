@@ -615,7 +615,11 @@ Runs two layers of checks against the live stack: the PHPUnit `Smoke` suite (`te
 
 ## Security
 
-If you discover a security vulnerability, please send an email to security@example.com. All security vulnerabilities will be promptly addressed.
+microHelium runs untrusted, user-submitted code, so a judge sandbox escape is
+arbitrary code execution on the host. **Report vulnerabilities privately**
+through GitHub's private vulnerability reporting, not as a public issue — see
+[SECURITY.md](SECURITY.md) for the channel, what is in scope and what to
+expect.
 
 ### Dependency auditing
 

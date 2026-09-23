@@ -140,6 +140,34 @@ jobs:
           echo "$files"
           echo "$files" | xargs ./vendor/bin/pint --test
 
+  # Issue #398. publiccode.yml is what public-software catalogues read, and
+  # an invalid one is silently skipped by their crawlers -- nobody finds out.
+  # The official validator runs here, pinned by version AND by SHA-256 (the
+  # value from the release's checksums.txt), for the same reason the actions
+  # above are pinned by commit: a release asset can be replaced.
+  #
+  # --no-network: the URL checks would make this job depend on github.com
+  # answering during CI. The schema is what can regress in a PR; the URLs
+  # are the repository's own.
+  publiccode:
+    name: publiccode.yml (validador oficial)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate publiccode.yml
+        env:
+          PARSER_VERSION: v5.4.3
+          PARSER_SHA256: 211847305611417ac0b76af5169086232ea6c75ff6ae686227b6972a41599dd7
+        run: |
+          curl -fsSL -o parser.tar.gz \
+            "https://github.com/italia/publiccode-parser-go/releases/download/${PARSER_VERSION}/publiccode-parser-go_Linux_x86_64.tar.gz"
+          echo "${PARSER_SHA256}  parser.tar.gz" | sha256sum -c -
+          tar xzf parser.tar.gz publiccode-parser
+          ./publiccode-parser -no-network publiccode.yml
+
   judge-image:
     name: Judging (all languages, inside the sandbox)
     runs-on: ubuntu-latest

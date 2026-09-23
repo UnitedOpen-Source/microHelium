@@ -135,6 +135,33 @@ class LicenseDeclarationsAgreeTest extends TestCase
     }
 
     /**
+     * Issue #398: o `publiccode.yml` é a sexta declaração, e a que catálogos
+     * de software público leem sem abrir mais nada. Sem esta checagem, uma
+     * relicença futura (#266) atualizaria as cinco fontes acima e deixaria o
+     * catálogo anunciando a licença antiga.
+     *
+     * Lido por expressão regular e não por parser YAML de propósito: a chave
+     * só aparece uma vez no arquivo, e o teste não deve depender de um pacote
+     * que o projeto não declara.
+     */
+    public function test_publiccode_yml_declara_o_mesmo_spdx()
+    {
+        $publiccode = file_get_contents(base_path('publiccode.yml'));
+
+        $this->assertSame(
+            1,
+            preg_match_all('/^\s+license:\s*(\S+)\s*$/m', $publiccode, $matches),
+            'O publiccode.yml deveria ter exatamente uma chave legal.license.'
+        );
+
+        $this->assertSame(
+            self::SPDX,
+            trim($matches[1][0], '\'"'),
+            'publiccode.yml declara licença diferente do resto do repositório.'
+        );
+    }
+
+    /**
      * O README e o SRS quebram linha no meio das frases, então "or\nlater"
      * não casa com "or later" sem normalizar antes.
      */

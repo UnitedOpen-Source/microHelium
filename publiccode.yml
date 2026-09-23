@@ -1,0 +1,93 @@
+# Metadados do padrão publiccode.yml (https://github.com/publiccodenet/publiccode.yml),
+# para que catálogos de software público encontrem e avaliem o microHelium.
+# Issue #398. Validado no CI pelo publiccode-parser oficial
+# (italia/publiccode-parser-go); a licença abaixo é conferida junto com as
+# demais declarações por tests/Unit/LicenseDeclarationsAgreeTest.php.
+publiccodeYmlVersion: '0'
+
+name: microHelium
+url: 'https://github.com/UnitedOpen-Source/microHelium'
+landingURL: 'https://github.com/UnitedOpen-Source/microHelium'
+
+platforms:
+  - web
+  - linux
+
+categories:
+  - learning-management-system
+
+developmentStatus: beta
+softwareType: standalone/web
+
+description:
+  pt:
+    shortDescription: >-
+      Juiz online e sistema de competições de programação no estilo
+      ICPC/Maratona SBC, com treino livre e linguagens de ensino.
+    longDescription: |
+      O microHelium é um juiz online e sistema de gestão de competições de
+      programação no estilo ICPC e Maratona SBC, inspirado no BOCA. Ele recebe
+      o código de equipes ou estudantes, compila e executa cada submissão num
+      sandbox isolado (bubblewrap e cgroups v2) e compara a saída com os casos
+      de teste, devolvendo o veredito em tempo real.
+
+
+      Além do modo competição, tem Treino Livre: uma biblioteca pública de
+      problemas com envio fora de prova e histórico privado. O catálogo do
+      juiz inclui linguagens usadas no ensino de algoritmos no Brasil, como
+      Portugol Studio, G-Portugol e Scratch, ao lado de C, C++, Java e Python.
+
+
+      Instituições podem hospedar a própria instalação, cadastrar alunos por
+      contas gerenciadas com privacidade por idade, julgar em máquinas
+      distribuídas e exportar resultados no formato CLICS da ICPC.
+    features:
+      - Julgamento automático em sandbox isolado
+      - Placar ICPC em tempo real com congelamento
+      - Treino Livre fora de competição
+      - Portugol Studio, G-Portugol e Scratch no juiz
+      - Contas gerenciadas para menores de idade
+      - Julgamento distribuído por máquinas remotas
+      - Contest API e pacote de resultados no formato CLICS
+  en:
+    shortDescription: >-
+      Online judge and ICPC-style programming contest system, with a practice
+      mode and teaching languages.
+    longDescription: |
+      microHelium is an online judge and programming contest management system
+      in the ICPC style, inspired by BOCA. It receives code from teams or
+      students, compiles and runs each submission inside an isolated sandbox
+      (bubblewrap and cgroups v2) and compares the output against the test
+      cases, returning the verdict in real time.
+
+
+      Besides contests, it has a practice mode: a public problem library with
+      submissions outside any contest and a private history. The judge catalog
+      includes languages used to teach algorithms in Brazil, such as Portugol
+      Studio, G-Portugol and Scratch, next to C, C++, Java and Python.
+
+
+      Institutions can self-host their own installation, register students
+      through managed accounts with age-based privacy, judge on distributed
+      machines and export results in the ICPC CLICS format.
+    features:
+      - Automatic judging inside an isolated sandbox
+      - Real-time ICPC scoreboard with freeze
+      - Practice mode outside contests
+      - Portugol Studio, G-Portugol and Scratch in the judge
+      - Managed accounts for minors
+      - Distributed judging on remote machines
+      - CLICS Contest API and results package
+
+legal:
+  license: AGPL-3.0-or-later
+
+maintenance:
+  type: community
+  contacts:
+    - name: Matheus Breguêz
+
+localisation:
+  localisationReady: false
+  availableLanguages:
+    - pt
