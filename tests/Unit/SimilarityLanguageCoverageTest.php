@@ -112,7 +112,7 @@ class SimilarityLanguageCoverageTest extends TestCase
     ];
 
     /**
-     * O teste que faltava, e que teria evitado três releases com Go quebrado.
+     * O teste que faltava, e que teria evitado Go quebrado desde o #74 (11/09/2026).
      *
      * O mapa trazia `'go' => 'golang'`. `golang` é como o README do JPlag
      * CHAMA a linguagem na tabela de suporte; o identificador que a CLI aceita

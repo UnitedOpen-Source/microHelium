@@ -12,9 +12,10 @@ use App\Models\Language;
  *
  * The identifiers below are the ones `java -jar jplag.jar --help` prints for
  * the pinned 6.2.0 jar, and not the prose of the README. That distinction is
- * not pedantry: this map shipped `golang` for three releases, which is what
- * the README's table calls Go, and it is NOT a language JPlag accepts -- every
- * Go check died with `Language golang does not exists`. Since 2026-09-23
+ * not pedantry: this map shipped `golang` from the day it was written (#74,
+ * 2026-09-11). That is what the README's table calls Go, and it is NOT a
+ * language JPlag accepts -- every Go check died with `Language golang does not
+ * exists`. Since 2026-09-23
  * SimilarityLanguageCoverageTest holds the CLI's own list, so a name that only
  * exists in documentation cannot get back in.
  *
@@ -56,7 +57,7 @@ class SimilarityLanguageMap
     private const MAP = [
         // C -- the three entries share `file_ext` `c`, so the sibling rule in
         // SimilarityLanguageCoverageTest could not see them missing: with none
-        // of them mapped there was no sibling to cobrar. Measured in the
+        // of them mapped there was no sibling to hold them to. Measured in the
         // docblock above.
         'c_gcc13' => 'c',
         'c99_gcc' => 'c',
