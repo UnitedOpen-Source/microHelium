@@ -1,0 +1,75 @@
+#!/bin/sh
+# Issue #306, passo 3 -- o que o Dockerfile.judge instala depende do perfil.
+#
+# POSIX sh de proposito: roda no `RUN` que instala o `bash`, entao nao pode
+# depender dele.
+#
+# Le docker/judge/perfil/$JUDGE_PROFILE.corta (gerado por
+# `php artisan judge:toolchain-profile <perfil> --corta` e conferido por
+# tests/Unit/Judge/ImagemPorPerfilTest.php). Cada linha e `procedencia:alvo`.
+#
+#   perfil apk-add [opcoes] pacote=pino ...   apk add sem os pacotes cortados
+#   perfil filtra  [opcoes] pacote=pino ...   so imprime a linha que iria ao apk
+#   perfil inclui  procedencia:alvo           sai 0 se o perfil instala isso
+#
+# Perfil desconhecido reprova: uma imagem enxuta que virasse `completo` em
+# silencio -- ou o contrario -- e exatamente o que esta issue existe para
+# evitar.
+set -eu
+
+DIR=$(dirname "$0")
+PERFIL=${JUDGE_PROFILE:-completo}
+CORTA="$DIR/$PERFIL.corta"
+
+if [ ! -f "$CORTA" ]; then
+    echo "perfil: JUDGE_PROFILE=$PERFIL nao tem $PERFIL.corta em $DIR" >&2
+    echo "perfil: conhecidos: $(cd "$DIR" && ls *.corta | sed 's/\.corta$//' | tr '\n' ' ')" >&2
+    exit 1
+fi
+
+cortado() {
+    grep -qxF "$1" "$CORTA"
+}
+
+filtra() {
+    saida=""
+    for arg in "$@"; do
+        case "$arg" in
+            -*) saida="$saida $arg" ;;
+            *)
+                nome=${arg%%=*}
+                if cortado "apk:$nome"; then
+                    continue
+                fi
+                saida="$saida $arg"
+                ;;
+        esac
+    done
+    echo "$saida"
+}
+
+verbo=${1:-}
+[ $# -gt 0 ] && shift
+
+case "$verbo" in
+    apk-add)
+        # shellcheck disable=SC2046 -- a divisao em palavras e o ponto.
+        set -- $(filtra "$@")
+        echo "perfil $PERFIL: apk add $*"
+        exec apk add "$@"
+        ;;
+    filtra)
+        filtra "$@"
+        ;;
+    inclui)
+        if cortado "$1"; then
+            echo "perfil $PERFIL: pula $1"
+            exit 1
+        fi
+        exit 0
+        ;;
+    *)
+        echo "uso: perfil apk-add|filtra|inclui ..." >&2
+        exit 2
+        ;;
+esac

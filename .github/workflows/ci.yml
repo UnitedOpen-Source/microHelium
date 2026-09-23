@@ -324,6 +324,7 @@ jobs:
 
     outputs:
       imagens: ${{ steps.filtro.outputs.imagens }}
+      perfis: ${{ steps.filtro.outputs.perfis }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -340,6 +341,7 @@ jobs:
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             echo "Sem commit base utilizavel; construindo por seguranca."
             echo "imagens=true" >> "$GITHUB_OUTPUT"
+            echo "perfis=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -368,6 +370,129 @@ jobs:
             echo "Nenhum caminho que entra nas imagens foi tocado; a construcao abaixo nao roda."
             echo "imagens=false" >> "$GITHUB_OUTPUT"
           fi
+
+          # Issue #306, passo 3 -- uma imagem por perfil muda com mais coisa
+          # do que a imagem completa: o que ela instala sai do catalogo e do
+          # manifesto (app/Models/Language.php, app/Support/Judge/), e o que
+          # ela DECLARA sai da sonda. Uma linguagem ligada no catalogo move o
+          # `completo` e regera os .corta -- que estao em docker/, entao o
+          # filtro de cima ja pegaria --, mas uma mudanca so no que um perfil
+          # promete (a lista `deGraca`, por exemplo) nao passaria por docker/.
+          perfis=$(git diff --name-only "$base" HEAD -- \
+            Dockerfile.judge docker/judge/ app/Models/Language.php \
+            app/Support/Judge/ app/Services/Judgehost/MachineCapabilities.php \
+            tests/E2E/PerfilDaImagemTest.php tests/E2E/MultiLanguageJudgingTest.php \
+            tests/E2E/ToolchainVersionsMatchCatalogTest.php .github/workflows/ci.yml)
+
+          if [ -n "$perfis" ]; then
+            echo "Caminhos que mudam uma imagem por perfil foram tocados:"
+            echo "$perfis"
+            echo "perfis=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "perfis=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # -------------------------------------------------------------------------
+  # Issue #306, passo 3 -- a rede de regressao que a issue pediu: a suite
+  # multi-linguagem rodada CONTRA CADA PERFIL, dentro da imagem construida com
+  # ele. O perfil `completo` e o job `judge-image` acima (e o padrao do build,
+  # e ele roda a suite inteira, inclusive o PerfilDaImagemTest).
+  #
+  # O que roda aqui e o que depende do perfil:
+  #   - MultiLanguageJudging: cada linguagem que a imagem promete julga uma
+  #     solucao certa como AC (a metade "esta imagem julga estas");
+  #   - ToolchainVersionsMatchCatalog: a versao que o catalogo promete e a
+  #     instalada, para as linguagens desta imagem;
+  #   - PerfilDaImagem: a sonda encontra o prometido, nao declara nada alem, e
+  #     a imagem nao recebeu ordem de instalar o que o perfil corta (a metade
+  #     "e nao afirma julgar nenhuma outra").
+  # O resto da suite nao muda de perfil para perfil, e ja roda no `completo`.
+  # -------------------------------------------------------------------------
+  judge-profile:
+    name: Imagem do juiz por perfil (${{ matrix.perfil }})
+    needs: docker-changes
+    if: needs.docker-changes.outputs.perfis == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        perfil: [maratona, scripting, funcional]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.3-
+
+      - run: cp .env.example .env
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - run: php artisan key:generate
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # Os estagios compilados (SWI-Prolog, G-Portugol, Portugol Studio...)
+      # sao os mesmos em todo perfil, entao o cache do job `judge-image` os
+      # serve; cada perfil guarda o proprio estagio final num escopo seu, para
+      # que as tres matrizes nao se sobrescrevam.
+      - name: Build the judge image (${{ matrix.perfil }})
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile.judge
+          build-args: JUDGE_PROFILE=${{ matrix.perfil }}
+          tags: microhelium-judge:${{ matrix.perfil }}
+          load: true
+          cache-from: |
+            type=gha
+            type=gha,scope=judge-${{ matrix.perfil }}
+          cache-to: type=gha,mode=max,scope=judge-${{ matrix.perfil }}
+
+      # O numero que a #306 existe para mudar. Fica no log de todo PR que
+      # mexe numa imagem, ao lado do `completo`, que o job `judge-image` nao
+      # imprime mas qualquer um mede com o mesmo comando.
+      - name: Tamanho da imagem
+        run: |
+          docker image inspect microhelium-judge:${{ matrix.perfil }} \
+            --format '{{.Size}}' \
+            | awk '{ printf "microhelium-judge:${{ matrix.perfil }}  %.1f MiB\n", $1 / 1048576 }'
+
+      - name: Allow unprivileged user namespaces for bubblewrap
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+
+      - name: Let the judge user write to the mounted workspace
+        run: |
+          chmod -R a+rwX storage bootstrap/cache
+          chmod a+rwX .
+
+      # Mesmos --privileged e --fail-on-skipped do job `judge-image`, pelo
+      # mesmo motivo: um sandbox que nao subiu nao pode virar build verde.
+      - name: Suíte por perfil dentro da imagem
+        run: |
+          docker run --rm --privileged \
+            --security-opt apparmor=unconfined \
+            --security-opt seccomp=unconfined \
+            -v "$PWD":/var/www/html \
+            -w /var/www/html \
+            microhelium-judge:${{ matrix.perfil }} \
+            ./vendor/bin/phpunit --no-coverage --fail-on-skipped \
+              --testsuite E2E \
+              --filter 'MultiLanguageJudging|ToolchainVersionsMatchCatalog|PerfilDaImagem'
 
   app-image:
     name: Julgamento pela fila (imagem da aplicação)

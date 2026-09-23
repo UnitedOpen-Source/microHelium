@@ -3,6 +3,7 @@
 namespace App\Services\Judgehost;
 
 use App\Models\Language;
+use App\Support\Judge\PerfilDaImagem;
 use App\Support\Judge\ToolchainManifest;
 use App\Support\Judge\ToolchainVersions;
 use Illuminate\Support\Facades\Process;
@@ -86,6 +87,18 @@ class MachineCapabilities
             $extension = (string) ($this->field($language, 'extension') ?? '');
 
             if ($extension === '' || in_array($extension, $supported, true)) {
+                continue;
+            }
+
+            // Issue #306, passo 3 -- numa imagem enxuta a sonda sozinha
+            // mente: os invocadores de docker/judge/bin e os estagios
+            // compilados estao em todo perfil, entao o binario de uma
+            // linguagem que o perfil nao instalou pode existir (o
+            // `scratch-run` existe numa imagem sem Node). Declarar isso seria
+            // reivindicar trabalho que a maquina nao sabe fazer -- a #125 de
+            // novo. A imagem declara o que PROMETE e a sonda ENCONTRA. Numa
+            // imagem `completo` (o padrao) isto nao filtra nada.
+            if (! PerfilDaImagem::permite($extension)) {
                 continue;
             }
 

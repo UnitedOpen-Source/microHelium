@@ -3,6 +3,7 @@
 namespace Tests\E2E;
 
 use App\Models\Language;
+use App\Support\Judge\PerfilDaImagem;
 use App\Support\Judge\ToolchainVersions;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -171,7 +172,10 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
         $ativas = [];
 
         foreach (Language::getDefaultLanguages() as $language) {
-            if (($language['is_active'] ?? false) === true) {
+            // Issue #306, passo 3 -- e que esta imagem promete: uma imagem
+            // `maratona` nao tem o GHC, e a versao dele nao e pergunta que
+            // ela saiba responder.
+            if (($language['is_active'] ?? false) === true && PerfilDaImagem::promete((string) $language['extension'])) {
                 $ativas[(string) $language['extension']] = true;
             }
         }

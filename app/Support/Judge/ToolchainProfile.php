@@ -85,8 +85,9 @@ final class ToolchainProfile
                 // `c99_gcc`/`cpp14_gpp`/`cpp17_gpp` sao o mesmo `gcc`/`g++`
                 // com outro `-std`: ja estao instalados, e recusa-los exigiria
                 // apagar entradas do catalogo, nao pacotes da imagem.
-                // `php`/`sed` vem da imagem base.
-                ['c99_gcc', 'cpp14_gpp', 'cpp17_gpp', 'php', 'sed'],
+                // `php`/`sed` vem da imagem base. `sh` vem do `bash`, que e
+                // infraestrutura do juiz (ToolchainManifest::shared()).
+                ['c99_gcc', 'cpp14_gpp', 'cpp17_gpp', 'php', 'sed', 'sh'],
             ),
             new self(
                 'scripting',
@@ -297,6 +298,51 @@ final class ToolchainProfile
         }
 
         return $out;
+    }
+
+    /**
+     * Issue #306, passo 3 -- o que o `Dockerfile.judge` deixa de instalar
+     * quando e construido com este perfil.
+     *
+     * E a diferenca entre as exigencias do `completo` e as deste perfil,
+     * restrita as procedencias que o build sabe pular: `apk`, `download` e
+     * `npm`. Cada linha e `procedencia:alvo` (`apk:ghc`, `download:SCALA`,
+     * `npm:typescript`), que e o formato que `docker/judge/perfil/perfil`
+     * le.
+     *
+     * O que NAO entra, e por que:
+     *
+     *   - exigencia de `ToolchainManifest::shared()`: esta em todo perfil por
+     *     definicao, entao nunca e diferenca;
+     *   - `stage`: `COPY --from` nao e condicional sem mudar o formato que o
+     *     DockerfileToolchain le, e o custo dos estagios e medido na spec;
+     *   - `invoker`, `repo_file`, `base_image`: sao arquivos pequenos ou a
+     *     propria base. Quem impede que eles facam a imagem PARECER capaz do
+     *     que nao e e a sonda, restrita ao prometido
+     *     (MachineCapabilities::detect()).
+     *
+     * @return list<string>
+     */
+    public function cuts(): array
+    {
+        $mine = [];
+
+        foreach ($this->requirements() as $requirement) {
+            $mine[$requirement->key()] = true;
+        }
+
+        $skippable = [ToolchainRequirement::APK, ToolchainRequirement::DOWNLOAD, ToolchainRequirement::NPM];
+        $cuts = [];
+
+        foreach ((self::named('completo') ?? $this)->requirements() as $requirement) {
+            if (in_array($requirement->kind, $skippable, true) && ! array_key_exists($requirement->key(), $mine)) {
+                $cuts[] = $requirement->key();
+            }
+        }
+
+        sort($cuts);
+
+        return $cuts;
     }
 
     /**

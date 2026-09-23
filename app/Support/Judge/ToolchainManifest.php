@@ -386,11 +386,20 @@ final class ToolchainManifest
      * Dockerfiles a instalam, em grupos diferentes e sem atribui-la a uma
      * linguagem; fica aqui pelo mesmo motivo.
      *
+     * `bash` (issue #306, passo 3) e exigencia do `sh`, do C# e do
+     * JavaScript -- e e TAMBEM o que o AutoJudgeService usa para embrulhar
+     * todo comando julgado (`bash -c` no `wrapWithBwrap()`). Enquanto toda
+     * imagem instalava tudo, isso nao fazia diferenca. Com imagem por perfil,
+     * faz: resolvido sem esta linha, o perfil `maratona` cortava o `bash`, e
+     * a imagem subia sem julgar nada. A base (`php:*-alpine`) nao o traz --
+     * so o `sh` do busybox.
+     *
      * @return list<ToolchainRequirement>
      */
     public static function shared(): array
     {
         return [
+            ToolchainRequirement::apk('bash', 'o `bash -c` que embrulha todo comando julgado'),
             ToolchainRequirement::apk('bubblewrap', 'o confinamento do juiz'),
             ToolchainRequirement::apk('libstdc++'),
         ];

@@ -453,4 +453,83 @@ class MachineCapabilitiesTest extends TestCase
             );
         }
     }
+
+    private function comPerfil(?string $perfil, callable $faz): mixed
+    {
+        $antes = [$_SERVER['JUDGE_PROFILE'] ?? null, $_ENV['JUDGE_PROFILE'] ?? null, getenv('JUDGE_PROFILE')];
+
+        foreach (['_SERVER', '_ENV'] as $g) {
+            if ($perfil === null) {
+                unset($GLOBALS[$g]['JUDGE_PROFILE']);
+            } else {
+                $GLOBALS[$g]['JUDGE_PROFILE'] = $perfil;
+            }
+        }
+        putenv($perfil === null ? 'JUDGE_PROFILE' : "JUDGE_PROFILE={$perfil}");
+
+        try {
+            return $faz();
+        } finally {
+            foreach (['_SERVER' => $antes[0], '_ENV' => $antes[1]] as $g => $v) {
+                if ($v === null) {
+                    unset($GLOBALS[$g]['JUDGE_PROFILE']);
+                } else {
+                    $GLOBALS[$g]['JUDGE_PROFILE'] = $v;
+                }
+            }
+            putenv($antes[2] === false ? 'JUDGE_PROFILE' : "JUDGE_PROFILE={$antes[2]}");
+        }
+    }
+
+    /**
+     * Issue #306, passo 3 -- numa imagem enxuta, a sonda sozinha mente.
+     *
+     * Os tres casos usam `sh {source}`, que existe em toda maquina que roda
+     * esta suite: o binario e encontrado nos tres. O que muda e a promessa.
+     * `sh` e prometido pelo `maratona` (vem do `bash`, que e infraestrutura);
+     * `scratch` nao e -- e o caso real e o `scratch-run`, que existe numa
+     * imagem sem Node --; e uma linguagem customizada tambem nao.
+     */
+    public function test_numa_imagem_enxuta_a_maquina_declara_o_que_o_perfil_promete_e_nada_alem(): void
+    {
+        $detectadas = $this->comPerfil('maratona', fn () => (new MachineCapabilities)->detect([
+            $this->language('sh', null, 'sh {source}'),
+            $this->language('scratch', null, 'sh {source}'),
+            $this->language('c_custom_do_admin', null, 'sh {source}'),
+        ]));
+
+        $this->assertSame(['sh'], $detectadas);
+    }
+
+    /**
+     * O padrao nao restringe nada, e isso e o contrato, nao um atalho: o
+     * admin cria linguagem propria por contest, fora do catalogo padrao, e
+     * uma maquina completa sempre as julgou.
+     */
+    public function test_numa_imagem_completa_nada_muda_nem_para_linguagem_customizada(): void
+    {
+        foreach ([null, 'completo'] as $perfil) {
+            $detectadas = $this->comPerfil($perfil, fn () => (new MachineCapabilities)->detect([
+                $this->language('sh', null, 'sh {source}'),
+                $this->language('c_custom_do_admin', null, 'sh {source}'),
+            ]));
+
+            $this->assertSame(['sh', 'c_custom_do_admin'], $detectadas, 'perfil '.($perfil ?? '(ausente)'));
+        }
+    }
+
+    /**
+     * Lista vazia de capacidades quer dizer "julgo tudo" (ver o docblock de
+     * `detect()`). Um perfil que o codigo nao conhece NAO pode cair nisso:
+     * tem de parar o agente, alto.
+     */
+    public function test_perfil_desconhecido_para_a_sonda_em_vez_de_declarar_qualquer_coisa(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('maratonaa');
+
+        $this->comPerfil('maratonaa', fn () => (new MachineCapabilities)->detect([
+            $this->language('sh', null, 'sh {source}'),
+        ]));
+    }
 }

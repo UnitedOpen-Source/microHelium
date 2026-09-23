@@ -50,9 +50,11 @@ cada uma vem e o que está fixado. Este arquivo é esse lugar.
 - **56** executáveis distintos que o catálogo ativo chama (primeiro token de
   `compile_command` e `run_command`, pela regra de
   `ToolchainManifest::executableOf()`)
-- **38** pacotes `apk` exigidos por linguagem ativa, mais **2** de
-  infraestrutura (`bubblewrap`, `libstdc++`) = **40** — que é exatamente a
-  lista do perfil `completo` de `docs/specs/306-perfis-de-toolchain.md`
+- **38** pacotes `apk` exigidos por linguagem ativa, mais **3** de
+  infraestrutura (`bash`, `bubblewrap`, `libstdc++`) = **40** distintos,
+  porque o `bash` é as duas coisas (exigência do `sh`, do C# e do JavaScript,
+  e o `bash -c` que embrulha todo comando julgado) — que é exatamente a lista
+  do perfil `completo` de `docs/specs/306-perfis-de-toolchain.md`
 - **40** pacotes fixados no estágio final do `Dockerfile.judge` — exatamente
   os 40 acima. Até 24/09/2026 eram 42: `erlang27` e `elixir` ficavam
   instalados, fixados e **não oferecidos** (#339), e saíram das três imagens
@@ -229,11 +231,13 @@ derivável sem construir a imagem, e por isso carrega a data.
 `racket=9.2-r0`, `ruby=3.4.9-r0`, `rust=1.96.1-r0`, `sbcl=2.6.5-r0`,
 `tcl=8.6.17-r1`, `zig=0.16.0-r1`, `zlib=1.3.2-r0`.
 
-Mais dois de infraestrutura, que não são de linguagem nenhuma e estão no
-caminho de **toda** execução julgada: `bubblewrap=0.12.0-r0` (o
-confinamento — sem ele o `AutoJudgeService` se recusa a rodar código
-submetido) e `libstdc++=15.2.0-r5` (biblioteca de execução em C++ dos
-toolchains construídos em C++ — LDC e Crystal arrastam LLVM).
+Mais três de infraestrutura, que estão no caminho de **toda** execução
+julgada: `bubblewrap=0.12.0-r0` (o confinamento — sem ele o
+`AutoJudgeService` se recusa a rodar código submetido), `libstdc++=15.2.0-r5`
+(biblioteca de execução em C++ dos toolchains construídos em C++ — LDC e
+Crystal arrastam LLVM) e `bash`, que também é de linguagem mas entrou aqui na
+#306: o `AutoJudgeService` embrulha todo comando em `bash -c`, e uma imagem por
+perfil que o cortasse subiria sem julgar nada.
 
 O critério, escrito no próprio `Dockerfile.judge`: **tudo que compila ou
 executa código de competidor está fixado; o que só constrói a imagem

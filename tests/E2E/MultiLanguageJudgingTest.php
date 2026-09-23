@@ -11,6 +11,7 @@ use App\Models\Run;
 use App\Models\Site;
 use App\Models\TestCase as ProblemTestCase;
 use App\Services\AutoJudgeService;
+use App\Support\Judge\PerfilDaImagem;
 use Helium\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -104,7 +105,32 @@ class MultiLanguageJudgingTest extends TestCase
         'groovy' => 30,
     ];
 
+    /**
+     * Issue #306, passo 3 -- os casos que ESTA imagem roda: os do catalogo
+     * ativo, restritos ao que o perfil dela promete. No `completo` (o padrao)
+     * sao todos, como sempre. Filtrar, e nao pular: o job do juiz roda com
+     * `--fail-on-skipped`.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
+     */
     public static function activeLanguages(): array
+    {
+        return array_filter(
+            self::casosDoCatalogo(),
+            fn (string $extension): bool => PerfilDaImagem::promete($extension),
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
+    /**
+     * A tabela de fixtures contra o catalogo ativo INTEIRO, sem olhar para a
+     * imagem. E o que a cobertura abaixo confere: ela e uma pergunta sobre o
+     * repositorio ("toda linguagem ativa tem fixture?"), e nao sobre a
+     * maquina -- numa imagem `maratona` a resposta tem de ser a mesma.
+     *
+     * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
+     */
+    private static function casosDoCatalogo(): array
     {
         $solutions = [
             'c_gcc13' => ['file' => 'solution.c', 'source' => "#include <stdio.h>\nint main(){int a,b;scanf(\"%d %d\",&a,&b);printf(\"%d\\n\",a+b);return 0;}\n"],
@@ -350,7 +376,7 @@ class MultiLanguageJudgingTest extends TestCase
     public function test_every_active_language_has_a_solution_fixture_covering_it()
     {
         $active = collect(Language::getDefaultLanguages())->where('is_active', true)->pluck('extension');
-        $covered = array_keys(self::activeLanguages());
+        $covered = array_keys(self::casosDoCatalogo());
 
         $missing = $active->diff($covered)->values()->all();
 
