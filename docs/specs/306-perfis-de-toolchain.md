@@ -40,15 +40,33 @@ php artisan judge:toolchain-profile <perfil> --apk \
 | `maratona` | 5 | 10 | 6 | **579,2 MiB** | +558 MiB |
 | `scripting` | 12 | 17 | 13 | 710,6 MiB | +689 MiB |
 | `funcional` | 20 | 25 | 20 | 2630,7 MiB | +2609 MiB |
-| `completo` | 48 | 48 | 38 | **4938,4 MiB** | +4917 MiB |
+| `completo` | 51 | 51 | 40 | **5799,4 MiB** | +5778 MiB |
+
+**Remedido em 23/09/2026**, com a mesma receita e a mesma imagem base, em
+`aarch64`. As três primeiras linhas voltaram **idênticas** — `579,2`, `710,6` e
+`2630,7 MiB` —, o que é o controle de que o método não mudou. Só o `completo` se
+moveu, de `4938,4` para `5799,4 MiB`, e a conta fecha nos **+861,0 MiB** de duas
+linguagens que entraram no catálogo ativo depois da primeira medição: o
+`dotnet10-sdk` do #358 (+602 MiB) e o `openjdk17-jdk` do #370 (+259 MiB).
+
+Isso é exatamente o que esta linha tem de ruim: ela é derivada do catálogo
+ativo — o `completo` é o único perfil definido como `homologadas = null`, isto é,
+"tudo que está ligado" —, então **todo `is_active => true` novo a envelhece**, e
+até aqui nada reprovava por isso. Desde 23/09/2026 as três colunas que o
+repositório sabe calcular (`Homologadas`, `Roda`, `Pacotes apk`) são conferidas
+por `tests/Unit/Judge/PerfisDeToolchainTest.php`, pelo mesmo motivo e no mesmo
+formato do `InventarioDeRuntimeTest` sobre a spec da #300. A coluna `Instalado`
+continua sendo medição de fora, e por isso o teste que guarda as outras três diz,
+quando reprova, que ela também precisa ser remedida.
 
 Três leituras, e as três mudam a conversa da issue:
 
 1. **O desperdício é maior do que a issue estimou.** A prova típica de cinco
-   linguagens custa **11,7% do que a imagem instala hoje**. Não é "a maior
-   parte da imagem": é quase toda ela.
+   linguagens custa **10,0% do que a imagem instala hoje** (era 11,7% na
+   medição de 18/09; a fatia caiu porque o denominador cresceu, não porque a
+   prova ficou mais cara). Não é "a maior parte da imagem": é quase toda ela.
 2. **O número de ~1,0 GB da issue é anterior à #305.** O catálogo ativo hoje
-   manda instalar **4,9 GiB só de `apk`**, e o `Dockerfile.judge` instala o
+   manda instalar **5,7 GiB só de `apk`**, e o `Dockerfile.judge` instala o
    catálogo ativo inteiro. Quem for decidir sobre banda no dia da prova
    (#53) precisa desse número, e não do antigo.
 3. **A fronteira cara é entre `scripting` e `funcional`, e é o GHC.** Medido
