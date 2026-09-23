@@ -289,7 +289,7 @@ colateral correto: `sh` passa a rodar em todo perfil, como `php` e `sed`.
 1. **Rejulgamento de prova antiga.** Os pinos de toda lista gerada são os do
    `Dockerfile.judge` daquele commit, e a imagem carrega o perfil; logo
    `(commit, perfil)` identifica os toolchains de uma imagem e reconstruí-la
-   dá os mesmos. **Fica fora**, e vira issue própria: registrar em cada
+   dá os mesmos. **Fica fora**, e virou a #392: registrar em cada
    julgamento com que versão ele foi feito (o #373 registrou a versão que o
    host declara *agora*, que um re-registro sobrescreve).
 2. **Linguagem habilitada depois da imagem pronta.** O `canJudge()` já impede o
@@ -348,4 +348,4 @@ positivo da sonda: são **~355 MiB** (`llvm22` 107 MiB, `llvm22-libs` 167 MiB,
 Os 2137,4 MiB do `maratona` incluem isso. Tirá-los é mexer na infraestrutura
 da imagem (compilar o `pdo_pgsql` num estágio, ou remover o `-dev` depois de
 compilar), e não no recorte por perfil — por isso fica registrado aqui e vai
-para issue própria, em vez de entrar calado neste PR.
+para a #391, em vez de entrar calado neste PR.
