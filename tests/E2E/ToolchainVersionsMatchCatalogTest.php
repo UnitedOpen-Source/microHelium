@@ -69,6 +69,7 @@ class ToolchainVersionsMatchCatalogTest extends TestCase
             'cpp17_gpp' => ['15', 'C++17 (G++ 15)'],
             'c_clang17' => ['22', 'C (Clang 22)'],
             'cpp_clang' => ['22', 'C++ (Clang 22)'],
+            'java17' => ['17', 'Java (OpenJDK 17 LTS)'],
             'java21' => ['21', 'Java (OpenJDK 21 LTS)'],
             'java25' => ['25', 'Java (OpenJDK 25 LTS)'],
             'py3' => ['3.14', 'Python 3.14'],

@@ -303,7 +303,7 @@ RUN apk add --no-cache \
     # julgamento distribuido (#53), dois workers com respostas diferentes
     # para a mesma submissao.
     libstdc++=15.2.0-r5 \
-    # Java -- issue #305: as DUAS LTS, lado a lado.
+    # Java -- issue #305: as TRES LTS, lado a lado.
     #
     # Cada JDK do Alpine vive no seu proprio prefixo
     # (`/usr/lib/jvm/java-NN-openjdk`), e as entradas do catalogo apontam
@@ -321,6 +321,22 @@ RUN apk add --no-cache \
     # rodam, e por isso a suite nao acusou nada; o que estava errado era o
     # comentario, que dizia 21. Quem depende de uma JVM especifica e o
     # catalogo, por caminho absoluto, e nao este link.
+    #
+    # O `openjdk17-jdk` entrou em 21/09/2026, e a pergunta que ele levanta e
+    # justamente essa: instalar um JDK MENOR mexeria no `default-jvm` e
+    # levaria `kotlinc`/Portugol Studio para o 17? MEDIDO numa imagem com os
+    # tres instalados, e a resposta e NAO -- o link continua no maior:
+    #
+    #   /usr/lib/jvm/default-jvm -> java-25-openjdk
+    #   kotlinc -version         -> kotlinc-jvm 2.4.20 (JRE 25.0.4+7-alpine-r0)
+    #   /usr/lib/jvm/java-17-openjdk/bin/javac -version -> javac 17.0.20
+    #
+    # Custo medido do 17 por `apk add --simulate` sobre esta mesma imagem,
+    # que ja tem o 21 e o 25 (portanto ja com as dependencias comuns pagas):
+    # +259,0 MiB, quatro pacotes (`openjdk17-jre-headless`, `-jre`,
+    # `-jmods`, `-jdk`). O numero de +326 MiB que a #305 registra e o do
+    # JDK 25 numa base sem JVM nenhuma.
+    openjdk17-jdk=17.0.20_p8-r0 \
     openjdk21-jdk=21.0.12_p8-r0 \
     openjdk25-jdk=25.0.4_p7-r0 \
     # Python 3

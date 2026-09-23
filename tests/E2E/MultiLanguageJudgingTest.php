@@ -111,6 +111,7 @@ class MultiLanguageJudgingTest extends TestCase
             'cpp_gpp13' => ['file' => 'solution.cpp', 'source' => "#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<std::endl;return 0;}\n"],
             'cpp17_gpp' => ['file' => 'solution.cpp', 'source' => "#include <iostream>\nint main(){int a,b;std::cin>>a>>b;std::cout<<a+b<<std::endl;return 0;}\n"],
             'java21' => ['file' => 'Main.java', 'source' => "import java.util.Scanner;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    System.out.println(sc.nextInt() + sc.nextInt());\n  }\n}\n"],
+            'java17' => ['file' => 'Main.java', 'source' => "import java.util.Scanner;\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    System.out.println(sc.nextInt() + sc.nextInt());\n  }\n}\n"],
             // Issue #305 -- a MESMA fonte para as duas LTS de Java. E de
             // proposito: o que distingue as duas entradas nao e o programa,
             // e o caminho absoluto do JDK que cada uma invoca. Se as duas

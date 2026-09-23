@@ -97,7 +97,14 @@ final class ToolchainManifest
             // `java` exista", e o 21 e o suficiente mais barato. Qualquer JDK
             // roda o jar que o kotlinc produz -- quem precisa de uma versao
             // ESPECIFICA e o catalogo, e ele pede por caminho absoluto.
+            //
+            // Issue #305 -- o 17 entrou ao lado do 21 e do 25. Reconferido
+            // numa imagem com os tres: `default-jvm` continua em
+            // `java-25-openjdk`, entao ligar o 17 nao move o chao de quem
+            // chama `java` pelo PATH.
             // ---------------------------------------------------------
+            '/usr/lib/jvm/java-17-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk17-jdk')],
+            '/usr/lib/jvm/java-17-openjdk/bin/java' => [ToolchainRequirement::apk('openjdk17-jdk')],
             '/usr/lib/jvm/java-21-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk21-jdk')],
             '/usr/lib/jvm/java-21-openjdk/bin/java' => [ToolchainRequirement::apk('openjdk21-jdk')],
             '/usr/lib/jvm/java-25-openjdk/bin/javac' => [ToolchainRequirement::apk('openjdk25-jdk')],

@@ -68,6 +68,7 @@ final class ToolchainVersions
             // O caminho absoluto por versao e o mecanismo do "lado a lado"
             // (#307): `javac` no PATH e um so, e seria o mesmo para as duas
             // entradas.
+            'java17' => '/usr/lib/jvm/java-17-openjdk/bin/javac -version 2>&1',
             'java21' => '/usr/lib/jvm/java-21-openjdk/bin/javac -version 2>&1',
             'java25' => '/usr/lib/jvm/java-25-openjdk/bin/javac -version 2>&1',
             'py3' => 'python3 -c "import sys;print(\'%d.%d\' % sys.version_info[:2])"',

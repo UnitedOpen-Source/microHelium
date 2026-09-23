@@ -43,18 +43,18 @@ cada uma vem e o que está fixado. Este arquivo é esse lugar.
 <!-- Guardados por InventarioDeRuntimeTest. Não edite sem remedir. -->
 
 - **78** entradas no catálogo `Language::getDefaultLanguages()`
-- **50** ativas (`is_active => true`)
-- **28** inativas
+- **51** ativas (`is_active => true`)
+- **27** inativas
 - **39** linguagens distintas entre as ativas — C tem três entradas, C++
-  quatro, e C#, Java, Fortran, Prolog e Common Lisp duas cada
+  quatro, e C#, Fortran, Prolog e Common Lisp duas cada, e Java três
 - **56** executáveis distintos que o catálogo ativo chama (primeiro token de
   `compile_command` e `run_command`, pela regra de
   `ToolchainManifest::executableOf()`)
-- **37** pacotes `apk` exigidos por linguagem ativa, mais **2** de
-  infraestrutura (`bubblewrap`, `libstdc++`) = **39** — que é exatamente a
+- **38** pacotes `apk` exigidos por linguagem ativa, mais **2** de
+  infraestrutura (`bubblewrap`, `libstdc++`) = **40** — que é exatamente a
   lista do perfil `completo` de `docs/specs/306-perfis-de-toolchain.md`
-- **41** pacotes fixados no estágio final do `Dockerfile.judge`. A diferença
-  para os 39 acima são exatamente `erlang27` e `elixir`: instalados, fixados,
+- **42** pacotes fixados no estágio final do `Dockerfile.judge`. A diferença
+  para os 40 acima são exatamente `erlang27` e `elixir`: instalados, fixados,
   e **não oferecidos** (#339) — ver a seção própria
 
 O conjunto de extensões ativas mudou **uma vez** desde a revisão de 20/09: o
@@ -166,6 +166,7 @@ derivável sem construir a imagem, e por isso carrega a data.
 | `cpp_clang` | apk `clang22=22.1.3-r2` | clang 22.1.3 |
 | `java25` | apk `openjdk25-jdk=25.0.4_p7-r0` | javac/java 25.0.4 |
 | `java21` | apk `openjdk21-jdk=21.0.12_p8-r0` | javac/java 21.0.12 |
+| `java17` | apk `openjdk17-jdk=17.0.20_p8-r0` | javac/java 17.0.20 |
 | `py3` | apk `python3=3.14.7-r1`, repo `resources/judge-runtime/python/sitecustomize.py` | CPython 3.14.7 |
 | `js_node24` | apk `nodejs=24.18.1-r0`, apk `bash=5.3.9-r1`, repo `resources/judge-runtime/node/run.sh` | Node v24.18.1 |
 | `ts` | apk `npm=11.12.1-r0`, npm `typescript@7.0.2`, apk `bash=5.3.9-r1`, repo `resources/judge-runtime/node/run.sh`, apk `nodejs=24.18.1-r0` | tsc 7.0.2 sobre Node 24 |
@@ -208,7 +209,7 @@ derivável sem construir a imagem, e por isso carrega a data.
 | `cob` | apk `gnucobol=3.2-r0` | cobc (GnuCOBOL) 3.2.0 |
 | `tcl` | repo `docker/judge/bin/tcl-check`, invocador `tcl-check`, apk `tcl=8.6.17-r1` | tclsh 8.6.17 |
 
-### Fixado por versão: os 37 pacotes `apk` de linguagem ativa
+### Fixado por versão: os 38 pacotes `apk` de linguagem ativa
 
 <!-- Guardado por InventarioDeRuntimeTest: cada pino aqui tem de existir no
      Dockerfile.judge, e cada apk que o manifesto exige tem de estar aqui. -->
@@ -221,7 +222,8 @@ derivável sem construir a imagem, e por isso carrega a data.
 `ghc=9.10.3-r2`, `gmp=6.3.0-r4`, `gnucobol=3.2-r0`, `go=1.26.8-r0`,
 `guile=3.0.9-r2`, `ldc=1.42.0-r0`, `lua5.4=5.4.8-r0`,
 `ncurses-libs=6.6_p20260516-r0`, `nim=2.2.0-r0`, `nodejs=24.18.1-r0`,
-`npm=11.12.1-r0`, `ocaml=4.14.3-r0`, `openjdk21-jdk=21.0.12_p8-r0`,
+`npm=11.12.1-r0`, `ocaml=4.14.3-r0`, `openjdk17-jdk=17.0.20_p8-r0`,
+`openjdk21-jdk=21.0.12_p8-r0`,
 `openjdk25-jdk=25.0.4_p7-r0`, `perl=5.42.2-r0`, `python3=3.14.7-r1`,
 `racket=9.2-r0`, `ruby=3.4.9-r0`, `rust=1.96.1-r0`, `sbcl=2.6.5-r0`,
 `tcl=8.6.17-r1`, `zig=0.16.0-r1`, `zlib=1.3.2-r0`.
