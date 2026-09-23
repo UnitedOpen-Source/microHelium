@@ -118,7 +118,7 @@ class PerfisDeToolchainTest extends TestCase
         $this->assertSame(
             [],
             $divergencias,
-            "a tabela de ".self::DOCUMENTO." nao descreve mais o que os perfis resolvem:\n  "
+            'a tabela de '.self::DOCUMENTO." nao descreve mais o que os perfis resolvem:\n  "
             .implode("\n  ", $divergencias)."\n\n"
             ."Isto quase sempre significa que uma linguagem foi ligada ou desligada: o perfil\n"
             ."`completo` e o catalogo ativo inteiro, entao ele se move a cada `is_active`.\n\n"
