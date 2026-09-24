@@ -651,7 +651,9 @@ jobs:
     #
     # Deliberately not an end-to-end suite: three public pages, a check that an
     # island really mounted, and a check that the CSP is still being sent.
-    # Runs in well under a minute once the browser is cached.
+    # Issue #394 added an axe-core WCAG 2.1 A/AA scan of ten screens in both
+    # themes (tests/Browser/accessibility.spec.js, docs/acessibilidade.md).
+    # Runs in about a minute once the browser is cached.
     name: Browser (built assets under the real CSP)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -683,6 +685,17 @@ jobs:
           touch database/browser.sqlite
           php artisan migrate --force
         env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/browser.sqlite
+
+      # Issue #394: the axe scan in tests/Browser/accessibility.spec.js needs
+      # a running contest, a problem, a judged run, a team and an admin, or
+      # the authenticated screens would be empty and pass for the wrong
+      # reason. The script refuses any database but this throwaway file.
+      - name: Seed the accessibility fixtures
+        run: php tests/Browser/seed-a11y.php
+        env:
+          APP_ENV: local
           DB_CONNECTION: sqlite
           DB_DATABASE: database/browser.sqlite
 
