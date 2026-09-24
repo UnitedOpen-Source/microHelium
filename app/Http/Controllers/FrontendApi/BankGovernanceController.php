@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\FrontendApi;
 
 use App\Http\Controllers\Controller;
+use App\Models\CurriculumOutcome;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\PracticePublication;
@@ -41,7 +42,7 @@ class BankGovernanceController extends Controller
         $organizations = $this->visibleOrganizations($user);
         $organizationIds = $organizations->pluck('id');
 
-        $query = ProblemBank::query()->with('organization')->orderBy('name')->orderBy('id');
+        $query = ProblemBank::query()->with(['organization', 'outcomes.framework'])->orderBy('name')->orderBy('id');
 
         if (! $user->isAdmin()) {
             $query->whereIn('owning_org_id', $organizationIds->all() ?: [-1]);
@@ -175,11 +176,22 @@ class BankGovernanceController extends Controller
 
             $tags = $this->normalizeTags($request->input('tags'));
 
+            // Issue #396 -- ausente quer dizer "não mexa": um cliente que só
+            // conhece etiquetas (anterior à #396) não pode apagar as
+            // habilidades de um problema por omissão.
+            $outcomeIds = $request->exists('outcome_ids')
+                ? $this->normalizeOutcomeIds($request->input('outcome_ids'))
+                : null;
+
             $previousOwner = $locked->owning_org_id;
             $locked->owning_org_id = $requestedOwner;
             $locked->tags = $tags;
             $locked->version = $locked->version + 1;
             $locked->save();
+
+            if ($outcomeIds !== null) {
+                $locked->outcomes()->sync($outcomeIds);
+            }
 
             if ($ownerChanged) {
                 ProblemBankOwnershipTransfer::create([
@@ -228,6 +240,8 @@ class BankGovernanceController extends Controller
             'owning_org_id' => $bank->owning_org_id,
             'organization_name' => $bank->organization?->name,
             'tags' => array_values($bank->tags ?? []),
+            // Issue #396 -- habilidades de currículo oficial associadas.
+            'outcomes' => $bank->outcomes->map(fn (CurriculumOutcome $outcome) => $outcome->present())->values()->all(),
             'version' => (string) $bank->version,
             // Issue #43. "published" means there is an open publication;
             // "outdated" means there is one, but the bank has moved on since
@@ -379,6 +393,44 @@ class BankGovernanceController extends Controller
         }
 
         return $normalized;
+    }
+
+    /**
+     * Issue #396 -- a lista inteira de habilidades do problema, validada no
+     * servidor. Erros sempre na chave `outcome_ids` (nunca `outcome_ids.3`),
+     * pelo mesmo motivo de normalizeTags(): o FieldError.vue procura o nome
+     * exato do campo.
+     *
+     * @return list<int>
+     */
+    private function normalizeOutcomeIds(mixed $raw): array
+    {
+        if (! is_array($raw) || ! array_is_list($raw)) {
+            $this->fail('outcome_ids', 'Habilidades inválidas.');
+        }
+        if (count($raw) > 50) {
+            $this->fail('outcome_ids', 'No máximo 50 habilidades por problema.');
+        }
+
+        $ids = [];
+        foreach ($raw as $id) {
+            if (is_string($id) && ctype_digit($id)) {
+                $id = (int) $id;
+            }
+            if (! is_int($id) || $id < 1) {
+                $this->fail('outcome_ids', 'Habilidades inválidas.');
+            }
+            if (in_array($id, $ids, true)) {
+                $this->fail('outcome_ids', 'Habilidade repetida.');
+            }
+            $ids[] = $id;
+        }
+
+        if ($ids !== [] && CurriculumOutcome::whereKey($ids)->count() !== count($ids)) {
+            $this->fail('outcome_ids', 'Habilidade inexistente. Atualize a página.');
+        }
+
+        return $ids;
     }
 
     private function fail(string $field, string $message): never

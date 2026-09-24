@@ -4,6 +4,7 @@ namespace App\Http\Controllers\FrontendApi;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contest;
+use App\Models\CurriculumOutcome;
 use App\Models\Language;
 use App\Models\PracticePublication;
 use App\Models\Problem;
@@ -73,6 +74,7 @@ class PracticeController extends Controller
             ->select([
                 'practice_publications.id as publication_id',
                 'problems.id as problem_id',
+                'practice_publications.problem_bank_id',
                 'problems.name',
                 // The readable code comes from the bank; problems.short_name
                 // is an internal uniqueness token (see PracticePublisher).
@@ -93,7 +95,21 @@ class PracticeController extends Controller
             });
         }
 
+        // Issue #396 -- filtro por código de habilidade, em qualquer
+        // currículo (docs/specs/396-curriculos-oficiais.md).
+        $skill = $this->skillCode($request);
+        if ($skill !== '') {
+            $query->whereExists(function ($exists) use ($skill) {
+                $exists->selectRaw('1')
+                    ->from('problem_bank_outcomes')
+                    ->join('curriculum_outcomes', 'curriculum_outcomes.id', '=', 'problem_bank_outcomes.curriculum_outcome_id')
+                    ->whereColumn('problem_bank_outcomes.problem_bank_id', 'practice_publications.problem_bank_id')
+                    ->where('curriculum_outcomes.code', $skill);
+            });
+        }
+
         $page = $query->paginate(self::PER_PAGE);
+        $skillCodes = $this->skillCodesByBank(collect($page->items())->pluck('problem_bank_id')->all());
         $solved = $this->solvedProblemIds($request, $contest, collect($page->items())->pluck('problem_id')->all());
 
         // getAttribute() and not `->short_name`, deliberately. Every one of
@@ -110,6 +126,7 @@ class PracticeController extends Controller
             'name' => (string) $row->getAttribute('name'),
             'summary' => $this->summary($row->getAttribute('description')),
             'tags' => $this->tags($row->getAttribute('tags')),
+            'skills' => $skillCodes[(int) $row->problem_bank_id] ?? [],
             'solved' => in_array((int) $row->problem_id, $solved, true),
             // "Estatísticas opcionais [...] stats:null quando não
             // implementado ou suprimido por privacidade/baixa amostragem."
@@ -150,6 +167,11 @@ class PracticeController extends Controller
                 'name' => (string) $snapshot->name,
                 'statement' => (string) $snapshot->description,
                 'examples' => $this->examples($bank),
+                // Issue #396. Metadado de catálogo, não enunciado: mostra as
+                // associações atuais do banco, não as do snapshot publicado.
+                'skills' => $bank->outcomes()->with('framework')->get()
+                    ->map(fn (CurriculumOutcome $outcome) => $outcome->present())
+                    ->values()->all(),
                 'time_limit_ms' => (int) $snapshot->time_limit * 1000,
                 'memory_limit_mb' => (int) $snapshot->memory_limit,
                 'max_source_bytes' => $this->maxSourceBytes(),
@@ -413,6 +435,44 @@ class PracticeController extends Controller
             fn ($tag) => is_scalar($tag) ? trim((string) $tag) : '',
             $tags
         ), fn ($tag) => $tag !== ''));
+    }
+
+    /**
+     * Issue #396 -- `?skill=EF06CO02`. Só o formato de um código; qualquer
+     * outra coisa vira "sem filtro", como `q` malformado.
+     */
+    private function skillCode(Request $request): string
+    {
+        $raw = $request->query('skill');
+        $code = is_scalar($raw) ? trim((string) $raw) : '';
+
+        return preg_match('/^[A-Za-z0-9._-]{1,32}$/', $code) ? $code : '';
+    }
+
+    /**
+     * Uma consulta para a página inteira, não uma por item.
+     *
+     * @param  list<int|string|null>  $bankIds
+     * @return array<int, list<string>> códigos por problem_bank_id, na ordem do documento
+     */
+    private function skillCodesByBank(array $bankIds): array
+    {
+        if ($bankIds === []) {
+            return [];
+        }
+
+        $codes = [];
+        $rows = CurriculumOutcome::query()
+            ->join('problem_bank_outcomes', 'problem_bank_outcomes.curriculum_outcome_id', '=', 'curriculum_outcomes.id')
+            ->whereIn('problem_bank_outcomes.problem_bank_id', $bankIds)
+            ->orderBy('curriculum_outcomes.curriculum_framework_id')
+            ->orderBy('curriculum_outcomes.position')
+            ->get(['curriculum_outcomes.code', 'problem_bank_outcomes.problem_bank_id']);
+        foreach ($rows as $row) {
+            $codes[(int) $row->getAttribute('problem_bank_id')][] = $row->code;
+        }
+
+        return $codes;
     }
 
     private function searchTerm(Request $request): string

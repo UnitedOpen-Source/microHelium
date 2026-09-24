@@ -1,15 +1,29 @@
 <script setup>
-import { ref, nextTick, watch } from 'vue';
+import { ref, computed, nextTick, watch } from 'vue';
 import { useFeature } from './useFeature.js';
+import { request } from './api.js';
 import FeatureState from './FeatureState.vue';
 import FeaturePager from './FeaturePager.vue';
 import FieldError from './FieldError.vue';
 const { data, loading, error, busy, notice, actionError, load, filter, act, query } = useFeature('/api/frontend/bank-governance');
 const publication = ref(null);
 const organization = ref(query.organization_id || ''), search = ref(query.q || ''), editing = ref(null), owner = ref(''), tags = ref('');
-async function edit(item) { editing.value = item; owner.value = item.owning_org_id ?? ''; tags.value = item.tags.join(', '); actionError.value = null; await nextTick(); document.getElementById('bank-edit-title')?.focus(); }
+// Issue #396 -- habilidades de currículo oficial. Carregadas uma vez, na
+// primeira edição; enquanto não carregam, o PATCH não manda `outcome_ids`, e
+// o servidor mantém as associações como estão.
+const curricula = ref(null), curriculaError = ref(''), outcomeIds = ref([]), outcomeSearch = ref('');
+const outcomeMatches = computed(() => {
+    const term = outcomeSearch.value.trim().toLowerCase();
+    return (curricula.value || []).map(framework => ({ ...framework, outcomes: framework.outcomes.filter(o => !term || outcomeIds.value.includes(o.id) || [o.code, o.text, o.stage, o.axis].some(v => (v || '').toLowerCase().includes(term))) })).filter(framework => framework.outcomes.length);
+});
+async function loadCurricula() {
+    if (curricula.value) return;
+    curriculaError.value = '';
+    try { curricula.value = (await request('/api/frontend/curricula')).frameworks; } catch (failure) { curriculaError.value = failure.message; }
+}
+async function edit(item) { editing.value = item; owner.value = item.owning_org_id ?? ''; tags.value = item.tags.join(', '); outcomeIds.value = (item.outcomes || []).map(o => o.id); outcomeSearch.value = ''; actionError.value = null; loadCurricula(); await nextTick(); document.getElementById('bank-edit-title')?.focus(); }
 async function save(event) {
-    const result = await act(`/api/frontend/bank-governance/${encodeURIComponent(editing.value.id)}`, { owning_org_id: owner.value || null, tags: [...new Set(tags.value.split(',').map(t => t.trim()).filter(Boolean))], version: editing.value.version }, 'Organização do problema atualizada.', 'PATCH', event.target);
+    const result = await act(`/api/frontend/bank-governance/${encodeURIComponent(editing.value.id)}`, { owning_org_id: owner.value || null, tags: [...new Set(tags.value.split(',').map(t => t.trim()).filter(Boolean))], ...(curricula.value ? { outcome_ids: outcomeIds.value } : {}), version: editing.value.version }, 'Organização do problema atualizada.', 'PATCH', event.target);
     if (result) { editing.value = null; await load(); }
 }
 async function publish(item) {
@@ -27,10 +41,26 @@ watch(() => query.q, value => { search.value = value || ''; });
             <section v-if="editing" class="surface feature-panel"><h2 id="bank-edit-title" tabindex="-1">Organizar: {{ editing.name }}</h2><form class="feature-form" @submit.prevent="save">
                 <label>Organização proprietária<select v-model="owner" name="owning_org_id" :disabled="busy || !editing.capabilities?.can_transfer" aria-describedby="owner-help owning_org_id-error" :aria-invalid="!!actionError?.errors?.owning_org_id"><option value="">Sem organização</option><option v-for="org in data.organizations" :key="org.id" :value="org.id">{{ org.name }}</option></select><small id="owner-help">Trocar a organização muda quem pode editar este problema.</small><FieldError :error="actionError" name="owning_org_id" /></label>
                 <label>Etiquetas<input v-model="tags" name="tags" maxlength="500" :disabled="busy" aria-describedby="tags-help tags-error" :aria-invalid="!!actionError?.errors?.tags"><small id="tags-help">Separe por vírgulas. Exemplo: grafos, programação dinâmica.</small><FieldError :error="actionError" name="tags" /></label>
+                <fieldset class="feature-fieldset feature-wide"><legend>Habilidades de currículo</legend>
+                    <p id="outcomes-help" class="feature-help">Marque as habilidades de currículo oficial que este problema exercita. {{ outcomeIds.length }} selecionada(s).</p>
+                    <p v-if="curriculaError" class="feature-message">Não foi possível carregar os currículos: {{ curriculaError }} As habilidades atuais serão mantidas ao salvar.</p>
+                    <p v-else-if="!curricula" class="feature-help" role="status">Carregando currículos…</p>
+                    <p v-else-if="!curricula.length" class="feature-help">Nenhum currículo foi importado nesta instalação.</p>
+                    <template v-else>
+                        <label>Buscar habilidade<input v-model="outcomeSearch" name="outcome_ids" type="search" maxlength="100" placeholder="Código, texto ou etapa…" :disabled="busy" @keydown.enter.prevent aria-describedby="outcomes-help outcome_ids-error" :aria-invalid="!!actionError?.errors?.outcome_ids"></label>
+                        <div class="feature-outcomes">
+                            <p v-if="!outcomeMatches.length" class="feature-help">Nenhuma habilidade corresponde à busca.</p>
+                            <section v-for="framework in outcomeMatches" :key="framework.id"><h3>{{ framework.name }}</h3>
+                                <div v-for="outcome in framework.outcomes" :key="outcome.id" class="feature-check"><input :id="`outcome-${outcome.id}`" v-model="outcomeIds" type="checkbox" :value="outcome.id" :disabled="busy"><label :for="`outcome-${outcome.id}`"><strong>{{ outcome.code }}</strong> {{ outcome.text }} <span class="feature-help">({{ [outcome.stage, outcome.axis].filter(Boolean).join(' · ') }})</span></label></div>
+                            </section>
+                        </div>
+                        <FieldError :error="actionError" name="outcome_ids" />
+                    </template>
+                </fieldset>
                 <div class="feature-actions feature-wide"><button class="button-primary" :disabled="busy || loading">Salvar organização</button><button type="button" class="button-secondary" :disabled="busy" @click="editing = null; actionError = null">Cancelar</button></div>
             </form></section>
             <section class="surface feature-panel"><h2>Problemas do banco</h2><p v-if="!data.items?.length" class="feature-empty">Nenhum problema corresponde aos filtros.</p>
-                <article v-for="item in data.items" :key="item.id" class="feature-record"><div class="feature-heading"><h3>{{ item.name }}</h3><span class="feature-badge">{{ item.capabilities?.can_edit ? 'Você pode editar' : 'Somente leitura' }}</span></div><p><strong>Organização:</strong> {{ item.organization_name || 'Sem organização atribuída' }}</p><p v-if="!item.owning_org_id" class="feature-help">Problema legado. A atribuição é feita pela administração.</p><div class="feature-tags" aria-label="Etiquetas"><span v-for="tag in item.tags" :key="tag" class="feature-badge">{{ tag }}</span><span v-if="!item.tags.length" class="feature-help">Sem etiquetas</span></div><button v-if="item.capabilities?.can_edit" type="button" class="button-secondary" :disabled="busy" @click="edit(item)">Organizar<span class="sr-only"> {{ item.name }}</span></button>
+                <article v-for="item in data.items" :key="item.id" class="feature-record"><div class="feature-heading"><h3>{{ item.name }}</h3><span class="feature-badge">{{ item.capabilities?.can_edit ? 'Você pode editar' : 'Somente leitura' }}</span></div><p><strong>Organização:</strong> {{ item.organization_name || 'Sem organização atribuída' }}</p><p v-if="!item.owning_org_id" class="feature-help">Problema legado. A atribuição é feita pela administração.</p><div class="feature-tags" aria-label="Etiquetas"><span v-for="tag in item.tags" :key="tag" class="feature-badge">{{ tag }}</span><span v-if="!item.tags.length" class="feature-help">Sem etiquetas</span></div><div v-if="item.outcomes?.length" class="feature-tags" aria-label="Habilidades de currículo"><span v-for="outcome in item.outcomes" :key="outcome.id" class="feature-badge" :title="outcome.text">{{ outcome.code }}</span></div><button v-if="item.capabilities?.can_edit" type="button" class="button-secondary" :disabled="busy" @click="edit(item)">Organizar<span class="sr-only"> {{ item.name }}</span></button>
                     <p class="feature-help">Treino Livre: {{ item.practice_status === 'published' ? 'Publicado' : 'Não publicado' }}</p>
                     <div v-if="publication === item.id" class="feature-message"><p>{{ item.practice_status === 'published' ? 'Retirar este problema da biblioteca? Os envios anteriores serão preservados.' : 'Publicar uma cópia deste problema para treino? O enunciado ficará acessível fora da competição.' }}</p><div class="feature-actions"><button type="button" class="button-primary" :disabled="busy" @click="publish(item)">Confirmar {{ item.practice_status === 'published' ? 'retirada' : 'publicação' }}</button><button type="button" class="button-secondary" :disabled="busy" @click="publication = null">Cancelar</button></div></div>
                     <button v-else-if="item.capabilities?.can_publish" type="button" class="button-secondary" :disabled="busy" @click="publication = item.id">{{ item.practice_status === 'published' ? 'Retirar do treino' : 'Publicar para treino' }}<span class="sr-only"> {{ item.name }}</span></button>

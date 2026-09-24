@@ -1,0 +1,11 @@
+{
+    "slug": "bncc-computacao",
+    "name": "BNCC Computação — Computação na Educação Básica, complemento à BNCC",
+    "jurisdiction": "BR",
+    "version": "2022",
+    "locale": "pt_BR",
+    "source_url": "https://basenacionalcomum.mec.gov.br/images/historico/anexo_parecer_cneceb_n_2_2022_bncc_computacao.pdf",
+    "source_consulted_at": "2026-09-24",
+    "source_sha256": "b0f021db3c7c2c042b821cec5fab7d77ed1888dbb61590461ce2afef404865b7",
+    "source_notes": "Anexo ao Parecer CNE/CEB nº 2/2022, a que remete o art. 1º, §2º, da Resolução CNE/CEB nº 1, de 4 de outubro de 2022. 141 habilidades, todas conferidas no texto do PDF (75 páginas). O PDF imprime o código 'EF05CO011' (com três dígitos) para a 11ª habilidade do 5º ano; ele entra como está impresso. As habilidades do Ensino Médio são organizadas por competência específica, não por eixo, e por isso não têm eixo."
+}

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProblemBank extends Model
@@ -63,6 +64,20 @@ class ProblemBank extends Model
     public function practicePublications(): HasMany
     {
         return $this->hasMany(PracticePublication::class);
+    }
+
+    /**
+     * Issue #396 -- habilidades de currículos oficiais que este problema
+     * exercita (docs/specs/396-curriculos-oficiais.md). N:N porque o mesmo
+     * problema pode ser `EF06CO02` na BNCC e um item de KS3 ao mesmo tempo.
+     */
+    /** @return BelongsToMany<CurriculumOutcome, $this> */
+    public function outcomes(): BelongsToMany
+    {
+        return $this->belongsToMany(CurriculumOutcome::class, 'problem_bank_outcomes', 'problem_bank_id', 'curriculum_outcome_id')
+            ->withTimestamps()
+            ->orderBy('curriculum_outcomes.curriculum_framework_id')
+            ->orderBy('curriculum_outcomes.position');
     }
 
     public function activePracticePublication(): ?PracticePublication

@@ -34,12 +34,14 @@ watch(() => query.q, value => { search.value = value || ''; });
             <template v-if="mode === 'library'">
                 <div class="feature-message">Pratique no seu ritmo. Os envios de treino não alteram o placar das competições.</div>
                 <form class="surface feature-panel feature-search" role="search" @submit.prevent="filter({ q: search, page: 1 })"><label>Buscar problemas<input v-model="search" type="search" name="q" maxlength="100" placeholder="Nome ou etiqueta…"></label><button class="button-primary" :disabled="loading">Buscar</button><button type="button" class="button-secondary" :disabled="loading" @click="search = ''; filter({ q: '', page: 1 })">Limpar</button></form>
+                <p v-if="query.skill" class="feature-message">Mostrando problemas associados à habilidade <strong>{{ query.skill }}</strong>. <button type="button" class="button-secondary" :disabled="loading" @click="filter({ skill: '', page: 1 })">Remover filtro de habilidade</button></p>
                 <p role="status" class="feature-help">{{ data.meta?.total ?? data.items?.length ?? 0 }} problemas encontrados</p>
-                <div v-if="!data.items?.length" class="surface feature-empty"><h2>Nenhum problema encontrado</h2><p>{{ query.q ? 'Tente outro termo ou limpe a busca.' : 'Os problemas aparecerão aqui quando a organização publicar a biblioteca.' }}</p></div>
+                <div v-if="!data.items?.length" class="surface feature-empty"><h2>Nenhum problema encontrado</h2><p>{{ query.q || query.skill ? 'Tente outro termo ou limpe a busca.' : 'Os problemas aparecerão aqui quando a organização publicar a biblioteca.' }}</p></div>
                 <div class="feature-grid"><article v-for="problem in data.items" :key="problem.id" class="surface feature-panel feature-problem">
                     <div class="feature-heading"><span class="eyebrow">{{ problem.short_name }}</span><span class="feature-badge">{{ problem.solved ? 'Resolvido' : 'Para praticar' }}</span></div>
                     <h2><a :href="`/practice/problems/${encodeURIComponent(problem.id)}`">{{ problem.name }}</a></h2>
                     <p class="feature-help">{{ problem.summary }}</p><div class="feature-tags"><span v-for="tag in problem.tags" :key="tag" class="feature-badge">{{ tag }}</span></div>
+                    <div v-if="problem.skills?.length" class="feature-tags" aria-label="Habilidades de currículo"><a v-for="code in problem.skills" :key="code" :href="`/practice?skill=${encodeURIComponent(code)}`" class="feature-badge">{{ code }}<span class="sr-only">: ver problemas desta habilidade</span></a></div>
                     <p class="feature-help">{{ problem.stats ? `${problem.stats.solved_count} de ${problem.stats.participant_count} participantes resolveram` : 'Estatísticas ainda indisponíveis' }}</p>
                     <a :href="`/practice/problems/${encodeURIComponent(problem.id)}`" class="button-secondary">Abrir problema<span class="sr-only">: {{ problem.name }}</span></a>
                 </article></div>
@@ -53,6 +55,7 @@ watch(() => query.q, value => { search.value = value || ''; });
             </template>
             <template v-else-if="data.problem">
                 <article class="surface feature-panel feature-statement"><p class="eyebrow">{{ data.problem.short_name }}</p><h2>{{ data.problem.name }}</h2><p class="feature-help">Tempo: {{ data.problem.time_limit_ms }} ms · Memória: {{ data.problem.memory_limit_mb }} MB</p><div class="feature-prose">{{ data.problem.statement }}</div>
+                    <section v-if="data.problem.skills?.length"><h3>Habilidades de currículo</h3><ul><li v-for="skill in data.problem.skills" :key="skill.id"><a :href="`/practice?skill=${encodeURIComponent(skill.code)}`" class="feature-badge">{{ skill.code }}<span class="sr-only">: ver problemas desta habilidade</span></a> {{ skill.text }} <span class="feature-help">({{ [skill.framework.name, skill.stage, skill.axis].filter(Boolean).join(' · ') }})</span></li></ul></section>
                     <section v-for="(example, index) in data.problem.examples" :key="index"><h3>Exemplo {{ index + 1 }}</h3><div class="feature-grid"><div><h4>Entrada</h4><pre>{{ example.input }}</pre></div><div><h4>Saída</h4><pre>{{ example.output }}</pre></div></div></section>
                 </article>
                 <section class="surface feature-panel"><h2>Enviar solução</h2><p id="source-help" class="feature-help">Cole seu código. Limite de {{ data.problem.max_source_bytes }} bytes. Seu texto será preservado nesta página se o envio falhar. Copie o código para guardá-lo antes de fechar a aba.</p>
