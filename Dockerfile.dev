@@ -245,7 +245,7 @@ RUN apk add --no-cache \
     go=1.26.8-r0 \
     rust=1.96.1-r0 \
     ruby=3.4.9-r0 \
-    perl=5.42.2-r0 \
+    perl=5.42.2-r1 \
     # Issue #305, Lote C -- o mesmo conjunto do Dockerfile.judge, onde
     # cada um destes foi compilado e executado num `a+b` dentro do
     # sandbox antes de ser ligado no catalogo. As tres listas andam
@@ -275,7 +275,7 @@ RUN apk add --no-cache \
     nim=2.2.0-r0 \
     crystal=1.20.3-r0 \
     ldc=1.42.0-r0 \
-    ocaml=4.14.3-r0 \
+    ocaml=4.14.4-r0 \
     ghc=9.10.3-r2 \
     # Issue #305, Lote D -- COBOL vem do proprio Alpine (`apk search -x
     # gnucobol`), ao contrario do que a issue supunha.

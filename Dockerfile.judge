@@ -397,7 +397,7 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     ruby=3.4.9-r0 \
     # Perl -- issue #305, mesma razao do clang: ja estava presente como
     # dependencia do git, e a entrada `perl` passa a ser ativa.
-    perl=5.42.2-r0 \
+    perl=5.42.2-r1 \
     # COBOL -- issue #305, Lote D, e a suposicao que nao se confirmou.
     #
     # Esta entrada estava no lote das linguagens "que nao existem no Alpine e
@@ -481,7 +481,7 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     crystal=1.20.3-r0 \
     ldc=1.42.0-r0 \
     # OCaml (+160 MiB)
-    ocaml=4.14.3-r0 \
+    ocaml=4.14.4-r0 \
     # Haskell (+1442 MiB) -- e o item mais caro do lote, sozinho maior
     # que a imagem inteira antes dele, porque o GHC arrasta llvm16 e
     # clang16 proprios. Fica porque Haskell e linguagem de maratona de
