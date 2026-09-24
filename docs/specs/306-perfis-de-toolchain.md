@@ -312,7 +312,9 @@ colateral correto: `sh` passa a rodar em todo perfil, como `php` e `sed`.
 - **tamanho: 2137,4 MiB**, contra **9391,1 MiB** da imagem `completo`
   construída na mesma máquina, do mesmo commit — **22,8%**. Isto é imagem
   publicada, com PHP, aplicação e estágios, e não só o `apk` da tabela do
-  passo 2; os ~355 MiB do achado abaixo estão dentro dos dois números;
+  passo 2; os ~355 MiB do achado abaixo estão dentro dos dois números, e os
+  ~86 MiB da BEAM também — ela saiu das três imagens no #400, depois desta
+  medição, e como não era de linguagem ativa, nenhum perfil a cortava;
 - a imagem `completo` também passou no `PerfilDaImagemTest` e no
   `ToolchainVersionsMatchCatalogTest` (52 de 52, `--fail-on-skipped`), que é o
   que o job `judge-image` do CI vai rodar;
