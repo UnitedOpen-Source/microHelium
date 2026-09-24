@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\FrontendApi\BankGovernanceController;
+use App\Http\Controllers\FrontendApi\CurriculumController;
 use Illuminate\Support\Facades\Route;
 
 // Issue #46 -- docs/specs/46-bank-ownership.md. Real data/mutation
@@ -26,4 +27,11 @@ Route::prefix('api/frontend')->middleware(['auth'])->group(function () {
     // disclosure policy for material from still-active events is open.
     Route::post('/bank-governance/{bank}/practice', [BankGovernanceController::class, 'practice'])
         ->name('api.frontend.bank-governance.practice');
+
+    // Issue #396 -- docs/specs/396-curriculos-oficiais.md. Os currículos e
+    // habilidades para o seletor da tela acima. Só leitura; quem associa
+    // habilidade a problema é o PATCH de /bank-governance/{bank}, com a
+    // mesma autorização das etiquetas.
+    Route::get('/curricula', [CurriculumController::class, 'index'])
+        ->name('api.frontend.curricula.index');
 });

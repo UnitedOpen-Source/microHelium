@@ -275,3 +275,50 @@ test('explicit searches add history entries and popstate restores the submitted 
     window.dispatchEvent(new window.PopStateEvent('popstate')); await tick();
     assert.equal(document.querySelector('[name=q]').value, 'aritmetica');
 });
+
+// Issue #396 -- habilidades de currículo oficial (docs/specs/396-curriculos-oficiais.md).
+test('practice problem lists its curriculum skills, each linking to the library filtered by that code', async () => {
+    const skill = { id: 3, code: 'EF06CO02', text: 'Elaborar algoritmos usando uma linguagem de programação.', stage: '6º ano', axis: 'Pensamento Computacional', framework: { slug: 'bncc-computacao', name: 'BNCC Computação' } };
+    await mount('Practice', { problem: { id: 1, name: 'Soma', max_source_bytes: 1024, languages: [], examples: [], skills: [skill] }, capabilities: { can_submit: false } }, { mode: 'problem', problemId: '1' });
+    assert.match(document.body.textContent, /Habilidades de currículo/);
+    assert.match(document.body.textContent, /Elaborar algoritmos/);
+    assert.match(document.body.textContent, /BNCC Computação · 6º ano · Pensamento Computacional/);
+    assert.equal(document.querySelector('a[href="/practice?skill=EF06CO02"]').textContent.startsWith('EF06CO02'), true);
+});
+
+test('practice library sends the skill filter from the URL and can drop it', async () => {
+    history.replaceState(null, '', '/practice?skill=EF06CO02');
+    const calls = []; globalThis.fetch = async path => { calls.push(path); return envelope({ items: [{ id: 1, short_name: 'A', name: 'Soma', summary: '', tags: [], skills: ['EF06CO02'], solved: false, stats: null }], meta }); };
+    app = createApp(components.Practice); app.mount('#app'); await tick();
+    assert.equal(calls[0], '/api/frontend/practice/problems?skill=EF06CO02');
+    assert.match(document.body.textContent, /associados à habilidade EF06CO02/);
+    [...document.querySelectorAll('button')].find(b => b.textContent === 'Remover filtro de habilidade').click(); await tick();
+    assert.equal(calls[1], '/api/frontend/practice/problems?page=1');
+    assert.equal(new URL(location.href).searchParams.has('skill'), false);
+});
+
+test('bank edit sends the chosen outcome ids only once the curricula have loaded', async () => {
+    const item = { id: 7, name: 'Soma', tags: [], outcomes: [{ id: 1, code: 'EF06CO02', text: 'Elaborar algoritmos.' }], version: '4', practice_status: 'unpublished', capabilities: { can_edit: true, can_transfer: false, can_publish: false } };
+    const frameworks = [{ id: 1, slug: 'bncc-computacao', name: 'BNCC Computação', outcomes: [{ id: 1, code: 'EF06CO02', text: 'Elaborar algoritmos.', stage: '6º ano', axis: 'Pensamento Computacional' }, { id: 2, code: 'EF07CO02', text: 'Analisar programas para detectar e remover erros.', stage: '7º ano', axis: 'Pensamento Computacional' }] }];
+    await mount('BankGovernance', { organizations: [], items: [item], meta });
+    const calls = []; fetch = async (path, options) => { calls.push([path, options]); if (path === '/api/frontend/curricula') return envelope({ frameworks }); return envelope(options?.method === 'PATCH' ? { id: 7, version: '5' } : { organizations: [], items: [item], meta }); };
+    [...document.querySelectorAll('button')].find(b => b.textContent.startsWith('Organizar')).click(); await tick();
+    assert.equal(document.getElementById('outcome-1').checked, true);
+    field('outcome_ids', 'remover erros'); await tick();
+    assert.ok(document.getElementById('outcome-1'), 'selected skills stay visible while searching');
+    document.getElementById('outcome-2').click(); await tick();
+    submit(document.querySelector('.feature-form')); await tick();
+    const patch = calls.find(([, options]) => options?.method === 'PATCH');
+    assert.deepEqual(JSON.parse(patch[1].body).outcome_ids, [1, 2]);
+});
+
+test('bank edit leaves outcome_ids out when the curricula could not load', async () => {
+    const item = { id: 7, name: 'Soma', tags: [], outcomes: [{ id: 1, code: 'EF06CO02', text: 'x' }], version: '4', practice_status: 'unpublished', capabilities: { can_edit: true, can_transfer: false, can_publish: false } };
+    await mount('BankGovernance', { organizations: [], items: [item], meta });
+    const calls = []; fetch = async (path, options) => { calls.push([path, options]); if (path === '/api/frontend/curricula') return new Response('', { status: 503 }); return envelope(options?.method === 'PATCH' ? { id: 7, version: '5' } : { organizations: [], items: [item], meta }); };
+    [...document.querySelectorAll('button')].find(b => b.textContent.startsWith('Organizar')).click(); await tick();
+    assert.match(document.body.textContent, /As habilidades atuais serão mantidas/);
+    submit(document.querySelector('.feature-form')); await tick();
+    const patch = calls.find(([, options]) => options?.method === 'PATCH');
+    assert.equal('outcome_ids' in JSON.parse(patch[1].body), false);
+});
