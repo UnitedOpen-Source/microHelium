@@ -80,6 +80,12 @@ class ResultController extends Controller
             // julgamento por causa dela seria pior.
             'measured_wall_ms' => ['nullable', 'integer', 'min:0'],
             'measured_cpu_ms' => ['nullable', 'integer', 'min:0'],
+            // Issue #392 -- com qual toolchain o agente julgou, e em qual
+            // perfil de imagem. Opcionais pelo mesmo motivo da medicao: um
+            // agente anterior a esta mudanca continua tendo o veredito
+            // aceito, e o que se grava dele e o que se sabe (ver abaixo).
+            'toolchain_version' => ['nullable', 'string', 'max:40'],
+            'toolchain_profile' => ['nullable', 'string', 'max:40'],
         ]);
 
         $verdict = DB::transaction(function () use ($run, $judgehost, $data) {
@@ -117,6 +123,14 @@ class ResultController extends Controller
                 'stderr' => $data['stderr'] ?? null,
                 'measured_wall_ms' => $data['measured_wall_ms'] ?? null,
                 'measured_cpu_ms' => $data['measured_cpu_ms'] ?? null,
+                // Issue #392. Sem versao no relatorio -- agente posterior ao
+                // #373 e anterior a esta mudanca --, vale a que ESTE host
+                // declarou para esta extensao no registro: e a mesma sonda,
+                // no mesmo processo do agente, e e mais verdade que null. O
+                // perfil nao tem de onde vir, e fica null ("nao disse").
+                'toolchain_version' => $data['toolchain_version']
+                    ?? $judgehost->declaredVersionOf((string) $fresh->language?->extension),
+                'toolchain_profile' => $data['toolchain_profile'] ?? null,
             ]);
 
             return $fresh->fresh();

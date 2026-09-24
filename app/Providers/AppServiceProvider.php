@@ -3,6 +3,8 @@
 namespace Helium\Providers;
 
 use App\Http\Middleware\SecurityHeaders;
+use App\Services\Judgehost\JudgingToolchain;
+use App\Services\Judgehost\MachineCapabilities;
 use App\Services\Similarity\JplagSimilarityEngine;
 use App\Services\Similarity\SimilarityEngineInterface;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -53,5 +55,10 @@ class AppServiceProvider extends ServiceProvider
         // Tests\Support\Similarity\FakeSimilarityEngine so the suite never
         // shells out to a real JPlag jar (see docs/specs/42-similarity.md).
         $this->app->bind(SimilarityEngineInterface::class, JplagSimilarityEngine::class);
+
+        // Issue #392 -- singleton porque a sonda de versao e memoizada na
+        // instancia de MachineCapabilities: um worker da fila pergunta a
+        // versao do `kotlinc` uma vez por processo, e nao por julgamento.
+        $this->app->singleton(JudgingToolchain::class, fn () => new JudgingToolchain(new MachineCapabilities));
     }
 }

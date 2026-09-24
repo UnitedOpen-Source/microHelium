@@ -58,7 +58,17 @@
             <div><dt>Julgados</dt><dd>{{ $previa['judged'] }}</dd></div>
             <div><dt>Mudariam de veredito</dt><dd><strong>{{ $previa['changes'] }}</strong></dd></div>
             <div><dt>Falharam</dt><dd>{{ $previa['errors'] }}</dd></div>
+            <div><dt>Julgados com outra versão do toolchain</dt><dd>{{ $previa['toolchain_changes'] }}</dd></div>
         </dl>
+
+        @if($previa['toolchain_changes'] > 0)
+            {{-- Issue #392 -- um veredito que mudou junto com o compilador
+                 pede outra leitura que um que mudou porque o caso de teste
+                 foi consertado. --}}
+            <p class="feature-message feature-error">
+                {{ $previa['toolchain_changes'] }} {{ Str::plural('envio', $previa['toolchain_changes']) }} {{ $previa['toolchain_changes'] === 1 ? 'foi rejulgado' : 'foram rejulgados' }} com outra versão do toolchain da linguagem. Confira a coluna “Toolchain” antes de aplicar.
+            </p>
+        @endif
 
         @if($previa['errors'] > 0)
             {{-- Um membro que falhou fica como estava: trocar um veredito
@@ -115,7 +125,7 @@
         @else
             <div class="overflow-x-auto">
                 <table>
-                    <thead><tr><th>Envio</th><th>Antes</th><th>Depois</th><th>Muda?</th><th>Falha</th></tr></thead>
+                    <thead><tr><th>Envio</th><th>Antes</th><th>Depois</th><th>Muda?</th><th>Toolchain</th><th>Falha</th></tr></thead>
                     <tbody>
                         @foreach($previa['items'] as $item)
                             <tr>
@@ -123,6 +133,13 @@
                                 <td>{{ $item['from'] ?? '—' }}</td>
                                 <td>{{ $item['to'] ?? ($item['error'] ? '—' : 'aguardando') }}</td>
                                 <td>{{ $item['changes'] ? 'Sim' : 'Não' }}</td>
+                                <td>
+                                    @if($item['toolchain_changed'])
+                                        <strong>{{ $item['toolchain_from'] }} → {{ $item['toolchain_to'] }}</strong>
+                                    @else
+                                        {{ $item['toolchain_to'] ?? $item['toolchain_from'] ?? '—' }}
+                                    @endif
+                                </td>
                                 <td>{{ $item['error'] ?? '' }}</td>
                             </tr>
                         @endforeach

@@ -60,6 +60,10 @@ class RejudgingService
                 'old_status' => $run->status,
                 'old_judged_time' => $run->judged_time,
                 'old_verified_at' => $run->verified_at,
+                // Issue #392 -- e com qual toolchain o veredito antigo foi
+                // produzido, capturado no mesmo instante e pelo mesmo motivo.
+                'old_toolchain_version' => $run->toolchain_version,
+                'old_toolchain_profile' => $run->toolchain_profile,
             ]);
         }
 
@@ -163,12 +167,20 @@ class RejudgingService
             'judged' => $members->filter(fn (RejudgingRun $m) => $m->isJudged() && $m->error === null)->count(),
             'errors' => $members->whereNotNull('error')->count(),
             'changes' => $members->filter(fn (RejudgingRun $m) => $m->changesVerdict())->count(),
+            // Issue #392 -- quantos foram rejulgados com OUTRA versao do
+            // toolchain. Um veredito que mudou junto com o compilador pede
+            // outra leitura que um veredito que mudou porque o caso de teste
+            // foi consertado.
+            'toolchain_changes' => $members->filter(fn (RejudgingRun $m) => $m->changesToolchain())->count(),
             'items' => $members->map(fn (RejudgingRun $m) => [
                 'run_id' => $m->run_id,
                 'run_number' => $m->run?->run_number,
                 'from' => $m->oldAnswer?->short_name,
                 'to' => $m->newAnswer?->short_name,
                 'changes' => $m->changesVerdict(),
+                'toolchain_from' => $m->old_toolchain_version,
+                'toolchain_to' => $m->new_toolchain_version,
+                'toolchain_changed' => $m->changesToolchain(),
                 'error' => $m->error,
             ])->values()->all(),
         ];
@@ -214,6 +226,11 @@ class RejudgingService
                     'verified_at' => null,
                     'verified_by' => null,
                     'verify_comment' => null,
+                    // Issue #392 -- o veredito novo foi produzido pelo
+                    // toolchain do julgamento de sombra, entao e esse que
+                    // passa a descrever o run.
+                    'toolchain_version' => $member->new_toolchain_version,
+                    'toolchain_profile' => $member->new_toolchain_profile,
                 ]);
             }
 
@@ -234,13 +251,16 @@ class RejudgingService
             $this->recomputeAffectedCells($members);
         });
 
-        $changed = $rejudging->members()->get()->filter(fn (RejudgingRun $m) => $m->changesVerdict())->count();
+        $applied = $rejudging->members()->get();
+        $changed = $applied->filter(fn (RejudgingRun $m) => $m->changesVerdict())->count();
+        $toolchainChanged = $applied->filter(fn (RejudgingRun $m) => $m->changesToolchain())->count();
 
         ContestLog::warning($rejudging->contest_id, "Rejulgamento em lote #{$rejudging->id} aplicado: {$changed} veredito(s) alterado(s)", [
             'event' => 'rejudging_applied',
             'rejudging_id' => $rejudging->id,
             'reason' => $rejudging->reason,
             'changed' => $changed,
+            'toolchain_changed' => $toolchainChanged,
             'user_id' => $actor?->user_id,
         ]);
     }

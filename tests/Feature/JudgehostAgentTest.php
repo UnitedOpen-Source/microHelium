@@ -14,6 +14,7 @@ use App\Models\TestCase as ProblemTestCase;
 use App\Services\AutoJudgeService;
 use App\Services\Judgehost\JudgehostAgent;
 use App\Services\Judgehost\JudgehostClient;
+use App\Services\Judgehost\MachineCapabilities;
 use App\Services\Judgehost\WorkMaterialiser;
 use Helium\User;
 use Illuminate\Http\Client\Request as ClientRequest;
@@ -658,5 +659,46 @@ SH);
         $this->assertSame('judged', $run->status);
         $this->assertSame(1500, (int) $run->measured_wall_ms, 'o tempo de parede nao chegou ao servidor');
         $this->assertSame(250, (int) $run->measured_cpu_ms, 'o tempo de CPU nao chegou ao servidor');
+    }
+
+    /**
+     * Issue #392 -- o agente leva ao servidor com qual toolchain julgou.
+     *
+     * O duble de maquina vai SO no agente, e o host nao declarou versao
+     * nenhuma no registro: a unica forma de `15.2.0` chegar a coluna e
+     * atravessando o HTTP. Mesma licao do teste de medicao acima -- um duble
+     * que o servidor tambem enxergasse faria o teste passar sem o fio.
+     */
+    public function test_o_agente_manda_a_versao_e_o_perfil_com_que_julgou(): void
+    {
+        $maquina = new class extends MachineCapabilities
+        {
+            public function versionsOf(array $extensions): array
+            {
+                return in_array('sh', $extensions, true) ? ['sh' => '5.2.37'] : [];
+            }
+        };
+
+        $perfilOriginal = getenv('JUDGE_PROFILE');
+        putenv('JUDGE_PROFILE=maratona');
+
+        try {
+            [, $token] = Judgehost::issue('judge-versionado');
+            $run = $this->pendingRun("read a b\necho \$((a + b))\n", "3 4\n", "7\n");
+            $this->fakeServerAsThisApp();
+
+            $client = new JudgehostClient('https://contest.example', $token, 30);
+            $agente = new JudgehostAgent($client, new WorkMaterialiser($client), app(AutoJudgeService::class), null, $maquina);
+
+            $this->assertTrue($agente->tick());
+        } finally {
+            $perfilOriginal === false ? putenv('JUDGE_PROFILE') : putenv('JUDGE_PROFILE='.$perfilOriginal);
+        }
+
+        $run->refresh();
+
+        $this->assertSame('judged', $run->status);
+        $this->assertSame('5.2.37', $run->toolchain_version, 'a versao que o agente sondou nao chegou ao servidor');
+        $this->assertSame('maratona', $run->toolchain_profile, 'o perfil da imagem do agente nao chegou ao servidor');
     }
 }

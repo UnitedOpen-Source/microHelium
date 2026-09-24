@@ -281,6 +281,14 @@ class JudgeWorkQueue
                 'extension' => $language->extension,
                 'compile_command' => $language->compile_command,
                 'run_command' => $language->run_command,
+                // Issue #392 -- a versao que ESTE host declarou para esta
+                // linguagem, como a spec #53 promete no DTO de claim. E o
+                // que o servidor sabe no momento da reivindicacao; a versao
+                // que vale para o julgamento e a que o agente manda de
+                // volta com o veredito.
+                'version' => $run->judgehost_id !== null
+                    ? Judgehost::query()->find($run->judgehost_id)?->declaredVersionOf((string) $language->extension)
+                    : null,
             ],
             'source' => [
                 'filename' => $run->filename,

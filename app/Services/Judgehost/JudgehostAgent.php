@@ -199,6 +199,16 @@ class JudgehostAgent
             ? (int) round($medido['cpu_seconds'] * 1000)
             : null;
 
+        // Issue #392 -- e o carimbo do toolchain com que se julgou.
+        //
+        // Da MachineCapabilities deste agente, a mesma que declarou as
+        // versoes no register: a sonda e memoizada nela, entao isto custa um
+        // subprocesso so na primeira vez que a extensao aparece -- e nenhum,
+        // se o register ja a sondou. Uma sonda que falha vira null, e o
+        // veredito vai do mesmo jeito.
+        $extension = (string) ($payload['language']['extension'] ?? '');
+        $verdict += (new JudgingToolchain($this->machine))->carimbo($extension);
+
         $accepted = $this->client->reportResult($runId, $verdict);
 
         if (! $accepted) {

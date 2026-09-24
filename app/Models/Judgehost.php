@@ -111,6 +111,25 @@ class Judgehost extends Model
     }
 
     /**
+     * Issue #392 -- a versao que este host declarou para $extension no
+     * ultimo registro, ou null quando nao declarou.
+     *
+     * Vai no DTO de claim (a spec #53 promete "versao de linguagem" ali) e
+     * e o fallback do relatorio de um agente que nao manda a versao do
+     * julgamento. Registro, nunca roteamento: ver canJudge().
+     */
+    public function declaredVersionOf(string $extension): ?string
+    {
+        if ($extension === '') {
+            return null;
+        }
+
+        $version = $this->capabilities()->where('extension', $extension)->value('version');
+
+        return is_string($version) && $version !== '' ? $version : null;
+    }
+
+    /**
      * Can this host judge a submission in $extension?
      *
      * A host that has declared nothing is treated as able to judge
