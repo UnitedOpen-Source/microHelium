@@ -1,15 +1,15 @@
 @extends('layouts.app')
 
-@section('title', 'Submissão #' . $run->run_number)
+@section('title', __('Submissão #:number', ['number' => $run->run_number]))
 
-@section('description', 'Confira o resultado, o código enviado e as mensagens da avaliação.')
+@section('description', __('Confira o resultado, o código enviado e as mensagens da avaliação.'))
 
 @section('content')
 <div class="space-y-6">
     <div class="rounded-xl border border-border bg-card overflow-hidden">
         <div class="border-b border-border px-6 py-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h2 class="text-lg font-semibold">Submissão #{{ $run->run_number }}</h2>
+                <h2 class="text-lg font-semibold">{{ __('Submissão #:number', ['number' => $run->run_number]) }}</h2>
                 <p class="text-sm text-muted-foreground">
                     {{ $run->problem->short_name }} - {{ $run->problem->name }} &middot; {{ $run->language->name }}
                 </p>
@@ -20,26 +20,26 @@
                 </span>
             @else
                 <span class="px-3 py-1.5 text-sm font-medium rounded-lg bg-muted text-muted-foreground">
-                    {{ $run->status === 'judging' ? 'Julgando…' : 'Aguardando julgamento' }}
+                    {{ $run->status === 'judging' ? __('Julgando…') : __('Aguardando julgamento') }}
                 </span>
             @endif
         </div>
 
         <div class="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 border-b border-border">
             <div>
-                <p class="text-xs text-muted-foreground uppercase">Data/Hora</p>
+                <p class="text-xs text-muted-foreground uppercase">{{ __('Data/Hora') }}</p>
                 <p class="text-sm font-medium">{{ $run->created_at->format('d/m/Y H:i:s') }}</p>
             </div>
             <div>
-                <p class="text-xs text-muted-foreground uppercase">Arquivo</p>
+                <p class="text-xs text-muted-foreground uppercase">{{ __('Arquivo') }}</p>
                 <p class="text-sm font-medium break-all">{{ $run->filename }}</p>
             </div>
             <div>
-                <p class="text-xs text-muted-foreground uppercase">Status</p>
-                <p class="text-sm font-medium">{{ ['pending' => 'Na fila', 'judging' => 'Em avaliação', 'judged' => 'Avaliada'][$run->status] ?? $run->status }}</p>
+                <p class="text-xs text-muted-foreground uppercase">{{ __('Status') }}</p>
+                <p class="text-sm font-medium">{{ ['pending' => __('Na fila'), 'judging' => __('Em avaliação'), 'judged' => __('Avaliada')][$run->status] ?? $run->status }}</p>
             </div>
             <div>
-                <p class="text-xs text-muted-foreground uppercase">Resultado da avaliação</p>
+                <p class="text-xs text-muted-foreground uppercase">{{ __('Resultado da avaliação') }}</p>
                 <p class="text-sm font-medium">{{ $run->auto_judge_result ?? '-' }}</p>
             </div>
         </div>
@@ -48,13 +48,13 @@
         <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-border">
             @if($run->auto_judge_stdout)
             <div>
-                <p class="text-xs font-medium text-muted-foreground uppercase mb-1" id="submission-output">Saída (stdout)</p>
+                <p class="text-xs font-medium text-muted-foreground uppercase mb-1" id="submission-output">{{ __('Saída (stdout)') }}</p>
                 <pre tabindex="0" translate="no" role="region" aria-labelledby="submission-output" class="bg-muted rounded p-3 text-xs overflow-x-auto max-h-64 overflow-y-auto">{{ $run->auto_judge_stdout }}</pre>
             </div>
             @endif
             @if($run->auto_judge_stderr)
             <div>
-                <p class="text-xs font-medium text-muted-foreground uppercase mb-1" id="submission-errors">Erros (stderr)</p>
+                <p class="text-xs font-medium text-muted-foreground uppercase mb-1" id="submission-errors">{{ __('Erros (stderr)') }}</p>
                 <pre tabindex="0" translate="no" role="region" aria-labelledby="submission-errors" class="bg-muted rounded p-3 text-xs overflow-x-auto max-h-64 overflow-y-auto">{{ $run->auto_judge_stderr }}</pre>
             </div>
             @endif
@@ -62,27 +62,27 @@
         @endif
 
         <div class="p-6">
-            <p class="text-xs font-medium text-muted-foreground uppercase mb-2" id="submission-source">Código-fonte</p>
+            <p class="text-xs font-medium text-muted-foreground uppercase mb-2" id="submission-source">{{ __('Código-fonte') }}</p>
             @if($sourceCode !== null)
                 <pre tabindex="0" translate="no" role="region" aria-labelledby="submission-source" class="bg-muted rounded p-4 text-sm overflow-x-auto max-h-[32rem] overflow-y-auto">{{ $sourceCode }}</pre>
-                <p class="mt-3"><a href="{{ route('submission.source', $run) }}" class="text-sm text-primary hover:underline">Baixar o arquivo enviado</a></p>
+                <p class="mt-3"><a href="{{ route('submission.source', $run) }}" class="text-sm text-primary hover:underline">{{ __('Baixar o arquivo enviado') }}</a></p>
             @elseif($sourceIsBinary ?? false)
                 {{-- Issue #268 -- um `.sb3` de Scratch e um ZIP. Renderizar
                      isto num `<pre>` poria centenas de KB de U+FFFD no HTML,
                      que o leitor de tela le em voz alta e que nao mostra
                      nada a ninguem. --}}
                 <div class="bg-muted rounded p-4">
-                    <p class="text-sm text-foreground">Este envio é um arquivo binário ({{ number_format(($sourceBytes ?? 0) / 1024, 1, ',', '.') }} KB) e não pode ser mostrado como texto.</p>
-                    <p class="mt-3"><a href="{{ route('submission.source', $run) }}" class="text-sm text-primary hover:underline">Baixar o arquivo enviado</a></p>
+                    <p class="text-sm text-foreground">{{ __('Este envio é um arquivo binário (:size KB) e não pode ser mostrado como texto.', ['size' => number_format(($sourceBytes ?? 0) / 1024, 1, ',', '.')]) }}</p>
+                    <p class="mt-3"><a href="{{ route('submission.source', $run) }}" class="text-sm text-primary hover:underline">{{ __('Baixar o arquivo enviado') }}</a></p>
                 </div>
             @else
-                <p class="text-sm text-muted-foreground">Arquivo de código-fonte não encontrado.</p>
+                <p class="text-sm text-muted-foreground">{{ __('Arquivo de código-fonte não encontrado.') }}</p>
             @endif
         </div>
 
         <div class="p-6 border-t border-border">
             <a href="{{ route('submissions') }}" class="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors inline-block">
-                Voltar às submissões
+                {{ __('Voltar às submissões') }}
             </a>
         </div>
     </div>

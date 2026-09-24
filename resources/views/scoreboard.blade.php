@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', 'Placar')
+@section('title', __('Placar'))
 
-@section('description', 'Acompanhe a classificação e os problemas resolvidos pelos times.')
+@section('description', __('Acompanhe a classificação e os problemas resolvidos pelos times.'))
 
 @section('content')
 <div class="space-y-6">
@@ -13,9 +13,9 @@
                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                Placar da Competição
+                {{ __('Placar da Competição') }}
             </h2>
-            <p class="text-sm text-muted-foreground">Classificação dos times participantes. Recarregue para consultar novos resultados.</p>
+            <p class="text-sm text-muted-foreground">{{ __('Classificação dos times participantes. Recarregue para consultar novos resultados.') }}</p>
         </div>
         {{-- Issue #211: até aqui o congelamento não escondia nada, e esta
              página nem chegava a perguntar. Agora que esconde, ela precisa
@@ -23,19 +23,19 @@
              errado. --}}
         @if($frozen ?? false)
         <div class="border-b border-warning/40 bg-warning-soft px-6 py-3">
-            <p class="text-sm font-medium text-warning">Placar congelado</p>
-            <p class="text-sm text-muted-foreground">As submissões feitas a partir do congelamento aparecem como pendentes (<span class="font-mono">?</span>) e não alteram a classificação. A competição continua.</p>
+            <p class="text-sm font-medium text-warning">{{ __('Placar congelado') }}</p>
+            <p class="text-sm text-muted-foreground">{!! __('As submissões feitas a partir do congelamento aparecem como pendentes (<span class="font-mono">?</span>) e não alteram a classificação. A competição continua.') !!}</p>
         </div>
         @endif
-        @include('partials.table-filter', ['tableId' => 'scoreboard-table', 'searchLabel' => 'times', 'difficulty' => false])
+        @include('partials.table-filter', ['tableId' => 'scoreboard-table', 'searchLabel' => __('times'), 'difficulty' => false])
         <div class="overflow-x-auto">
             <table id="scoreboard-table" class="w-full">
                 <thead>
                     <tr class="border-b border-border bg-muted/50">
                         <th class="w-16 px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</th>
-                        <th class="w-24 px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Resolvidos</th>
-                        <th class="w-28 px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Penalidade</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ __('Time') }}</th>
+                        <th class="w-24 px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ __('Resolvidos') }}</th>
+                        <th class="w-28 px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">{{ __('Penalidade') }}</th>
                         @foreach ($problems as $problem)
                         <th class="w-14 px-2 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider" title="{{ $problem->name }}">{{ $problem->short_name }}</th>
                         @endforeach
@@ -56,7 +56,7 @@
                             @endif
                         </td>
                         <td class="px-4 py-3">
-                            <div class="font-semibold">{{ $entry['user']->fullname ?? $entry['user']->username ?? ('Usuario #' . $entry['user_id']) }}</div>
+                            <div class="font-semibold">{{ $entry['user']->fullname ?? $entry['user']->username ?? __('Usuario #:id', ['id' => $entry['user_id']]) }}</div>
                         </td>
                         <td class="px-4 py-3 text-center">
                             <span class="inline-flex items-center rounded-md bg-primary-soft px-2.5 py-1 text-sm font-semibold text-primary ring-1 ring-inset ring-primary/20">
@@ -70,7 +70,7 @@
                             @php $ps = $entry['problems']->get($problem->id); @endphp
                             <td class="px-2 py-3 text-center">
                                 @if($ps && $ps['is_solved'])
-                                    <span class="inline-flex flex-col items-center justify-center w-10 h-9 rounded bg-success-soft text-xs font-medium text-success ring-1 ring-inset ring-success/20" title="{{ $problem->name }}: Aceito na tentativa {{ $ps['attempts'] }}">
+                                    <span class="inline-flex flex-col items-center justify-center w-10 h-9 rounded bg-success-soft text-xs font-medium text-success ring-1 ring-inset ring-success/20" title="{{ __(':problem: Aceito na tentativa :attempt', ['problem' => $problem->name, 'attempt' => $ps['attempts']]) }}">
                                         +{{ $ps['attempts'] > 1 ? $ps['attempts'] - 1 : '' }}
                                     </span>
                                 {{-- Issue #211: sem este estado, uma célula
@@ -80,15 +80,15 @@
                                      ICPC mantém visível durante o
                                      congelamento. --}}
                                 @elseif($ps && ($ps['pending'] ?? 0) > 0)
-                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-warning-soft text-xs font-medium text-warning ring-1 ring-inset ring-warning/20" title="{{ $problem->name }}: {{ $ps['attempts'] + $ps['pending'] }} submissão(ões), resultado não divulgado durante o congelamento">
+                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-warning-soft text-xs font-medium text-warning ring-1 ring-inset ring-warning/20" title="{{ __(':problem: :count submissão(ões), resultado não divulgado durante o congelamento', ['problem' => $problem->name, 'count' => $ps['attempts'] + $ps['pending']]) }}">
                                         ?{{ $ps['attempts'] + $ps['pending'] }}
                                     </span>
                                 @elseif($ps && $ps['attempts'] > 0)
-                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-destructive-soft text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20" title="{{ $problem->name }}: {{ $ps['attempts'] }} tentativa(s) incorreta(s)">
+                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-destructive-soft text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20" title="{{ __(':problem: :count tentativa(s) incorreta(s)', ['problem' => $problem->name, 'count' => $ps['attempts']]) }}">
                                         -{{ $ps['attempts'] }}
                                     </span>
                                 @else
-                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-muted text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border" title="{{ $problem->name }}: Não tentado">
+                                    <span class="inline-flex items-center justify-center w-10 h-9 rounded bg-muted text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border" title="{{ __(':problem: Não tentado', ['problem' => $problem->name]) }}">
                                         &middot;
                                     </span>
                                 @endif
@@ -101,11 +101,11 @@
                             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
-                            <p class="text-muted-foreground">Nenhum time participando ainda</p>
+                            <p class="text-muted-foreground">{{ __('Nenhum time participando ainda') }}</p>
                         </td>
                     </tr>
                     @endforelse
-                <tr id="scoreboard-table-empty" hidden><td colspan="{{ 4 + count($problems) }}" class="text-center text-muted-foreground">Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.</td></tr>
+                <tr id="scoreboard-table-empty" hidden><td colspan="{{ 4 + count($problems) }}" class="text-center text-muted-foreground">{{ __('Nenhum resultado para estes filtros. Tente outro termo ou limpe a busca.') }}</td></tr>
                 </tbody>
             </table>
         </div>
@@ -119,7 +119,7 @@
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Legenda
+                    {{ __('Legenda') }}
                 </h2>
             </div>
             <div class="p-6">
@@ -127,20 +127,20 @@
                     <div class="space-y-3">
                         <div class="flex items-center gap-2">
                             <span class="inline-flex items-center justify-center w-7 h-7 rounded bg-success-soft text-xs font-medium text-success ring-1 ring-inset ring-success/20">+</span>
-                            <span class="text-sm text-muted-foreground">Problema aceito</span>
+                            <span class="text-sm text-muted-foreground">{{ __('Problema aceito') }}</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="inline-flex items-center justify-center w-7 h-7 rounded bg-destructive-soft text-xs font-medium text-destructive ring-1 ring-inset ring-destructive/20">−1</span>
-                            <span class="text-sm text-muted-foreground">Tentativas incorretas</span>
+                            <span class="text-sm text-muted-foreground">{{ __('Tentativas incorretas') }}</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="inline-flex items-center justify-center w-7 h-7 rounded bg-muted text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border">·</span>
-                            <span class="text-sm text-muted-foreground">Não tentado</span>
+                            <span class="text-sm text-muted-foreground">{{ __('Não tentado') }}</span>
                         </div>
                     </div>
                     <div class="space-y-2 text-sm">
-                        <p><strong class="text-foreground">Resolvidos:</strong> <span class="text-muted-foreground">Número de problemas aceitos</span></p>
-                        <p><strong class="text-foreground">Penalidade:</strong> <span class="text-muted-foreground">Tempo total + penalidades por erros</span></p>
+                        <p><strong class="text-foreground">{{ __('Resolvidos:') }}</strong> <span class="text-muted-foreground">{{ __('Número de problemas aceitos') }}</span></p>
+                        <p><strong class="text-foreground">{{ __('Penalidade:') }}</strong> <span class="text-muted-foreground">{{ __('Tempo total + penalidades por erros') }}</span></p>
                     </div>
                 </div>
             </div>
@@ -152,14 +152,14 @@
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Tempo
+                    {{ __('Tempo') }}
                 </h2>
             </div>
             <div class="p-6 text-center">
                 <div class="text-4xl font-mono font-bold text-foreground mb-2" id="scoreboard-timer">
                     <contest-timer></contest-timer>
                 </div>
-                <p class="text-sm text-muted-foreground">Tempo restante</p>
+                <p class="text-sm text-muted-foreground">{{ __('Tempo restante') }}</p>
             </div>
         </div>
     </div>

@@ -52,7 +52,7 @@ class SubmitController extends Controller
         // devolvido que pudesse submeter pela API e nao pela web teria o
         // tempo de volta so para quem soubesse usar a API.
         if (! app(ContestClock::class)->isRunningFor($problem->contest, auth()->user()?->site_id)) {
-            return back()->withErrors(['source_file' => 'Este contest nao esta em andamento no momento.']);
+            return back()->withErrors(['source_file' => __('Este contest nao esta em andamento no momento.')]);
         }
 
         // Issue #284 -- o limite da prova, e nao a constante da instalacao.
@@ -75,7 +75,7 @@ class SubmitController extends Controller
         ]);
 
         if (! $request->hasFile('source_file') && trim((string) $request->input('code_text')) === '') {
-            return back()->withErrors(['source_file' => 'Envie um arquivo ou cole o codigo fonte.']);
+            return back()->withErrors(['source_file' => __('Envie um arquivo ou cole o codigo fonte.')]);
         }
 
         $user = auth()->user();
@@ -83,7 +83,7 @@ class SubmitController extends Controller
         $language = Language::findOrFail($validated['language_id']);
 
         if ($language->contest_id !== $problem->contest_id || ! $language->is_active) {
-            return back()->withErrors(['language_id' => 'Linguagem indisponivel para este problema.']);
+            return back()->withErrors(['language_id' => __('Linguagem indisponivel para este problema.')]);
         }
 
         if ($request->hasFile('source_file')) {
@@ -112,7 +112,7 @@ class SubmitController extends Controller
         $siteId = $user->site_id ?? $contest->sites()->value('id');
 
         if (! $siteId) {
-            return back()->withErrors(['source_file' => 'Este contest ainda nao tem nenhum site configurado; nao e possivel submeter.']);
+            return back()->withErrors(['source_file' => __('Este contest ainda nao tem nenhum site configurado; nao e possivel submeter.')]);
         }
 
         try {
@@ -133,10 +133,12 @@ class SubmitController extends Controller
                 rejectDuplicateSource: true,
             );
         } catch (DuplicateSubmissionException $e) {
-            return back()->withErrors(['source_file' => $e->getMessage()]);
+            // Issue #397 -- a mesma frase da excecao, mas traduzivel: a
+            // excecao tambem serve a API, cuja resposta nao muda de idioma.
+            return back()->withErrors(['source_file' => __('Submissao identica ja enviada (run #:number).', ['number' => $e->existingRunNumber])]);
         }
 
-        return redirect()->route('submissions')->with('success', 'Submissao enviada! Aguarde o julgamento.');
+        return redirect()->route('submissions')->with('success', __('Submissao enviada! Aguarde o julgamento.'));
     }
 
     /**
@@ -155,7 +157,7 @@ class SubmitController extends Controller
         }
 
         if ($user->contest_id !== $problem->contest_id) {
-            abort(403, 'Este problema nao pertence ao seu contest.');
+            abort(403, __('Este problema nao pertence ao seu contest.'));
         }
     }
 }

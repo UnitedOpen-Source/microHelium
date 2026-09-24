@@ -6,6 +6,7 @@ use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\ClicsHeaders;
 use App\Http\Middleware\EnsureAccountIsEnabled;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SetLocale;
 use Helium\Http\Middleware\IsAdminMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -89,6 +90,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Por grupo, e nao global: o guard e diferente em cada um, e os
         // grupos do judgehost e do webcast nao autenticam User nenhum.
         $middleware->web(append: [EnsureAccountIsEnabled::class.':web']);
+
+        // Issue #397 -- o idioma escolhido no seletor, guardado na sessao.
+        // No grupo `web` porque e ali que ha sessao.
+        $middleware->web(append: [SetLocale::class]);
         $middleware->api(append: [EnsureAccountIsEnabled::class.':sanctum']);
 
         $middleware->alias([

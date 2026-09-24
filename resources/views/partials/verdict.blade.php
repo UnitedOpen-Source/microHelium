@@ -1,17 +1,17 @@
 @php
     $verdictCode = strtoupper($code ?? '');
     $verdictMap = [
-        'AC' => ['success', 'Aceito', '✓'],
-        'WA' => ['destructive', 'Resposta incorreta', '×'],
-        'TLE' => ['warning', 'Tempo excedido', '!'],
-        'MLE' => ['warning', 'Memória excedida', '!'],
-        'CE' => ['destructive', 'Erro de compilação', '×'],
-        'RE' => ['destructive', 'Erro de execução', '×'],
-        'RTE' => ['destructive', 'Erro de execução', '×'],
-        'PE' => ['warning', 'Erro de apresentação', '!'],
-        'CS' => ['info', 'Consulte a organização', 'i'],
+        'AC' => ['success', __('Aceito'), '✓'],
+        'WA' => ['destructive', __('Resposta incorreta'), '×'],
+        'TLE' => ['warning', __('Tempo excedido'), '!'],
+        'MLE' => ['warning', __('Memória excedida'), '!'],
+        'CE' => ['destructive', __('Erro de compilação'), '×'],
+        'RE' => ['destructive', __('Erro de execução'), '×'],
+        'RTE' => ['destructive', __('Erro de execução'), '×'],
+        'PE' => ['warning', __('Erro de apresentação'), '!'],
+        'CS' => ['info', __('Consulte a organização'), 'i'],
     ];
-    $verdict = $verdictMap[$verdictCode] ?? ['neutral', $verdictCode && $verdictCode !== 'PENDING' ? $verdictCode : (($status ?? '') === 'judging' ? 'Em avaliação' : 'Na fila'), '·'];
+    $verdict = $verdictMap[$verdictCode] ?? ['neutral', $verdictCode && $verdictCode !== 'PENDING' ? $verdictCode : (($status ?? '') === 'judging' ? __('Em avaliação') : __('Na fila')), '·'];
     $verdictStyles = ['success' => 'bg-success-soft text-success', 'destructive' => 'bg-destructive-soft text-destructive', 'warning' => 'bg-warning-soft text-warning', 'info' => 'bg-info-soft text-info', 'neutral' => 'bg-muted text-muted-foreground'];
 @endphp
 {{-- Issue #394: the compact badge shows the short code ("AC") and used to

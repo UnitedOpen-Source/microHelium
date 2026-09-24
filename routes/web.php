@@ -11,6 +11,7 @@ use App\Http\Controllers\Backend\UserController;
 use App\Http\Controllers\ClarificationController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\JudgeController;
+use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\PrintRequestController;
 use App\Http\Controllers\ProblemController;
 use App\Http\Controllers\ProfileController;
@@ -107,6 +108,10 @@ Route::get('/wizard', function () {
     return view('wizard');
 })->name('wizard');
 
+// Issue #397 -- o seletor de idioma. Sem `auth`: a tela de entrada tambem
+// oferece o seletor, e quem ainda nao entrou e quem mais precisa ler.
+Route::post('/locale', [LocaleController::class, 'update'])->name('locale.update');
+
 // Health check
 Route::get('/up', function () {
     return response('OK', 200);
@@ -184,7 +189,7 @@ Route::post('/login', function () {
             }
 
             return back()->withErrors([
-                'email' => 'Esta conta esta desabilitada. Procure a organizacao do evento.',
+                'email' => __('Esta conta esta desabilitada. Procure a organizacao do evento.'),
             ])->withInput(request()->only('email'));
         }
 
@@ -205,7 +210,7 @@ Route::post('/login', function () {
             );
 
             return back()->withErrors([
-                'email' => 'Acesso bloqueado: fora da rede autorizada para o seu site.',
+                'email' => __('Acesso bloqueado: fora da rede autorizada para o seu site.'),
             ])->withInput(request()->only('email'));
         }
 
@@ -215,7 +220,7 @@ Route::post('/login', function () {
     }
 
     return back()->withErrors([
-        'email' => 'Credenciais invalidas.',
+        'email' => __('Credenciais invalidas.'),
     ])->withInput(request()->only('email'));
 })->middleware('throttle:5,1');
 
