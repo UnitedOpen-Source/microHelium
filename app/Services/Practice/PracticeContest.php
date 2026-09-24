@@ -93,6 +93,8 @@ class PracticeContest
      * publication level for statement/limits/tests; languages come from the
      * practice contest's own set, so enabling a new language does not
      * require republishing every problem.
+     *
+     * @return Collection<int, Language>
      */
     public function languages(Contest $contest): Collection
     {

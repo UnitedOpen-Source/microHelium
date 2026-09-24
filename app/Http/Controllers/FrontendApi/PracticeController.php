@@ -13,6 +13,7 @@ use App\Services\Practice\JudgeExecutorHealth;
 use App\Services\Practice\PracticeContest;
 use App\Services\RunSubmissionService;
 use App\Support\IdempotencyStore;
+use App\Support\SourceText;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -179,6 +180,11 @@ class PracticeController extends Controller
                     ->map(fn (Language $language) => [
                         'id' => (int) $language->id,
                         'name' => (string) $language->name,
+                        // Issue #390 (P2): tells the page which input to
+                        // offer -- the editor, or a file picker filtered to
+                        // the language's own extension.
+                        'source_kind' => $language->receivesSourceAsFile() ? 'file' : 'text',
+                        'accept' => $language->receivesSourceAsFile() ? '.'.$language->getFileExtension() : null,
                     ])->values()->all(),
             ],
             'capabilities' => [
@@ -221,16 +227,14 @@ class PracticeController extends Controller
             $snapshot = $publication->problem;
             $contest = $snapshot->contest;
 
-            $validated = Validator::make($request->all(), [
+            Validator::make($request->all(), [
                 'language_id' => ['required', 'integer'],
-                'source' => ['required', 'string'],
             ], [], [
                 'language_id' => 'linguagem',
-                'source' => 'codigo-fonte',
             ])->validate();
 
             $language = $this->practiceContest->languages($contest)
-                ->firstWhere('id', (int) $validated['language_id']);
+                ->firstWhere('id', (int) $request->input('language_id'));
 
             if (! $language) {
                 throw ValidationException::withMessages([
@@ -238,28 +242,13 @@ class PracticeController extends Controller
                 ]);
             }
 
-            $source = $validated['source'];
-
-            if (! mb_check_encoding($source, 'UTF-8')) {
-                throw ValidationException::withMessages([
-                    'source' => 'O codigo precisa estar em UTF-8 valido.',
-                ]);
-            }
-
-            if (trim($source) === '') {
-                throw ValidationException::withMessages([
-                    'source' => 'Envie o codigo da sua solucao.',
-                ]);
-            }
-
-            // Bytes, not characters: the limit is about what gets written to
-            // disk and handed to a compiler, and the client checks the same
-            // way (new TextEncoder().encode(...).length).
-            if (strlen($source) > $this->maxSourceBytes()) {
-                throw ValidationException::withMessages([
-                    'source' => 'O codigo ultrapassa o tamanho permitido de '.$this->maxSourceBytes().' bytes.',
-                ]);
-            }
+            // Issue #390 (P2) -- a linguagem escolhe o canal, e nao o
+            // participante: arquivo so para quem tem fonte-arquivo (o `.sb3`
+            // do Scratch), editor de texto para o resto, com as regras de
+            // antes. Ver docs/specs/390-envio-de-arquivo-no-treino.md.
+            [$filename, $source] = $language->receivesSourceAsFile()
+                ? $this->fileSource($request, $language)
+                : $this->textSource($request, $language);
 
             $run = $this->submissions->submit(
                 contest: $contest,
@@ -267,7 +256,7 @@ class PracticeController extends Controller
                 user: $user,
                 problem: $snapshot,
                 language: $language,
-                filename: $this->submissions->filenameFor($language),
+                filename: $filename,
                 source: $source,
                 // Practice deliberately accepts an identical resubmission --
                 // retrying the same code after a judge failure is legitimate
@@ -283,6 +272,102 @@ class PracticeController extends Controller
                 ],
             ], 202);
         });
+    }
+
+    /**
+     * The typed-source channel -- every language except the file-source
+     * ones, with the rules #43 already had.
+     *
+     * @return array{0: string, 1: string} filename and bytes
+     */
+    private function textSource(Request $request, Language $language): array
+    {
+        // A file for a text language is refused rather than read: opening
+        // upload for C or Python is not what #390 asked for, and accepting
+        // it silently would be a second, unvalidated way in.
+        if ($request->hasFile('source_file')) {
+            throw ValidationException::withMessages([
+                'source_file' => 'Esta linguagem recebe o codigo pelo editor, e nao por arquivo.',
+            ]);
+        }
+
+        $validated = Validator::make($request->all(), [
+            'source' => ['required', 'string'],
+        ], [], [
+            'source' => 'codigo-fonte',
+        ])->validate();
+
+        $source = $validated['source'];
+
+        // Issue #390 -- the same "is this text?" SubmissionController asks
+        // before rendering a source (#268). UTF-8 alone let through a
+        // stored ZIP with ASCII content; the NUL byte in its header is what
+        // gives it away.
+        if (! SourceText::isText($source)) {
+            throw ValidationException::withMessages([
+                'source' => 'O codigo precisa estar em UTF-8 valido, sem bytes binarios.',
+            ]);
+        }
+
+        if (trim($source) === '') {
+            throw ValidationException::withMessages([
+                'source' => 'Envie o codigo da sua solucao.',
+            ]);
+        }
+
+        // Bytes, not characters: the limit is about what gets written to
+        // disk and handed to a compiler, and the client checks the same
+        // way (new TextEncoder().encode(...).length).
+        if (strlen($source) > $this->maxSourceBytes()) {
+            throw ValidationException::withMessages([
+                'source' => 'O codigo ultrapassa o tamanho permitido de '.$this->maxSourceBytes().' bytes.',
+            ]);
+        }
+
+        return [$this->submissions->filenameFor($language), $source];
+    }
+
+    /**
+     * Issue #390 (P2) -- the uploaded-file channel, for a language whose
+     * source is a file (Scratch's `.sb3`).
+     *
+     * Nothing here is new validation: the size rule is the contest upload's
+     * (`file|max:<KB>`, SubmitController and Api\RunController), fed by the
+     * same number the text channel above uses; the stored name is
+     * RunSubmissionService::filenameFor(), so the extension is always the
+     * language's and never the client's (#311); and the bytes go to the same
+     * RunSubmissionService::submit() a contest run does, which is where
+     * `scratch-run --check` turns an invalid project into CE (#268).
+     *
+     * @return array{0: string, 1: string} filename and bytes
+     */
+    private function fileSource(Request $request, Language $language): array
+    {
+        if ($request->filled('source')) {
+            throw ValidationException::withMessages([
+                'source_file' => 'Esta linguagem recebe o projeto como arquivo .'.$language->getFileExtension().', e nao como texto.',
+            ]);
+        }
+
+        Validator::make($request->all(), [
+            'source_file' => ['required', 'file', 'max:'.Contest::defaultMaxSourceKb()],
+        ], [
+            'source_file.required' => 'Envie o arquivo .'.$language->getFileExtension().' do seu projeto.',
+            'source_file.max' => 'O arquivo ultrapassa o tamanho permitido de '.$this->maxSourceBytes().' bytes.',
+        ], [
+            'source_file' => 'arquivo do projeto',
+        ])->validate();
+
+        $file = $request->file('source_file');
+        $source = (string) file_get_contents($file->getRealPath());
+
+        if ($source === '') {
+            throw ValidationException::withMessages([
+                'source_file' => 'O arquivo enviado esta vazio.',
+            ]);
+        }
+
+        return [$this->submissions->filenameFor($language, $file->getClientOriginalName()), $source];
     }
 
     /**

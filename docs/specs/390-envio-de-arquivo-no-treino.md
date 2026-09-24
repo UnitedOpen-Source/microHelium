@@ -65,7 +65,7 @@ variante: o `extension` do catálogo às vezes é id de compilador (`c_gcc13`).
   `file|max:<KB>` do Laravel, a que `SubmitController` e `Api\RunController`
   usam.
 - **Nome do arquivo**: `RunSubmissionService::filenameFor($language, $nomeDoCliente)`
-  — basename saneado, extensão SEMPRE a da linguagem (`main.sb3`), nunca a
+  — basename saneado, extensão SEMPRE a da linguagem (`.sb3`), nunca a
   que o cliente mandou (#311).
 - **Gravação e julgamento**: `RunSubmissionService::submit()`, o mesmo que
   cria o Run da prova. Os bytes vão para o disco sem transformação, e o
@@ -106,8 +106,8 @@ texto devolve o editor com o código que estava nele.
 
 ## Casos de teste
 
-1. `.sb3` aceito numa linguagem Scratch: 202, um Run, `filename = main.sb3`
-   mesmo que o cliente mande `projeto.zip`, bytes gravados idênticos aos
+1. `.sb3` aceito numa linguagem Scratch: 202, um Run, `filename` saneado e
+   terminado em `.sb3` mesmo que o cliente mande `.zip`, bytes gravados idênticos aos
    enviados, `JudgeRunJob` despachado para esse Run.
 2. Arquivo acima de `Contest::defaultMaxSourceKb()` recusado com 422 em
    `source_file`, sem Run.

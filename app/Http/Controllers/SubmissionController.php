@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Run;
+use App\Support\SourceText;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
@@ -90,7 +91,7 @@ class SubmissionController extends Controller
         if (file_exists($path)) {
             $conteudo = (string) file_get_contents($path);
             $sourceBytes = strlen($conteudo);
-            $sourceIsBinary = ! self::isText($conteudo);
+            $sourceIsBinary = ! SourceText::isText($conteudo);
             $sourceCode = $sourceIsBinary ? null : $conteudo;
         }
 
@@ -126,18 +127,6 @@ class SubmissionController extends Controller
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'no-store, private',
         ]);
-    }
-
-    /**
-     * UTF-8 valido e sem byte nulo.
-     *
-     * O byte nulo entra na conta porque ha binario que passa por UTF-8
-     * valido por acaso -- e nenhum fonte de programa legitimo tem um.
-     */
-    private static function isText(string $content): bool
-    {
-        return $content === ''
-            || (! str_contains($content, "\0") && mb_check_encoding($content, 'UTF-8'));
     }
 
     /**
