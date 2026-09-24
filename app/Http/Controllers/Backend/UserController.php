@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Backend;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Site;
+use App\Services\AccountAnonymizer;
 use App\Services\ManagedAccountProvisioner;
 use Helium\User;
 use Illuminate\Http\RedirectResponse;
@@ -15,6 +16,12 @@ use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
+    /**
+     * Issue #395 -- editar ou reativar uma conta anonimizada a devolveria a
+     * alguem. Quem precisa de conta nova cria uma.
+     */
+    private const ANONYMIZED_IS_FINAL = 'Esta conta foi anonimizada e nao pode ser editada nem reativada. Crie uma conta nova.';
+
     /**
      * Display a listing of the resource.
      *
@@ -118,8 +125,9 @@ class UserController extends Controller
     /**
      * Issue #100 -- editing a user, which was not possible at all: this
      * controller had store() and destroy() and nothing in between, so the
-     * only way to fix a typo was to delete the account. Deleting cascades
-     * to its runs, scores, tasks and logs.
+     * only way to fix a typo was to delete the account. Deleting cascaded
+     * to its runs, scores, tasks and logs (ate o #395, quando excluir passou
+     * a anonimizar).
      */
     public function edit(User $user)
     {
@@ -132,6 +140,10 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        if ($user->isAnonymized()) {
+            return back()->withErrors(['user' => self::ANONYMIZED_IS_FINAL]);
+        }
+
         $validated = $request->validate([
             'fullname' => 'required|string|max:255',
             // Unique against everyone else, ignoring this row -- otherwise
@@ -226,37 +238,49 @@ class UserController extends Controller
         return ! User::query()
             ->whereIn('user_type', [User::TYPE_ADMIN, User::TYPE_SYSTEM])
             ->where('user_id', '!=', $user->user_id)
+            // Issue #395 -- uma conta anonimizada nao entra mais, entao nao
+            // e administrador de ninguem.
+            ->whereNull('anonymized_at')
             ->exists();
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Issue #395 -- "excluir" anonimiza.
+     *
+     * Era `$user->delete()`, um DELETE de verdade (o model nao usa
+     * SoftDeletes), e as chaves estrangeiras com `cascadeOnDelete` levavam
+     * runs, scores, leaderboard, clarificacoes, tarefas e as copias de
+     * seguranca que a conta tivesse gerado. Atender um pedido de exclusao
+     * tirava a equipe do placar de uma prova ja finalizada.
+     *
+     * A rota e as duas guardas (#100) continuam; o que muda e o efeito. Ver
+     * App\Services\AccountAnonymizer e
+     * docs/specs/395-anonimizar-em-vez-de-apagar.md.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\RedirectResponse
+     * @return RedirectResponse
      */
     public function destroy($id)
     {
         $user = User::find($id);
 
-        if (! $user) {
-            return redirect()->route('backend.users')->with('success', 'Usuario excluido com sucesso!');
+        if (! $user || $user->isAnonymized()) {
+            return redirect()->route('backend.users')->with('success', 'Conta anonimizada.');
         }
 
-        // Issue #100: the same two guards the edit path has. They matter
-        // more here -- deleting cascades to the account's runs, scores,
-        // tasks and logs, and there is no undo.
         if ((int) $user->user_id === (int) auth()->id()) {
-            return back()->withErrors(['user' => 'Voce nao pode excluir a sua propria conta.']);
+            return back()->withErrors(['user' => 'Voce nao pode anonimizar a sua propria conta.']);
         }
 
         if ($user->isAdmin() && $this->isLastAdmin($user)) {
-            return back()->withErrors(['user' => 'Esta e a ultima conta de administrador; excluí-la deixaria o sistema sem nenhum.']);
+            return back()->withErrors(['user' => 'Esta e a ultima conta de administrador; anonimiza-la deixaria o sistema sem nenhum.']);
         }
 
-        $user->delete();
+        /** @var User $actor */
+        $actor = auth()->user();
+        app(AccountAnonymizer::class)->anonymize($user, $actor);
 
-        return redirect()->route('backend.users')->with('success', 'Usuario excluido com sucesso!');
+        return redirect()->route('backend.users')->with('success', 'Conta anonimizada: os dados pessoais foram removidos e o historico de prova foi mantido.');
     }
 
     /**
@@ -276,6 +300,12 @@ class UserController extends Controller
      */
     public function resetLink(Request $request, User $user): RedirectResponse
     {
+        // Issue #395 -- a ativacao faz `is_enabled => true`: um link aqui
+        // devolveria a conta a alguem, com o pseudonimo no lugar do nome.
+        if ($user->isAnonymized()) {
+            return back()->withErrors(['user' => self::ANONYMIZED_IS_FINAL]);
+        }
+
         $token = app(ManagedAccountProvisioner::class)->issuePasswordReset($user);
 
         return back()->with('reset_link', [

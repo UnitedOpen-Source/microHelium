@@ -84,6 +84,10 @@ class User extends Authenticatable
         'birthdate' => 'date',
         'managed_at' => 'datetime',
         'is_enabled' => 'boolean',
+        // Issue #395. Fora do $fillable de proposito: so o
+        // AccountAnonymizer escreve estas duas, por forceFill().
+        'anonymized_at' => 'datetime',
+        'anonymized_by' => 'integer',
     ];
 
     protected $attributes = [
@@ -138,6 +142,16 @@ class User extends Authenticatable
     public function managedBy(): BelongsTo
     {
         return $this->belongsTo(self::class, 'managed_by', 'user_id');
+    }
+
+    /**
+     * Issue #395 -- a conta foi anonimizada a pedido do titular. A linha
+     * continua existindo para o placar e a trilha da prova, mas nao e mais
+     * de ninguem. Ver App\Services\AccountAnonymizer.
+     */
+    public function isAnonymized(): bool
+    {
+        return $this->anonymized_at !== null;
     }
 
     public function isAdmin(): bool

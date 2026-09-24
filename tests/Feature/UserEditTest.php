@@ -213,13 +213,13 @@ class UserEditTest extends TestCase
         $admin = $this->createAdminUser();
         $other = $this->createAdminUser();
 
-        // Deleting cascades to runs, scores, tasks and logs, so the same two
-        // guards matter more here than on edit.
+        // Excluir anonimiza desde o #395: a linha fica, e a conta anonimizada
+        // deixa de contar como administrador.
         $this->actingAs($other)->delete("/backend/users/{$other->user_id}")->assertSessionHasErrors('user');
-        $this->assertNotNull(User::find($other->user_id));
+        $this->assertFalse(User::find($other->user_id)->isAnonymized());
 
         $this->actingAs($other)->delete("/backend/users/{$admin->user_id}")->assertRedirect();
-        $this->assertNull(User::find($admin->user_id));
+        $this->assertTrue(User::find($admin->user_id)->isAnonymized());
 
         $this->actingAs($other);
         $remaining = $this->createAdminUser();

@@ -109,7 +109,8 @@ class UserControllerTest extends TestCase
     }
 
     /**
-     * Test admin can delete a user.
+     * Test admin can "delete" a user -- which, since issue #395, anonymizes
+     * the account instead of removing the row (and its contest history).
      */
     public function test_admin_can_delete_user()
     {
@@ -122,7 +123,12 @@ class UserControllerTest extends TestCase
 
         $response->assertRedirect(route('backend.users'));
         $response->assertSessionHas('success');
-        $this->assertDatabaseMissing('users', ['user_id' => $userToDelete->user_id]);
+        $this->assertDatabaseMissing('users', ['username' => $userToDelete->username]);
+        $this->assertDatabaseHas('users', [
+            'user_id' => $userToDelete->user_id,
+            'fullname' => 'Participante '.$userToDelete->user_id,
+            'email' => null,
+        ]);
     }
 
     /**

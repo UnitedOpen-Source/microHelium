@@ -86,5 +86,14 @@
             </button>
         </form>
     </div>
+
+    {{-- Issue #395: o titular baixa o que o sistema guarda sobre ele. --}}
+    <div class="bg-card rounded-lg border border-border shadow-sm p-6 space-y-3">
+        <h2 class="text-lg font-semibold text-foreground">Meus dados</h2>
+        <p class="text-sm text-muted-foreground">Baixe, em JSON, os dados da sua conta, as suas submissões com o código-fonte, os seus esclarecimentos, pedidos de impressão e chamados.</p>
+        <a href="{{ route('profile.export') }}" class="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors">
+            Baixar meus dados
+        </a>
+    </div>
 </div>
 @endsection
