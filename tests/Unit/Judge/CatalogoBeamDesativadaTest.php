@@ -148,53 +148,56 @@ class CatalogoBeamDesativadaTest extends TestCase
     }
 
     /**
-     * Enquanto a BEAM continuar instalada, as tres imagens instalam A MESMA.
+     * As tres imagens concordam sobre a BEAM: ou NENHUMA a instala, ou as
+     * tres fixam A MESMA.
      *
-     * As linguagens estao desligadas e o toolchain continua nas tres imagens
-     * (+86 MiB em cada, medido no comentario do `Dockerfile.judge`). Isso e
-     * deliberado: reativar precisa ser trocar um `false`, e nao reconstruir a
-     * receita. O efeito colateral e que esses pinos ficam FORA do
-     * `ToolchainManifestParityTest`, que so percorre as linguagens ligadas --
-     * ou seja, hoje nada impediria os tres Dockerfiles de divergirem em
-     * silencio e a divergencia so aparecer no dia da reativacao.
+     * Ate 24/09/2026 a BEAM ficava instalada e desligada, para que reativar
+     * fosse trocar um `false`. Nesse dia o Alpine publicou a OTP-27.3.4.18,
+     * tirou do repositorio o `erlang27=27.3.4.17-r0` que as tres imagens
+     * fixavam, e o `elixir` passou a puxar o `erlang28` -- todo build sem cache
+     * das tres imagens parou em `unable to select packages`, por causa de dois
+     * pacotes que nenhuma prova usava. A BEAM saiu das tres imagens.
      *
-     * Se um dia a decisao for remover a BEAM das imagens, este caso sai junto
-     * -- e ai ele falha ate ser removido, que e o comportamento desejado: a
-     * remocao tem de ser uma decisao, nao um esquecimento.
+     * Este caso substitui o que exigia "a mesma BEAM enquanto ela continuar
+     * instalada" -- e o docblock daquele caso ja dizia que ele sairia junto
+     * com a remocao. O que ele guardava continua guardado, nos dois estados:
+     * como `erl`/`ex` estao fora do ToolchainManifestParityTest (que so
+     * percorre linguagens ligadas), nada mais impediria uma imagem de voltar a
+     * instalar a BEAM sozinha, que e a forma da #302. Reativar exige pino
+     * `>= 29.1` (ReativarABeamExigeOtpCorrigidaTest) -- e as tres juntas.
      */
-    public function test_as_tres_imagens_fixam_a_mesma_beam_enquanto_ela_continuar_instalada(): void
+    public function test_as_tres_imagens_concordam_sobre_a_beam(): void
     {
         $raiz = dirname(__DIR__, 3);
 
-        foreach ([ToolchainRequirement::apk('erlang27'), ToolchainRequirement::apk('elixir')] as $exigencia) {
+        foreach ([ToolchainRequirement::apk('erlang27'), ToolchainRequirement::apk('erlang28'), ToolchainRequirement::apk('erlang29'), ToolchainRequirement::apk('elixir')] as $exigencia) {
+            $instala = [];
             $pinos = [];
 
             foreach (self::dockerfiles() as $dockerfile) {
                 $imagem = DockerfileToolchain::fromFile($raiz.'/'.$dockerfile, $raiz);
-
-                $this->assertTrue(
-                    $imagem->satisfies($exigencia),
-                    "{$dockerfile} deixou de instalar ".$exigencia->describe().", e as outras imagens ainda instalam.\n"
-                    .'Tirar a BEAM de uma imagem so e a #302 de novo; ou tire das tres (e apague este caso), ou '
-                    .'mantenha nas tres.'
-                );
-
+                $instala[$dockerfile] = $imagem->satisfies($exigencia);
                 $pinos[$dockerfile] = $imagem->pinFor($exigencia);
             }
 
-            $this->assertNotNull(
-                $pinos['Dockerfile'],
-                $exigencia->describe().' esta sem pino de versao (#303)'
+            $this->assertCount(
+                1,
+                array_unique($instala),
+                $exigencia->describe().' esta em umas imagens e nao em outras: '
+                .json_encode($instala, JSON_UNESCAPED_SLASHES).'
+'
+                .'A BEAM entra nas tres ou em nenhuma -- meia imagem e a #302 de novo.'
             );
 
-            $this->assertLessThanOrEqual(
-                1,
-                count(array_unique($pinos, SORT_REGULAR)),
-                $exigencia->describe().' esta fixado em versoes diferentes entre as imagens: '
-                .json_encode($pinos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n"
-                .'Enquanto `erl`/`ex` estao desligadas isto nao passa pelo ToolchainManifestParityTest, que so '
-                .'percorre as linguagens ligadas -- a divergencia so apareceria no dia da reativacao.'
-            );
+            if (in_array(true, $instala, true)) {
+                $this->assertNotContains(null, $pinos, $exigencia->describe().' esta sem pino de versao (#303)');
+                $this->assertCount(
+                    1,
+                    array_unique($pinos),
+                    $exigencia->describe().' esta fixado em versoes diferentes entre as imagens: '
+                    .json_encode($pinos, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                );
+            }
         }
     }
 }

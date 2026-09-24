@@ -257,8 +257,14 @@ RUN apk add --no-cache \
     tcl=8.6.17-r1 \
     clojure=1.12.5-r0 \
     R=4.6.0-r0 \
-    elixir=1.19.6-r0 \
-    erlang27=27.3.4.17-r0 \
+    # BEAM (Erlang/Elixir): FORA das imagens desde 24/09/2026. `erl` e `ex`
+    # estao desligadas desde a #339, e o pino `erlang27=27.3.4.17-r0` sumiu
+    # do repositorio do Alpine com a OTP-27.3.4.18 -- nesse dia todo build
+    # sem cache das tres imagens parou em `unable to select packages`, e o
+    # `elixir` passou a puxar o `erlang28`, que conflita com o `erlang27`.
+    # Reativar exige uma OTP >= 29.1 (ReativarABeamExigeOtpCorrigidaTest), o
+    # que ja e um pino novo; ate la, os ~86 MiB e o risco de pino morto nao
+    # compram nada.
     gfortran=15.2.0-r5 \
     gcc-gnat=15.2.0-r5 \
     sbcl=2.6.5-r0 \
