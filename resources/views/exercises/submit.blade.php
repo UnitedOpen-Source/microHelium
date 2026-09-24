@@ -43,9 +43,13 @@
 
                 <!-- File Upload -->
                 <div>
-                    <label for="source_file" class="block text-sm font-medium text-foreground mb-2">Arquivo de código-fonte</label>
+                    {{-- Issue #394: one <label> per field. The drop zone below is
+                         the clickable label; this heading names the input through
+                         aria-labelledby, because two <label for> on one input are
+                         read inconsistently (axe: form-field-multiple-labels). --}}
+                    <span id="source_file_label" class="block text-sm font-medium text-foreground mb-2">Arquivo de código-fonte</span>
                     <div class="relative rounded-lg focus-within:ring-2 focus-within:ring-primary">
-                        <input type="file" name="source_file" id="source_file"
+                        <input type="file" name="source_file" id="source_file" aria-labelledby="source_file_label"
                                class="sr-only">
                         <label for="source_file" class="flex flex-col items-center justify-center w-full min-h-40 p-4 border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors">
                             <div class="flex flex-col items-center justify-center pt-5 pb-6" id="upload-placeholder">

@@ -1,5 +1,8 @@
 const controls = form => [...form.elements].filter(field => field.willValidate);
-const fieldLabel = field => field.labels?.[0]?.textContent.trim().replace(/\s*\*$/, '') || field.name;
+// aria-labelledby first: a field whose visible <label> is a larger control
+// (the file drop zone on the submit page, #394) is named by a separate heading.
+const labelledBy = field => field.getAttribute('aria-labelledby')?.split(/\s+/).map(id => document.getElementById(id)?.textContent.trim()).filter(Boolean).join(' ');
+const fieldLabel = field => (labelledBy(field) || field.labels?.[0]?.textContent.trim() || '').replace(/\s*\*$/, '') || field.name;
 
 export function validationMessage(field) {
     const validity = field.validity;
