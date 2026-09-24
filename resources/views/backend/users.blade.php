@@ -59,7 +59,10 @@
                             @endif
                         </td>
                         <td class="px-4 py-3">
-                            @if($user->is_enabled ?? true)
+                            {{-- Issue #395: excluir virou anonimizar; a linha fica. --}}
+                            @if(! empty($user->anonymized_at))
+                                <span class="px-2 py-1 text-xs font-medium bg-muted text-muted-foreground rounded">Anonimizada</span>
+                            @elseif($user->is_enabled ?? true)
                                 <span class="px-2 py-1 text-xs font-medium bg-success-soft text-success rounded">Ativo</span>
                             @else
                                 <span class="px-2 py-1 text-xs font-medium bg-muted text-foreground rounded">Inativo</span>
@@ -68,21 +71,23 @@
                         <td class="px-4 py-3 text-sm text-muted-foreground">{{ $user->created_at }}</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2">
+                                @if(empty($user->anonymized_at))
                                 {{-- Issue #100: editar, em vez de excluir e recriar. --}}
                                 <a href="{{ route('backend.users.edit', $user->user_id) }}" class="p-1.5 text-primary hover:bg-primary-soft rounded transition-colors" title="Editar {{ $user->fullname }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                     </svg>
                                 </a>
-                                <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" data-confirm="Excluir este usuario?">
+                                <form action="/backend/users/{{ $user->user_id }}" method="POST" class="inline" data-confirm="Anonimizar esta conta? Nome, login, e-mail, nascimento e codigo-fonte serao apagados; envios, tempos e placar ficam. Nao ha como desfazer.">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="p-1.5 text-destructive hover:bg-destructive-soft rounded transition-colors" title="Excluir {{ $user->fullname }}">
+                                    <button type="submit" class="p-1.5 text-destructive hover:bg-destructive-soft rounded transition-colors" title="Anonimizar {{ $user->fullname }}">
                                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
                                 </form>
+                                @endif
                             </div>
                         </td>
                     </tr>

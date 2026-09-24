@@ -48,6 +48,8 @@ Route::get('/home', [HomeController::class, 'index'])->middleware('auth')->name(
 // Profile (own account, any authenticated role)
 Route::get('/profile', [ProfileController::class, 'edit'])->middleware('auth')->name('profile.edit');
 Route::put('/profile', [ProfileController::class, 'update'])->middleware('auth')->name('profile.update');
+// Issue #395 -- o titular baixa os proprios dados (LGPD art. 18).
+Route::get('/profile/export', [ProfileController::class, 'export'])->middleware('auth')->name('profile.export');
 
 // Problems (real BOCA-schema Problem model, scoped to the user's contest)
 Route::get('/exercises', [ProblemController::class, 'index'])->name('exercises');

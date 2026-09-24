@@ -72,7 +72,11 @@ class ScoreboardTeams
 
         return User::query()
             ->where('user_type', User::TYPE_TEAM)
-            ->where('is_enabled', true)
+            // Issue #395 -- conta anonimizada e desabilitada, mas competiu:
+            // tira-la daqui tiraria do placar a equipe sem envio julgado
+            // (que nao tem linha em `leaderboard` para voltar pela uniao).
+            // Atender um pedido de exclusao nao pode mudar a classificacao.
+            ->where(fn ($query) => $query->where('is_enabled', true)->orWhereNotNull('anonymized_at'))
             ->where(function ($query) use ($contest, $siteIds) {
                 $query->where('contest_id', $contest->id)
                     ->when($siteIds->isNotEmpty(), fn ($q) => $q->orWhereIn('site_id', $siteIds));
