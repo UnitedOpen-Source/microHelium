@@ -33,5 +33,6 @@ Revisão de 10/09/2026, vinculada ao PR #35 e à issue #32. O trabalho aplica as
 - Navegador nesta revisão: abertura do diálogo administrativo, inspeção de `inert`, erro obrigatório e mudança de etapa com foco no título. A revisão anterior também verificou tema claro/escuro e viewport de 390px.
 - A extensão do Chrome bloqueou a automação durante o teste de envio administrativo. Por isso, a inspeção visual mobile desta segunda revisão e a recuperação após POST no navegador não foram concluídas; a recuperação está coberta pelos testes de DOM e Laravel.
 - Leitor de tela real, combinação de navegadores/tecnologias assistivas e contraste de cada conteúdo fornecido pelos organizadores ainda exigem validação manual. Não se afirma conformidade integral às WCAG.
+- Desde a #394 há verificação automática com axe-core no Playwright; o que ela mede e o que não mede está em [`acessibilidade.md`](acessibilidade.md).
 
 A integração já inclui o backend do detalhe de submissão (#31). Não há mudanças adicionais em controllers, rotas, migrations ou contratos de API. Filtros atuam sobre os registros carregados; dados de listas continuam sendo atualizados por navegação/recarregamento.
