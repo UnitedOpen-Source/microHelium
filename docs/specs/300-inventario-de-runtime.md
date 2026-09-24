@@ -189,13 +189,13 @@ derivável sem construir a imagem, e por isso carrega a data.
 | `zig` | apk `zig=0.16.0-r1` | Zig 0.16.0 |
 | `php` | base `php:8.3-` | PHP 8.3.33 |
 | `rb` | apk `ruby=3.4.9-r0` | Ruby 3.4.9 |
-| `perl` | apk `perl=5.42.2-r0` | Perl v5.42.2 |
+| `perl` | apk `perl=5.42.2-r1` | Perl v5.42.2 |
 | `lua` | apk `lua5.4=5.4.8-r0` | Lua 5.4.8 |
 | `sh` | apk `bash=5.3.9-r1` | GNU bash 5.3.9 |
 | `awk` | apk `gawk=5.3.2-r2` | GNU Awk 5.3.2 |
 | `sed` | base `php:8.3-` | BusyBox 1.37.0 (`/bin/sed` → `/bin/busybox`) |
 | `hs` | apk `ghc=9.10.3-r2` | GHC 9.10.3 |
-| `ml` | apk `ocaml=4.14.3-r0` | ocamlopt 4.14.3 |
+| `ml` | apk `ocaml=4.14.4-r0` | ocamlopt 4.14.4 (medido em 24/09/2026, depois de o Alpine tirar o 4.14.3 do repositório) |
 | `r` | apk `R=4.6.0-r0` | R/Rscript 4.6.0 |
 | `lisp_sbcl` | apk `sbcl=2.6.5-r0` | SBCL 2.6.5-85913ede1 |
 | `lisp_clisp` | apk `clisp=2.49.95_git250727-r1` | GNU CLISP 2.49.95+ |
@@ -225,9 +225,9 @@ derivável sem construir a imagem, e por isso carrega a data.
 `ghc=9.10.3-r2`, `gmp=6.3.0-r4`, `gnucobol=3.2-r0`, `go=1.26.8-r0`,
 `guile=3.0.9-r2`, `ldc=1.42.0-r0`, `lua5.4=5.4.8-r0`,
 `ncurses-libs=6.6_p20260516-r0`, `nim=2.2.0-r0`, `nodejs=24.18.1-r0`,
-`npm=11.12.1-r0`, `ocaml=4.14.3-r0`, `openjdk17-jdk=17.0.20_p8-r0`,
+`npm=11.12.1-r0`, `ocaml=4.14.4-r0`, `openjdk17-jdk=17.0.20_p8-r0`,
 `openjdk21-jdk=21.0.12_p8-r0`,
-`openjdk25-jdk=25.0.4_p7-r0`, `perl=5.42.2-r0`, `python3=3.14.7-r1`,
+`openjdk25-jdk=25.0.4_p7-r0`, `perl=5.42.2-r1`, `python3=3.14.7-r1`,
 `racket=9.2-r0`, `ruby=3.4.9-r0`, `rust=1.96.1-r0`, `sbcl=2.6.5-r0`,
 `tcl=8.6.17-r1`, `zig=0.16.0-r1`, `zlib=1.3.2-r0`.
 
