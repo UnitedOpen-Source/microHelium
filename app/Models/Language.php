@@ -886,4 +886,27 @@ class Language extends Model
 
         return $defaults[$this->extension]['file_ext'] ?? $this->extension;
     }
+
+    /**
+     * Issue #390 (P2) -- as extensoes cuja fonte e um ARQUIVO, e nao texto.
+     *
+     * Hoje so o `.sb3` do Scratch (#268): um ZIP que nenhum editor de texto
+     * produz e que nao sobrevive a JSON. Uma lista, e nao uma coluna nova: e
+     * propriedade do formato do arquivo, nao algo que o operador configure
+     * por prova.
+     */
+    private const FILE_SOURCE_EXTENSIONS = ['sb3'];
+
+    /**
+     * A linguagem recebe a fonte como arquivo enviado, e nao como texto
+     * digitado. O Treino Livre usa isto para decidir o canal -- arquivo so
+     * para quem precisa, editor para o resto.
+     *
+     * Pela extensao REAL do arquivo, e nao pelo `extension` do catalogo, que
+     * as vezes e id de variante de compilador (`c_gcc13`).
+     */
+    public function receivesSourceAsFile(): bool
+    {
+        return in_array($this->getFileExtension(), self::FILE_SOURCE_EXTENSIONS, true);
+    }
 }

@@ -12,14 +12,17 @@ export async function request(path, { method = 'GET', body, signal, key } = {}) 
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) controller.abort();
     const timeout = setTimeout(abort, 20000);
+    // Issue #390 (P2): a FormData body (an uploaded .sb3) goes as multipart,
+    // and the browser writes its own Content-Type with the boundary.
+    const form = typeof FormData !== 'undefined' && body instanceof FormData;
     try {
         const response = await fetch(path, {
             method, credentials: 'same-origin', signal: controller.signal,
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest',
-                ...(body ? { 'Content-Type': 'application/json' } : {}),
+                ...(body && !form ? { 'Content-Type': 'application/json' } : {}),
                 ...(method !== 'GET' ? { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' } : {}),
                 ...(key ? { 'Idempotency-Key': key } : {}),
-            }, ...(body ? { body: JSON.stringify(body) } : {}),
+            }, ...(body ? { body: form ? body : JSON.stringify(body) } : {}),
         });
         const json = response.headers.get('content-type')?.includes('application/json') ? await response.json() : null;
         if (!response.ok || !json || response.redirected) {

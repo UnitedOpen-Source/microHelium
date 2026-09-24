@@ -6,6 +6,7 @@ use App\Models\IdempotencyKey;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Throwable;
 
 /**
@@ -142,6 +143,15 @@ class IdempotencyStore
         foreach ($data as $key => $value) {
             if (is_array($value)) {
                 $data[$key] = self::normalizeForHash($value);
+            } elseif ($value instanceof UploadedFile) {
+                // Issue #390 (P2). An UploadedFile json_encodes as `{}`, so
+                // two different files under one key hashed the same and the
+                // second was answered with the first one's replay without
+                // ever being sent. The content is the payload; hash it.
+                $data[$key] = [
+                    'file_sha256' => (string) hash_file('sha256', (string) $value->getRealPath()),
+                    'name' => $value->getClientOriginalName(),
+                ];
             }
         }
 

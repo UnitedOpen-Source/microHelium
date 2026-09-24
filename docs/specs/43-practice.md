@@ -11,16 +11,16 @@
 - Admin publica **snapshot versionado** de `ProblemBank` (enunciado, limites, testes e linguagens) para prática. Editar o banco depois não altera desafios ou resultados existentes. Retirar da biblioteca bloqueia novos envios, preservando histórico privado. Republicação usa versão publicada explícita e não reavalia silenciosamente envios anteriores.
 - Biblioteca contém apenas publicados. Enunciado é texto simples com quebras de linha e exemplos estruturados; converter documentos/PDF no backend ou definir futuro contrato de download, sem enviar HTML bruto ao componente.
 - Habilitar envio somente com executor isolado e saudável conforme [#49](49-judge-isolation.md); can_submit=false e503 em mutação quando indisponível.
-- Fonte pelo editor, sem upload de arquivo nesta fase. Resultado vai para histórico; cliente não finge AC. Usuário sem login pode ler e recebe convite para entrar; envio exige conta habilitada e política de rate limit.
+- Fonte pelo editor. Upload de arquivo existe só para linguagem cuja fonte é arquivo (Scratch, `.sb3`), com os mesmos limites do texto — ver [#390 P2](390-envio-de-arquivo-no-treino.md). Resultado vai para histórico; cliente não finge AC. Usuário sem login pode ler e recebe convite para entrar; envio exige conta habilitada e política de rate limit.
 - Estatísticas opcionais: participantes distintos que tentaram e participantes distintos com AC. Não dividir AC por total de runs e rotular como taxa de pessoas. `stats:null` quando não implementado ou suprimido por privacidade/baixa amostragem. Sem percentil de dificuldade nesta fase.
 
 ## API e dados
 
 `GET /api/frontend/practice/problems?q=&page=1` público: `{items:[{id,short_name,name,summary,tags:string[],solved:boolean,stats:null|{solved_count,participant_count}}],meta}`. Para anônimo `solved=false`; campos personalizados tornam a resposta privada/não cacheável. Busca normalizada por nome/etiqueta, paginação estável.
 
-`GET /api/frontend/practice/problems/{id}` público: `{problem:{id,short_name,name,statement,examples:[{input,output}],time_limit_ms,memory_limit_mb,max_source_bytes,languages:[{id,name}]},capabilities:{can_submit,requires_login},submit_unavailable_reason:null|string}`. Sem fonte de referência/testes ocultos. Não publicado/inexistente: 404.
+`GET /api/frontend/practice/problems/{id}` público: `{problem:{id,short_name,name,statement,examples:[{input,output}],time_limit_ms,memory_limit_mb,max_source_bytes,languages:[{id,name,source_kind:"text"|"file",accept:null|string}]},capabilities:{can_submit,requires_login},submit_unavailable_reason:null|string}`. Sem fonte de referência/testes ocultos. Não publicado/inexistente: 404.
 
-`POST /api/frontend/practice/problems/{id}/runs`: `{language_id,source}` + Idempotency-Key → 202 `{data:{id,status:"pending"}}`. Validar bytes UTF-8, linguagem da versão, publicação ainda ativa, usuário habilitado, limites de frequência; 422 em `source`/`language_id`, 409 se versão/publicação mudou. Usar run_id efetivo, nunca ID legado.
+`POST /api/frontend/practice/problems/{id}/runs`: `{language_id,source}` (ou multipart `{language_id,source_file}` para linguagem fonte-arquivo, [#390 P2](390-envio-de-arquivo-no-treino.md)) + Idempotency-Key → 202 `{data:{id,status:"pending"}}`. Validar bytes UTF-8, linguagem da versão, publicação ainda ativa, usuário habilitado, limites de frequência; 422 em `source`/`language_id`, 409 se versão/publicação mudou. Usar run_id efetivo, nunca ID legado.
 
 `GET /api/frontend/practice/history?page=1` autenticado: `{items:[{id,problem_name,language_name,status,verdict:null|string,created_at,recovery_message:null|string,detail_url:null|string}],meta}`. Ordenar recente primeiro. Filtrar SEMPRE pelo ator e concurso de prática; não aceitar user_id por query. `detail_url` só pode apontar para detalhe que já autorize prática e a fonte privada; enquanto não implementado, null. Retirada do problema não remove os envios.
 

@@ -16,7 +16,25 @@ const dirty = computed(() => source.value !== submittedDraft.value && source.val
 const removeDraftGuard = protectDraft(() => dirty.value);
 onBeforeUnmount(removeDraftGuard);
 const verdicts = { AC: 'Aceita', WA: 'Resposta incorreta', TLE: 'Tempo excedido', MLE: 'Memória excedida', CE: 'Erro de compilação', RE: 'Erro de execução', RTE: 'Erro de execução', PE: 'Erro de apresentação', CS: 'Erro no julgamento', pending: 'Na fila', judging: 'Em avaliação', retrying: 'Retentativa em andamento' };
+// Issue #390 (P2): a language whose source is a file (Scratch's .sb3) gets a
+// file picker instead of the editor. The server decides the channel too; this
+// only offers the right input. Switching back keeps whatever was typed.
+const projectFile = ref(null);
+const selectedLanguage = computed(() => data.value?.problem?.languages?.find(item => String(item.id) === String(language.value)));
+const fileMode = computed(() => selectedLanguage.value?.source_kind === 'file');
+function pickFile(event) { projectFile.value = event.target.files?.[0] || null; }
+async function submitFile(event) {
+    const max = data.value.problem.max_source_bytes;
+    const fail = message => { actionError.value = { message: 'Revise o arquivo antes de enviar.', errors: { source_file: [message] } }; event.target.elements.source_file?.focus(); };
+    if (!projectFile.value) return fail(`Escolha o arquivo ${selectedLanguage.value.accept} do seu projeto.`);
+    if (projectFile.value.size > max) return fail(`O arquivo tem ${projectFile.value.size} bytes; o limite é ${max}.`);
+    const body = new FormData();
+    body.append('language_id', String(language.value));
+    body.append('source_file', projectFile.value, projectFile.value.name);
+    await act(`${endpoint}/runs`, body, 'Projeto recebido. Consulte o histórico para acompanhar o julgamento.', 'POST', event.target);
+}
 async function submit(event) {
+    if (fileMode.value) return submitFile(event);
     if (new TextEncoder().encode(source.value).length > data.value.problem.max_source_bytes) {
         actionError.value = { message: 'O código ultrapassa o tamanho permitido.', errors: { source: ['Reduza o código antes de enviar.'] } }; event.target.elements.source.focus(); return;
     }
@@ -58,11 +76,17 @@ watch(() => query.q, value => { search.value = value || ''; });
                     <section v-if="data.problem.skills?.length"><h3>Habilidades de currículo</h3><ul><li v-for="skill in data.problem.skills" :key="skill.id"><a :href="`/practice?skill=${encodeURIComponent(skill.code)}`" class="feature-badge">{{ skill.code }}<span class="sr-only">: ver problemas desta habilidade</span></a> {{ skill.text }} <span class="feature-help">({{ [skill.framework.name, skill.stage, skill.axis].filter(Boolean).join(' · ') }})</span></li></ul></section>
                     <section v-for="(example, index) in data.problem.examples" :key="index"><h3>Exemplo {{ index + 1 }}</h3><div class="feature-grid"><div><h4>Entrada</h4><pre>{{ example.input }}</pre></div><div><h4>Saída</h4><pre>{{ example.output }}</pre></div></div></section>
                 </article>
-                <section class="surface feature-panel"><h2>Enviar solução</h2><p id="source-help" class="feature-help">Cole seu código. Limite de {{ data.problem.max_source_bytes }} bytes. Seu texto será preservado nesta página se o envio falhar. Copie o código para guardá-lo antes de fechar a aba.</p>
+                <section class="surface feature-panel"><h2>Enviar solução</h2><p v-if="fileMode" id="source-help" class="feature-help">Envie o arquivo {{ selectedLanguage.accept }} do seu projeto, salvo pelo editor. Limite de {{ data.problem.max_source_bytes }} bytes.</p><p v-else id="source-help" class="feature-help">Cole seu código. Limite de {{ data.problem.max_source_bytes }} bytes. Seu texto será preservado nesta página se o envio falhar. Copie o código para guardá-lo antes de fechar a aba.</p>
                     <form v-if="data.capabilities?.can_submit" class="feature-form" @submit.prevent="submit">
                         <label>Linguagem<select v-model="language" name="language_id" required :disabled="busy" :aria-invalid="!!actionError?.errors?.language_id" aria-describedby="language_id-error"><option value="">Selecione uma linguagem</option><option v-for="item in data.problem.languages" :key="item.id" :value="item.id">{{ item.name }}</option></select><FieldError :error="actionError" name="language_id" /></label>
-                        <label class="feature-wide">Código-fonte<textarea v-model="source" name="source" required rows="14" spellcheck="false" autocapitalize="none" autocomplete="off" :disabled="busy" aria-describedby="source-help source-error" :aria-invalid="!!actionError?.errors?.source"></textarea><FieldError :error="actionError" name="source" /></label>
-                        <p class="feature-help feature-wide">{{ sourceBytes }} de {{ data.problem.max_source_bytes }} bytes · {{ dirty ? 'Alterações ainda não enviadas' : 'Nenhuma alteração pendente' }}</p>
+                        <template v-if="fileMode">
+                            <label class="feature-wide">Arquivo do projeto<input type="file" name="source_file" required :accept="selectedLanguage.accept" :disabled="busy" aria-describedby="source-help source_file-error" :aria-invalid="!!actionError?.errors?.source_file" @change="pickFile"><FieldError :error="actionError" name="source_file" /></label>
+                            <p class="feature-help feature-wide">{{ projectFile ? `${projectFile.name} · ${projectFile.size} de ${data.problem.max_source_bytes} bytes` : 'Nenhum arquivo escolhido' }}</p>
+                        </template>
+                        <template v-else>
+                            <label class="feature-wide">Código-fonte<textarea v-model="source" name="source" required rows="14" spellcheck="false" autocapitalize="none" autocomplete="off" :disabled="busy" aria-describedby="source-help source-error" :aria-invalid="!!actionError?.errors?.source"></textarea><FieldError :error="actionError" name="source" /></label>
+                            <p class="feature-help feature-wide">{{ sourceBytes }} de {{ data.problem.max_source_bytes }} bytes · {{ dirty ? 'Alterações ainda não enviadas' : 'Nenhuma alteração pendente' }}</p>
+                        </template>
                         <div class="feature-actions feature-wide"><button class="button-primary" :disabled="busy || loading || !!error">Enviar para julgamento</button><a href="/practice/history" class="button-secondary">Acompanhar meus envios</a></div>
                     </form>
                     <p v-else class="feature-message">{{ data.submit_unavailable_reason || 'O envio não está disponível para sua conta neste problema.' }} <a v-if="data.capabilities?.requires_login" href="/login" class="feature-link">Entrar na conta</a></p>

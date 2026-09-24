@@ -110,6 +110,7 @@ ligar sem testar não é possível.
   venha ele de onde vier.
 - **Similaridade** para Scratch: linguagem fora do `SimilarityLanguageMap`
   não é oferecida (422), e não quebra.
-- **Treino Livre**: `PracticeController` exige UTF-8 e rejeita binário por
-  construção.
+- **Treino Livre**: `PracticeController` exigia UTF-8 e rejeitava binário por
+  construção. Resolvido na #390 (P2), em
+  [`390-envio-de-arquivo-no-treino.md`](390-envio-de-arquivo-no-treino.md).
 - O item 4 da issue (limite de tamanho por contest) **já foi feito**, na #284.

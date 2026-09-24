@@ -26,7 +26,13 @@ export function useFeature(endpoint) {
         if (busy.value || loading.value || error.value) return null;
         busy.value = true; notice.value = ''; actionError.value = null;
         try {
-            const signature = JSON.stringify([path, method, body]);
+            // Issue #390 (P2): FormData stringifies as {}, so a file upload
+            // is signed by its entries -- a retry of the same file reuses the
+            // key, a different file gets a new one.
+            const signed = typeof FormData !== 'undefined' && body instanceof FormData
+                ? [...body.entries()].map(([name, value]) => [name, typeof value === 'string' ? value : [value.name, value.size, value.lastModified]])
+                : body;
+            const signature = JSON.stringify([path, method, signed]);
             if (pendingAction?.signature !== signature) pendingAction = { signature, key: crypto.randomUUID() };
             const result = await request(path, { method, body, key: pendingAction.key });
             pendingAction = null;

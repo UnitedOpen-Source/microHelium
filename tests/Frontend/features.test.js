@@ -187,6 +187,40 @@ test('judging health describes actual watchdog availability and distinguishes re
     assert.match(document.body.textContent, /Recuperação automática indisponível/); assert.match(document.body.textContent, /Retentativa em andamento/); assert.match(document.body.textContent, /1 de 1/);
 });
 
+// Issue #390 (P2): Scratch's .sb3 is a file, not text. The page offers the
+// upload only for the language that needs it, and sends it as multipart.
+test('practice offers a file upload for Scratch and keeps the editor for text languages', async () => {
+    await mount('Practice', { problem: { id: 1, name: 'Soma', max_source_bytes: 1024, languages: [{ id: 1, name: 'C', source_kind: 'text', accept: null }, { id: 9, name: 'Scratch', source_kind: 'file', accept: '.sb3' }], examples: [] }, capabilities: { can_submit: true } }, { mode: 'problem', problemId: '1' });
+    field('language_id', '1'); field('source', 'int main() {}'); await tick();
+    assert.ok(document.querySelector('textarea[name=source]')); assert.equal(document.querySelector('input[type=file]'), null);
+
+    field('language_id', '9'); await tick();
+    const input = document.querySelector('input[type=file][name=source_file]');
+    assert.ok(input, 'Scratch sem campo de arquivo'); assert.equal(input.getAttribute('accept'), '.sb3');
+    assert.equal(document.querySelector('textarea'), null);
+
+    // Too large: refused in the browser, nothing sent.
+    let sent = null; fetch = async (path, options) => { sent = [path, options]; return envelope({ id: 5, status: 'pending' }, 202); };
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File([new Uint8Array(2048)], 'grande.sb3')] });
+    input.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+    submit(); await tick();
+    assert.equal(sent, null); assert.match(document.body.textContent, /limite é 1024/);
+
+    const project = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00])], 'projeto.sb3');
+    Object.defineProperty(input, 'files', { configurable: true, value: [project] });
+    input.dispatchEvent(new Event('change', { bubbles: true })); await tick();
+    submit(); await tick();
+    assert.equal(sent[0], '/api/frontend/practice/problems/1/runs');
+    assert.ok(sent[1].body instanceof FormData, 'o projeto nao foi como multipart');
+    assert.equal(sent[1].body.get('language_id'), '9'); assert.equal(sent[1].body.get('source_file').name, 'projeto.sb3');
+    assert.equal(sent[1].headers['Content-Type'], undefined, 'o navegador escreve o boundary; forcar JSON quebraria o upload');
+    assert.ok(sent[1].headers['Idempotency-Key']);
+
+    // Back to C: the editor returns with what was typed.
+    field('language_id', '1'); await tick();
+    assert.equal(document.querySelector('textarea').value, 'int main() {}');
+});
+
 test('ambiguous network failure reuses idempotency key for the same practice submission', async () => {
     await mount('Practice', { problem: { max_source_bytes: 1024, languages: [{ id: 1, name: 'C' }], examples: [] }, capabilities: { can_submit: true } }, { mode: 'problem', problemId: '1' });
     field('language_id', '1'); field('source', 'int main() {}'); await tick();
