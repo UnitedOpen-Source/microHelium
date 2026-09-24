@@ -37,6 +37,7 @@ class JudgeToolchainProfileCommand extends Command
         {profile? : O perfil (sem argumento, lista os que existem)}
         {--apk : So a lista de pacotes apk, numa linha, pronta para `apk add`}
         {--json : Tudo que o perfil resolve, em JSON}
+        {--corta : O que o Dockerfile.judge deixa de instalar com este perfil (docker/judge/perfil/<perfil>.corta)}
         {--dockerfile=Dockerfile.judge : De qual imagem ler os pinos de versao}';
 
     protected $description = 'Resolve um perfil de linguagens homologadas na lista de instalacao correspondente';
@@ -67,6 +68,14 @@ class JudgeToolchainProfileCommand extends Command
         }
 
         $image = DockerfileToolchain::fromFile($path, base_path());
+
+        if ($this->option('corta') === true) {
+            foreach ($profile->cuts() as $cut) {
+                $this->line($cut);
+            }
+
+            return self::SUCCESS;
+        }
 
         if ($this->option('apk') === true) {
             $this->line(implode(' ', $profile->apkPackages($image)));

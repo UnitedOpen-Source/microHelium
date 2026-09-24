@@ -29,6 +29,17 @@ namespace App\Support\Judge;
  */
 final class DockerfileToolchain
 {
+    /**
+     * O comeco de uma linha de instalacao por `apk`.
+     *
+     * Issue #306, passo 3: no `Dockerfile.judge` a lista passa pelo
+     * `docker/judge/perfil/perfil apk-add`, que tira dela os pacotes que o
+     * perfil da imagem nao usa. A LISTA continua a mesma, com os mesmos
+     * pinos -- e e ela que este parser le. Ler so `apk add` faria o
+     * `Dockerfile.judge` parecer uma imagem sem toolchain nenhum.
+     */
+    private const APK_ADD = '/^RUN\s+(?:apk\s+add|\S*\/perfil\s+apk-add)\b/';
+
     private function __construct(
         public readonly string $name,
         private readonly string $source,
@@ -58,12 +69,12 @@ final class DockerfileToolchain
             $line = trim($line);
 
             if (! $inside) {
-                if (preg_match('/^RUN\s+apk\s+add\b/', $line) !== 1) {
+                if (preg_match(self::APK_ADD, $line) !== 1) {
                     continue;
                 }
 
                 $inside = true;
-                $line = (string) preg_replace('/^RUN\s+apk\s+add\b/', '', $line);
+                $line = (string) preg_replace(self::APK_ADD, '', $line);
             }
 
             // Um comentario no meio da lista nao interrompe a continuacao de
