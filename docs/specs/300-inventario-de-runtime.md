@@ -53,9 +53,10 @@ cada uma vem e o que está fixado. Este arquivo é esse lugar.
 - **38** pacotes `apk` exigidos por linguagem ativa, mais **2** de
   infraestrutura (`bubblewrap`, `libstdc++`) = **40** — que é exatamente a
   lista do perfil `completo` de `docs/specs/306-perfis-de-toolchain.md`
-- **42** pacotes fixados no estágio final do `Dockerfile.judge`. A diferença
-  para os 40 acima são exatamente `erlang27` e `elixir`: instalados, fixados,
-  e **não oferecidos** (#339) — ver a seção própria
+- **40** pacotes fixados no estágio final do `Dockerfile.judge` — exatamente
+  os 40 acima. Até 24/09/2026 eram 42: `erlang27` e `elixir` ficavam
+  instalados, fixados e **não oferecidos** (#339), e saíram das três imagens
+  quando o pino morreu no Alpine — ver a seção própria
 
 O conjunto de extensões ativas mudou **uma vez** desde a revisão de 20/09: o
 PR #358 acrescentou `cs_dotnet10` (.NET 10 LTS ao lado do 8). As outras 48 são
@@ -269,61 +270,56 @@ valor.
   `composer:latest`. Continua sendo o buraco de reprodutibilidade que sobra
   depois da #303.
 
-## Duas linguagens instaladas que NÃO podemos usar
+## Duas linguagens do catálogo que as imagens não instalam mais
 
-A imagem **instala** a BEAM e o catálogo **não a oferece**.
+`erl` (Erlang) e `ex` (Elixir) continuam no catálogo com `is_active => false`
+(#339), e **desde 24/09/2026 nenhuma das três imagens instala a BEAM**.
 
-| Pacote instalado | Versão medida | Entrada | Estado |
-|---|---|---|---|
-| `erlang27` | `27.3.4.17-r0` — medido: `erlang:system_info/1` responde erts **15.2.7.13**, OTP **27** | `erl` | `is_active => false` (#339) |
-| `elixir` | `1.19.6-r0` — medido: `Elixir 1.19.6 (compiled with Erlang/OTP 27)` | `ex` | `is_active => false` (#339) |
-
-**Por quê.** A BEAM não sobe de forma confiável em `x86_64`:
+**Por que estão desligadas.** A BEAM não sobe de forma confiável em `x86_64`:
 `sys_signal_stack.c:101:sys_sigaltstack(): Internal error: Failed to set
 alternate signal stack`. A ERTS dimensiona a pilha alternativa de sinal com o
 `SIGSTKSZ` **estático** da musl (8192 em x86_64); em CPU cujo kernel reporta
 `AT_MINSIGSTKSZ` maior — AVX-512, AMX — o `sigaltstack()` devolve `ENOMEM` e
-a ERTS aborta. Quem decide é a CPU do host.
+a ERTS aborta. Quem decide é a CPU do host. A correção
+(`sysconf(_SC_MINSIGSTKSZ)`, `erlang/otp#11376`) saiu na **OTP-29.1**
+(16/09/2026) e em nenhuma release das linhas 27 e 28 — conferido pelo conteúdo
+do arquivo em cada tag, inclusive nas de 22/09 (`OTP-28.5.0.7`,
+`OTP-27.3.4.18`, que não a carregam).
 
-**O bloqueio mudou de natureza, e isto foi remedido em 21/09:** a correção
-(`sysconf(_SC_MINSIGSTKSZ)`, `erlang/otp#11376`, mesclada em `maint` em
-10/08) **saiu na OTP-29.1, de 16/09/2026**. Conferido pelo conteúdo do
-arquivo em cada ref, e não por comparação de árvore: `OTP-29.1` tem;
-`OTP-28.5.0.6`, `OTP-27.3.4.17`, `maint-27` e `maint-28` **não têm**.
+**Por que saíram das imagens.** Até 24/09 a BEAM ficava instalada e
+desligada (+85,8 MiB por imagem), para que reativar fosse trocar um `false`.
+Nesse dia o Alpine publicou a OTP-27.3.4.18 no `v3.24/community`, **tirou do
+repositório a versão `27.3.4.17-r0` do `erlang27`** que as três imagens fixavam, e o
+`elixir` passou a resolver o `erlang28`, que conflita com o `erlang27`:
 
-**E o que o Alpine publica, conferido no `APKINDEX` de hoje** — `x86_64`, nos
-três repositórios, porque olhar só o `community` é como esta revisão errou de
-primeira e o #369 corrigiu:
+```
+ERROR: unable to select packages:
+  erlang28-28.5.0.7-r0: conflicts: erlang27-27.3.4.18-r0[erlang=28] ...
+  erlang27-27.3.4.18-r0: breaks: world[erlang27=27.3.4.17-r0]
+```
 
-| Repositório | `erlang27` | `erlang28` | `erlang29` |
-|---|---|---|---|
-| `v3.24/main`, `v3.24/community` | `27.3.4.17-r0` | `28.5.0.6-r0` | — |
-| `v3.24/testing` | — | — | não existe (sem `APKINDEX`) |
-| `edge/main`, `edge/community` | `27.3.4.17-r0` | `28.5.0.6-r0` | — |
-| **`edge/testing`** | — | — | **`29.0.6-r0`** |
+Todo build **sem cache** das três imagens parava aí, por causa de dois pacotes
+que nenhuma prova usava. Reativar já exige um pino novo — uma OTP `>= 29.1`,
+que `ReativarABeamExigeOtpCorrigidaTest` confere nos três Dockerfiles —, então
+mantê-los instalados não comprava nada e custava o risco de pino morto.
 
-**Existe um `erlang29`, e ele não serve** — `29.0.6` é anterior à `29.1`, que
-é a primeira release a carregar a correção. Esta é a armadilha exata que o
-#369 desarmou: quem lesse "espere o `erlang29` do Alpine", achasse um
-`erlang29` e reativasse cairia de volta no `sys_sigaltstack()` intermitente.
-**O nome do pacote não responde nada; quem responde é o pino**, e desde o #369
-quem compara é `ReativarABeamExigeOtpCorrigidaTest`, não um humano lendo um
-comentário.
+**O que o Alpine publica, remedido no `APKINDEX` de 24/09 (`x86_64`):**
 
-O bloqueio, portanto, **deixou de ser upstream e é empacotamento**: a release
-que carrega a correção não é nenhuma das que o Alpine publica, e a imagem do
-juiz é Alpine.
+| Repositório | `erlang27` | `erlang28` | `erlang29` | `elixir` |
+|---|---|---|---|---|
+| `v3.24/community` | `27.3.4.18-r0` | `28.5.0.7-r0` | — | `1.19.6-r0` |
+| `edge/community` | `27.3.4.17-r0` | `28.5.0.6-r0` | — | `1.20.4-r0` |
+| `edge/testing` | — | — | `29.0.6-r0` | — |
+| `v3.24/main`, `edge/main` | — | — | — | — |
 
-**Os pacotes continuam na imagem de propósito**, ao custo medido de
-**+85,8 MiB** (`apk add --simulate` sobre o perfil `completo`: 5540,3 MiB
-sem a BEAM, 5626,1 MiB com ela). E a desativação deixou de valer só no
-catálogo, em dois passos: o #364 pôs
-`tests/Unit/Judge/CatalogoBeamDesativadaTest.php` para reprovar na suíte
-rápida se as duas linhas virarem `true`, e o #369 trocou o roteiro escrito em
-comentário por **comparação de versão** em
-`ReativarABeamExigeOtpCorrigidaTest` — no dia em que alguém religar, ele exige
-que os três Dockerfiles fixem uma OTP `>= 29.1` e nomeia cada um que não fixa,
-com um controle positivo que o impede de ficar verde por estar vazio.
+Nenhum `>= 29.1`. **O nome do pacote não responde nada; quem responde é o
+pino** — um `erlang29` existe, e é `29.0.6`, anterior à correção.
+
+**O que continua guardado.** `CatalogoBeamDesativadaTest` reprova se `erl`/`ex`
+virarem `true` antes do bloqueio cair, se uma for ligada sem a outra, e — desde
+a remoção — se **uma** imagem voltar a instalar a BEAM sem as outras duas, que
+é a forma da #302. `ReativarABeamExigeOtpCorrigidaTest` exige OTP `>= 29.1` nas
+três no dia da reativação.
 
 ## Ajudas que nós mesmos escrevemos
 

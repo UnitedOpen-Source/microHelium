@@ -1,0 +1,89 @@
+name: Pinos do Alpine
+
+# Os tres Dockerfiles fixam os toolchains por `pacote=versao-rN` (#303). O
+# Alpine NAO guarda versoes antigas: quando publica a proxima revisao, a
+# fixada some do repositorio, e o proximo build SEM CACHE para em
+# `unable to select packages`.
+#
+# Foi o que aconteceu em 24/09/2026 com o `erlang27` (a OTP-27.3.4.18 tirou a
+# 27.3.4.17 do `v3.24/community`). Ninguem percebeu no dia: os jobs de imagem
+# do CI passavam porque aquela camada estava em cache, e o defeito apareceu
+# num PR que nao tinha nada a ver com Erlang, quando uma mudanca invalidou a
+# camada.
+#
+# Este workflow faz a pergunta direto, todo dia: os pinos das tres imagens
+# ainda resolvem no repositorio de hoje? `apk add --simulate` sobre a mesma
+# imagem base responde em segundos, sem construir nada. Quando reprovar, a
+# saida diz qual pacote -- e a correcao e subir o pino nos tres Dockerfiles
+# juntos (ToolchainManifestParityTest confere).
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - Dockerfile
+      - Dockerfile.dev
+      - Dockerfile.judge
+      - app/Support/Judge/**
+      - .github/workflows/pinos-alpine.yml
+
+permissions:
+  contents: read
+
+jobs:
+  pinos:
+    name: Os pinos das três imagens resolvem no Alpine de hoje
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, xml, bcmath, intl, zip
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.3-
+
+      - run: cp .env.example .env
+
+      - run: composer install --prefer-dist --no-interaction --no-progress
+
+      - run: php artisan key:generate
+
+      # A linha INTEIRA do `apk add` do estagio final de cada Dockerfile, lida
+      # pelo mesmo parser que as guardas usam (DockerfileToolchain) -- e nao a
+      # lista do perfil `completo`, que so tem linguagens ATIVAS. A quebra de
+      # 24/09 foi justamente num pacote de linguagem desligada (`erlang27`), e
+      # uma guarda restrita as ativas teria passado verde por cima dela.
+      - name: Simular a instalação de cada imagem
+        run: |
+          falhou=0
+          for f in Dockerfile Dockerfile.dev Dockerfile.judge; do
+            pacotes=$(php -r '
+              require "vendor/autoload.php";
+              $imagem = App\Support\Judge\DockerfileToolchain::fromFile($argv[1], getcwd());
+              $linha = [];
+              foreach ($imagem->apkPackages() as $nome => $pino) {
+                  $linha[] = $pino === null ? $nome : "{$nome}={$pino}";
+              }
+              echo implode(" ", $linha);
+            ' "$f")
+            echo "::group::$f ($(echo "$pacotes" | wc -w) pacotes)"
+            if docker run --rm php:8.3-cli-alpine apk add --simulate --no-cache $pacotes; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error file=$f::os pinos de $f nao resolvem mais no repositorio do Alpine (ver o log acima)"
+              falhou=1
+            fi
+          done
+          exit $falhou
