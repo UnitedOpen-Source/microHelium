@@ -21,9 +21,13 @@ class RejudgingRun extends Model
         'old_status',
         'old_judged_time',
         'old_verified_at',
+        'old_toolchain_version',
+        'old_toolchain_profile',
         'new_answer_id',
         'new_verdict',
         'new_message',
+        'new_toolchain_version',
+        'new_toolchain_profile',
         'judged_at',
         'error',
     ];
@@ -77,5 +81,27 @@ class RejudgingRun extends Model
         }
 
         return (int) $this->new_answer_id !== (int) $this->old_answer_id;
+    }
+
+    /**
+     * Issue #392 -- o julgamento novo foi feito com outra versao do
+     * toolchain?
+     *
+     * Mesma regra de `changesVerdict()`: um membro que nao rodou, ou que
+     * falhou, nao opina. E versao desconhecida de UM dos lados tambem nao
+     * conta como mudanca -- "nao disse" nao e "mudou" (#303). A previa mostra
+     * o que se sabe; afirmar mudanca exige saber os dois lados.
+     */
+    public function changesToolchain(): bool
+    {
+        if (! $this->isJudged() || $this->error !== null) {
+            return false;
+        }
+
+        if ($this->old_toolchain_version === null || $this->new_toolchain_version === null) {
+            return false;
+        }
+
+        return $this->old_toolchain_version !== $this->new_toolchain_version;
     }
 }

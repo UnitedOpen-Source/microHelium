@@ -11,6 +11,7 @@ use App\Models\Run;
 use App\Models\Score;
 use App\Models\TestCase;
 use App\Services\Clics\ContestEventRecorder;
+use App\Services\Judgehost\JudgingToolchain;
 use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Process\Exceptions\ProcessTimedOutException as LaravelProcessTimedOutException;
 use Illuminate\Process\PendingProcess;
@@ -546,6 +547,14 @@ class AutoJudgeService
 
         try {
             $result = $this->executeJudging($run);
+
+            // Issue #392 -- o caminho LOCAL carimba aqui, porque e aqui que
+            // se sabe que o julgamento aconteceu NESTA maquina. O remoto
+            // chega a recordVerdict() com o carimbo que o agente mandou; se
+            // o carimbo fosse feito dentro de recordVerdict(), um veredito
+            // remoto sairia com a versao do SERVIDOR, que nao julgou nada.
+            $result += app(JudgingToolchain::class)->carimbo((string) $run->language?->extension);
+
             $this->updateRunWithResult($run, $result);
         } catch (\Exception $e) {
             $this->handleJudgingError($run, $e);
@@ -1236,7 +1245,12 @@ class AutoJudgeService
      * writing the columns without them produces a run that looks judged and
      * a scoreboard that disagrees with it.
      *
-     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null, measured_wall_ms?: int|null, measured_cpu_ms?: int|null}  $result
+     * Issue #392 -- `toolchain_version` e `toolchain_profile`, quando
+     * PRESENTES no resultado, sao gravados no run. Ausentes, as colunas
+     * ficam como estavam: um caminho que nao carimba nao apaga o que outro
+     * gravou.
+     *
+     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null, measured_wall_ms?: int|null, measured_cpu_ms?: int|null, toolchain_version?: string|null, toolchain_profile?: string|null}  $result
      */
     public function recordVerdict(Run $run, array $result): void
     {
@@ -1272,7 +1286,7 @@ class AutoJudgeService
                 return;
             }
 
-            $this->writeVerdict($run, $result);
+            $this->writeVerdict($run, $result, $fresh);
         });
     }
 
@@ -1304,9 +1318,9 @@ class AutoJudgeService
     /**
      * O corpo que sempre existiu, agora atras da guarda acima.
      *
-     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null, measured_wall_ms?: int|null, measured_cpu_ms?: int|null}  $result
+     * @param  array{verdict: string, message?: string|null, stdout?: string|null, stderr?: string|null, measured_wall_ms?: int|null, measured_cpu_ms?: int|null, toolchain_version?: string|null, toolchain_profile?: string|null}  $result
      */
-    private function writeVerdict(Run $run, array $result): void
+    private function writeVerdict(Run $run, array $result, Run $anterior): void
     {
         $answer = Answer::where('contest_id', $run->contest_id)
             ->where('short_name', $result['verdict'])
@@ -1333,7 +1347,9 @@ class AutoJudgeService
             'auto_judge_stdout' => substr($result['stdout'] ?? '', 0, 65535),
             'auto_judge_stderr' => substr($result['stderr'] ?? '', 0, 65535),
             'judged_time' => $run->contest->getContestTime(),
-        ]);
+        ] + $this->toolchainColumns($result));
+
+        $this->warnIfToolchainChanged($run, $anterior, $result);
 
         // Update score
         Score::updateScore($run);
@@ -1355,6 +1371,70 @@ class AutoJudgeService
             'problem_id' => $run->problem_id,
             'verdict' => $result['verdict'],
         ]);
+    }
+
+    /**
+     * Issue #392 -- as colunas de toolchain que este resultado traz.
+     *
+     * So as chaves PRESENTES: um resultado sem carimbo (veredito que nao
+     * passou por nenhum dos dois caminhos que carimbam) deixa as colunas
+     * como estavam, em vez de apagar com null o que outro caminho gravou.
+     *
+     * @param  array<string, mixed>  $result
+     * @return array<string, string|null>
+     */
+    private function toolchainColumns(array $result): array
+    {
+        $columns = [];
+
+        foreach (['toolchain_version', 'toolchain_profile'] as $key) {
+            if (array_key_exists($key, $result)) {
+                $value = $result[$key];
+                $columns[$key] = is_string($value) && $value !== '' ? mb_substr($value, 0, 40) : null;
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Issue #392 -- o rejulgamento que trocou de compilador tem de DIZER.
+     *
+     * `$anterior` e a linha lida sob lock ANTES da gravacao: o rejulgamento
+     * avulso (`Api\RunController::rejudge()`) nao limpa as colunas de
+     * toolchain justamente para que, aqui, elas ainda descrevam o
+     * julgamento anterior. So se acusa mudanca quando as DUAS versoes sao
+     * conhecidas: "nao disse" nao e "mudou" (#303).
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function warnIfToolchainChanged(Run $run, Run $anterior, array $result): void
+    {
+        $antes = $anterior->toolchain_version;
+        $depois = $this->toolchainColumns($result)['toolchain_version'] ?? null;
+
+        if ($antes === null || $depois === null || $antes === $depois || $run->contest_id === null) {
+            return;
+        }
+
+        $perfilAntes = $anterior->toolchain_profile;
+        $perfilDepois = $this->toolchainColumns($result)['toolchain_profile'] ?? null;
+
+        ContestLog::warning(
+            (int) $run->contest_id,
+            "Run #{$run->run_number} julgado com outra versao do toolchain: {$antes} -> {$depois}"
+                .($perfilAntes !== $perfilDepois ? " (perfil {$perfilAntes} -> {$perfilDepois})" : ''),
+            [
+                'event' => 'toolchain_changed',
+                'run_id' => $run->id,
+                'language_id' => $run->language_id,
+                'from' => $antes,
+                'to' => $depois,
+                'profile_from' => $perfilAntes,
+                'profile_to' => $perfilDepois,
+                'verdict' => $result['verdict'] ?? null,
+            ]
+        );
     }
 
     protected function handleJudgingError(Run $run, \Exception $e): void

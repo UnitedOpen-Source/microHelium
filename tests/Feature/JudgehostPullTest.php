@@ -990,4 +990,118 @@ class JudgehostPullTest extends TestCase
 
         $this->assertSame('judging', $run->fresh()->status);
     }
+
+    // --- com qual toolchain (#392) ----------------------------------------
+
+    /**
+     * Issue #392 -- o relatorio do agente grava no RUN a versao e o perfil
+     * com que julgou. A versao declarada no host e a de agora, e um
+     * re-registro a sobrescreve; esta fica com o julgamento.
+     */
+    public function test_o_resultado_remoto_grava_a_versao_e_o_perfil_do_julgamento(): void
+    {
+        [$host, $token] = $this->host('judge-gcc15');
+        $host->declareCapabilities([$this->language->extension], [$this->language->extension => '13.2.1']);
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            [
+                'verdict' => $this->answer->short_name,
+                'toolchain_version' => '15.2.0',
+                'toolchain_profile' => 'maratona',
+            ],
+            $headers,
+        )->assertOk();
+
+        $fresh = $run->fresh();
+
+        // O que o agente disse vence o que o host declarou no registro: o
+        // relatorio e do julgamento, o registro e de antes dele.
+        $this->assertSame('15.2.0', $fresh->toolchain_version);
+        $this->assertSame('maratona', $fresh->toolchain_profile);
+    }
+
+    /**
+     * Agente posterior ao #373 e anterior a #392: declara a versao no
+     * registro e nao a manda no resultado. Vale a declarada -- e a mesma
+     * sonda, no mesmo processo.
+     */
+    public function test_um_agente_que_nao_manda_a_versao_fica_com_a_que_declarou(): void
+    {
+        [$host, $token] = $this->host('judge-intermediario');
+        $host->declareCapabilities([$this->language->extension], [$this->language->extension => '13.2.1']);
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $headers,
+        )->assertOk();
+
+        $fresh = $run->fresh();
+
+        $this->assertSame('judged', $fresh->status);
+        $this->assertSame('13.2.1', $fresh->toolchain_version);
+        $this->assertNull($fresh->toolchain_profile, 'perfil que ninguem disse nao pode ser inventado');
+    }
+
+    /**
+     * E o agente anterior ao #373, que nao declara versao nenhuma: veredito
+     * aceito, versao null.
+     */
+    public function test_um_agente_antigo_tem_o_veredito_aceito_sem_versao(): void
+    {
+        [, $token] = $this->host('judge-antigo');
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name],
+            $headers,
+        )->assertOk();
+
+        $fresh = $run->fresh();
+
+        $this->assertSame('judged', $fresh->status);
+        $this->assertNull($fresh->toolchain_version);
+        $this->assertNull($fresh->toolchain_profile);
+    }
+
+    public function test_uma_versao_longa_demais_e_recusada(): void
+    {
+        [, $token] = $this->host('judge-verborragico');
+        [$run, $headers] = $this->claimFor($token);
+
+        $this->postJson(
+            "/api/remote-judges/v1/runs/{$run->id}/result",
+            ['verdict' => $this->answer->short_name, 'toolchain_version' => str_repeat('9', 41)],
+            $headers,
+        )->assertStatus(422);
+
+        $this->assertSame('judging', $run->fresh()->status);
+    }
+
+    /**
+     * A spec #53 promete "versao de linguagem" no DTO de claim; o #373
+     * deixou por escrito que ele continuava sem. Agora vai a que o host
+     * declarou.
+     */
+    public function test_o_claim_leva_a_versao_que_o_host_declarou(): void
+    {
+        [$host, $token] = $this->host('judge-com-versao');
+        $host->declareCapabilities([$this->language->extension], [$this->language->extension => '15.2.0']);
+        $this->pendingRun();
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($token))
+            ->assertOk()
+            ->assertJsonPath('data.language.version', '15.2.0');
+
+        [, $semVersao] = $this->host('judge-sem-versao');
+        $this->pendingRun();
+
+        $this->postJson('/api/remote-judges/v1/fetch-work', [], $this->as($semVersao))
+            ->assertOk()
+            ->assertJsonPath('data.language.version', null);
+    }
 }

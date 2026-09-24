@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Answer;
 use App\Models\RejudgingRun;
 use App\Services\AutoJudgeService;
+use App\Services\Judgehost\JudgingToolchain;
 use App\Services\RejudgingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -67,10 +68,18 @@ class RejudgeMemberJob implements ShouldQueue
                 return;
             }
 
+            // Issue #392 -- o julgamento de sombra roda NESTE worker, entao
+            // e deste worker o toolchain que produziu o veredito novo. Fica
+            // ao lado do antigo, que o create() capturou do run, para a
+            // previa poder dizer "mudou de GCC 13 para GCC 15".
+            $carimbo = app(JudgingToolchain::class)->carimbo((string) $member->run->language?->extension);
+
             $member->update([
                 'new_answer_id' => $answer->id,
                 'new_verdict' => $verdict,
                 'new_message' => $result['message'] ?? null,
+                'new_toolchain_version' => $carimbo['toolchain_version'],
+                'new_toolchain_profile' => $carimbo['toolchain_profile'],
                 'judged_at' => now(),
                 'error' => null,
             ]);

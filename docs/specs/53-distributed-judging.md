@@ -33,7 +33,7 @@ Três limites deliberados:
 2. **A versão é registro, nunca roteamento.** `canJudge()` continua decidindo por presença da extensão. Rotear por versão exigiria alguém dizendo qual versão um contest exige — hoje nada no sistema diz isso — e a falha dessa regra seria um parque inteiro parando de receber trabalho com a fila parecendo vazia.
 3. **Ausente significa "não disse".** Um agente anterior a #303, ou um toolchain que não se identificou a tempo, declara as mesmas extensões de sempre com `version = null`.
 
-**O que ainda falta:** o DTO de *claim* continua sem a versão, e nenhuma coluna de `runs` guarda com que versão aquela submissão foi julgada. O que existe hoje é a versão que cada host declara **agora**, que um re-registro sobrescreve; comparar dois julgamentos da mesma submissão ainda depende de olhar o host no momento certo.
+**O que faltava, e a #392 entregou:** o DTO de *claim* passa a levar `language.version` (a versão que o host declarou), e cada julgamento grava em `runs.toolchain_version`/`toolchain_profile` a versão e o perfil de imagem com que foi feito — pelo agente remoto e pela fila local. O rejulgamento em lote guarda a de antes e a de depois em `rejudging_runs` e sinaliza a mudança. Ver [392-versao-no-julgamento.md](392-versao-no-julgamento.md).
 
 Capacidades são compatibilidades efetivas de linguagem/runtime, não permissões. **Sem downgrade automático que retire isolamento ou mude a semântica do julgamento.** Se nenhum executor compatível existir, manter pending com motivo e alerta operacional. Credencial de um concurso/site não recebe runs fora do escopo; agente não acessa endpoints administrativos/participantes.
 

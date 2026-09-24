@@ -139,6 +139,10 @@ class JudgehostClient
             // um veredito vale mais que a metrica dele.
             'measured_wall_ms' => $verdict['measured_wall_ms'] ?? null,
             'measured_cpu_ms' => $verdict['measured_cpu_ms'] ?? null,
+            // Issue #392. Com qual toolchain e em qual perfil de imagem.
+            // Um servidor anterior a esta mudanca ignora os campos.
+            'toolchain_version' => $verdict['toolchain_version'] ?? null,
+            'toolchain_profile' => $verdict['toolchain_profile'] ?? null,
         ]);
 
         if (in_array($response->status(), [403, 409], true)) {

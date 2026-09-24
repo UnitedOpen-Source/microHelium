@@ -48,6 +48,11 @@ class Run extends Model
         // maquinas sao comparaveis.
         'measured_wall_ms',
         'measured_cpu_ms',
+        // Issue #392 -- com qual versao do toolchain da linguagem, e em qual
+        // perfil de imagem, o veredito vigente foi produzido. Null e "nao
+        // disse", nunca "nao tem".
+        'toolchain_version',
+        'toolchain_profile',
         'auto_judge_stdout',
         'auto_judge_stderr',
     ];
