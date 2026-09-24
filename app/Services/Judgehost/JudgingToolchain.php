@@ -2,6 +2,7 @@
 
 namespace App\Services\Judgehost;
 
+use App\Support\Judge\PerfilDaImagem;
 use Throwable;
 
 /**
@@ -34,23 +35,21 @@ class JudgingToolchain
      * Imagem que nao diz de qual perfil veio e a de sempre: o catalogo
      * inteiro (#306).
      */
-    public const PERFIL_PADRAO = 'completo';
+    public const PERFIL_PADRAO = PerfilDaImagem::PADRAO;
 
     public function __construct(private MachineCapabilities $machine) {}
 
     /**
      * De qual perfil esta imagem foi construida.
      *
-     * Lido direto do ambiente, como a imagem o grava (`ENV JUDGE_PROFILE`).
-     * Quando o #393 entrar, isto passa a delegar a
-     * `App\Support\Judge\PerfilDaImagem::nome()`, que le a mesma variavel
-     * com a mesma regra de ausencia.
+     * Delega a `PerfilDaImagem::nome()` (#306, #393), que e quem le o
+     * `ENV JUDGE_PROFILE` que a imagem grava: uma fonte so para a pergunta, e
+     * nao duas leituras da mesma variavel que poderiam divergir na regra de
+     * ausencia.
      */
     public static function perfil(): string
     {
-        $nome = getenv('JUDGE_PROFILE');
-
-        return is_string($nome) && trim($nome) !== '' ? trim($nome) : self::PERFIL_PADRAO;
+        return PerfilDaImagem::nome();
     }
 
     /**
