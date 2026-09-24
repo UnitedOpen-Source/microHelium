@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Tests\Concerns\DefinePerfilDaImagem;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,8 @@ use Tests\TestCase;
  */
 class JudgehostAgentTest extends TestCase
 {
+    use DefinePerfilDaImagem;
+
     private Contest $contest;
 
     private Site $site;
@@ -679,8 +682,7 @@ SH);
             }
         };
 
-        $perfilOriginal = getenv('JUDGE_PROFILE');
-        putenv('JUDGE_PROFILE=maratona');
+        $this->definirPerfilDaImagem('maratona');
 
         try {
             [, $token] = Judgehost::issue('judge-versionado');
@@ -692,7 +694,7 @@ SH);
 
             $this->assertTrue($agente->tick());
         } finally {
-            $perfilOriginal === false ? putenv('JUDGE_PROFILE') : putenv('JUDGE_PROFILE='.$perfilOriginal);
+            $this->restaurarPerfilDaImagem();
         }
 
         $run->refresh();

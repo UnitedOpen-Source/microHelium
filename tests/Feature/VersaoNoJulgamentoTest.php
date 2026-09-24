@@ -22,6 +22,7 @@ use Helium\User;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use RuntimeException;
+use Tests\Concerns\DefinePerfilDaImagem;
 use Tests\TestCase;
 
 /**
@@ -35,6 +36,8 @@ use Tests\TestCase;
  */
 class VersaoNoJulgamentoTest extends TestCase
 {
+    use DefinePerfilDaImagem;
+
     private Contest $contest;
 
     private Site $site;
@@ -45,16 +48,12 @@ class VersaoNoJulgamentoTest extends TestCase
 
     private Answer $wrong;
 
-    private string|false $perfilOriginal;
-
     /** @var list<string> */
     private array $scratchDirs = [];
 
     protected function setUp(): void
     {
         parent::setUp();
-
-        $this->perfilOriginal = getenv('JUDGE_PROFILE');
 
         config([
             'autojudge.use_bwrap' => false,
@@ -81,9 +80,7 @@ class VersaoNoJulgamentoTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->perfilOriginal === false
-            ? putenv('JUDGE_PROFILE')
-            : putenv('JUDGE_PROFILE='.$this->perfilOriginal);
+        $this->restaurarPerfilDaImagem();
 
         foreach ($this->scratchDirs as $dir) {
             $this->removeTree($dir);
@@ -200,13 +197,13 @@ class VersaoNoJulgamentoTest extends TestCase
 
     public function test_imagem_que_nao_diz_o_perfil_e_a_completa(): void
     {
-        putenv('JUDGE_PROFILE');
+        $this->definirPerfilDaImagem(null);
         $this->assertSame('completo', JudgingToolchain::perfil());
 
-        putenv('JUDGE_PROFILE=   ');
+        $this->definirPerfilDaImagem('   ');
         $this->assertSame('completo', JudgingToolchain::perfil(), 'perfil vazio tem de valer o padrao, e nao virar ""');
 
-        putenv('JUDGE_PROFILE= maratona ');
+        $this->definirPerfilDaImagem(' maratona ');
         $this->assertSame('maratona', JudgingToolchain::perfil());
     }
 
@@ -220,7 +217,7 @@ class VersaoNoJulgamentoTest extends TestCase
             }
         };
 
-        putenv('JUDGE_PROFILE=maratona');
+        $this->definirPerfilDaImagem('maratona');
 
         $this->assertSame(
             ['toolchain_version' => null, 'toolchain_profile' => 'maratona'],
@@ -240,7 +237,7 @@ class VersaoNoJulgamentoTest extends TestCase
      */
     public function test_a_fila_grava_a_versao_e_o_perfil_com_que_julgou(): void
     {
-        putenv('JUDGE_PROFILE=scripting');
+        $this->definirPerfilDaImagem('scripting');
 
         $run = $this->envio(
             $this->php(),
@@ -266,7 +263,7 @@ class VersaoNoJulgamentoTest extends TestCase
      */
     public function test_linguagem_sem_receita_de_versao_julga_e_grava_null(): void
     {
-        putenv('JUDGE_PROFILE');
+        $this->definirPerfilDaImagem(null);
 
         $sh = Language::factory()->create([
             'contest_id' => $this->contest->id,
@@ -312,7 +309,7 @@ class VersaoNoJulgamentoTest extends TestCase
         $this->assertSame('13.2.1', $run->toolchain_version, 'o rejulgamento apagou a versao anterior, e nao ha mais com o que comparar');
 
         $this->app->instance(JudgingToolchain::class, new JudgingToolchain($this->maquina(['cpp17_gpp' => '15.2.0'])));
-        putenv('JUDGE_PROFILE=completo');
+        $this->definirPerfilDaImagem('completo');
 
         (new JudgeRunJob($run))->handle($this->juizQueResponde('AC'), $this->permissivePreflight());
 
@@ -406,7 +403,7 @@ class VersaoNoJulgamentoTest extends TestCase
         // O julgamento de sombra, de verdade, neste "worker" com GCC 15.
         $this->app->instance(JudgingToolchain::class, new JudgingToolchain($this->maquina(['cpp17_gpp' => '15.2.0'])));
         $this->app->instance(AutoJudgeService::class, $this->juizQueResponde('AC'));
-        putenv('JUDGE_PROFILE=completo');
+        $this->definirPerfilDaImagem('completo');
 
         foreach ([$gcc13, $gcc15, $semVersao] as $run) {
             (new RejudgeMemberJob($membro($run)->id))->handle(app(AutoJudgeService::class), $service);
