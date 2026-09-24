@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { initializeUI } from './ui';
+import { t } from './i18n.js';
 
 // Import components
 import ContestTimer from './components/ContestTimer.vue';
@@ -83,7 +84,7 @@ initializeUI();
 if (document.querySelector('[data-feature-page]')) {
     import('./features/mount.js').then(({ mountFeaturePages }) => mountFeaturePages()).catch(() => {
         const host = document.querySelector('[data-feature-page]');
-        host.textContent = 'Não foi possível abrir esta página. Atualize para tentar novamente.';
+        host.textContent = t('Não foi possível abrir esta página. Atualize para tentar novamente.');
         host.setAttribute('role', 'alert');
     });
 }

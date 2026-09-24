@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Sun, Moon } from '@lucide/vue'
+import { t } from '../i18n.js'
 
 const isDark = ref(false)
 
@@ -29,8 +30,8 @@ function toggleTheme() {
 <template>
     <button
         @click="toggleTheme"
-        type="button" class="icon-button" :aria-label="isDark ? 'Ativar modo claro' : 'Ativar modo escuro'" :aria-pressed="isDark"
-        :title="isDark ? 'Modo Claro' : 'Modo Escuro'"
+        type="button" class="icon-button" :aria-label="isDark ? t('Ativar modo claro') : t('Ativar modo escuro')" :aria-pressed="isDark"
+        :title="isDark ? t('Modo Claro') : t('Modo Escuro')"
     >
         <Sun aria-hidden="true" v-if="isDark" class="h-5 w-5" />
         <Moon aria-hidden="true" v-else class="h-5 w-5" />

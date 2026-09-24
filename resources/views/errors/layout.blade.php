@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="{{ \App\Support\InterfaceLocale::htmlLang() }}">
 <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title') · MicroHelium</title>
     @include('partials.theme-init')
+    @include('partials.i18n-catalog')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body>
@@ -13,7 +14,7 @@
             <p class="font-mono text-primary text-7xl font-semibold mb-6">@yield('code')</p>
             <h1 class="text-3xl font-semibold tracking-tight mb-4">@yield('title')</h1>
             <p class="text-muted-foreground leading-relaxed mb-8">@yield('message')</p>
-            <div class="flex flex-wrap justify-center gap-3"><a href="/" class="button-primary">Voltar ao início</a><a href="/ajuda" class="button-secondary">Consultar ajuda</a></div>
+            <div class="flex flex-wrap justify-center gap-3"><a href="/" class="button-primary">{{ __('Voltar ao início') }}</a><a href="/ajuda" class="button-secondary">{{ __('Consultar ajuda') }}</a></div>
         </div></main>
     </div>
 </body></html>

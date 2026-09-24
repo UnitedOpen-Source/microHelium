@@ -69,9 +69,22 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // Issue #397 -- o padrao era `en` com a interface inteira escrita em
+    // portugues: rotulo em portugues, mensagem de validacao em ingles. O
+    // idioma-fonte da interface e o pt_BR; as chaves dos arquivos JSON de
+    // resources/lang sao o proprio texto em portugues.
+    'locale' => env('APP_LOCALE', 'pt_BR'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'pt_BR'),
+
+    // Os idiomas que o seletor oferece, com o nome de cada um NO PROPRIO
+    // idioma. So entra aqui o que tem a area migrada inteira traduzida
+    // (tests/Unit/InterfaceStringsTest.php confere): oferecer um idioma que
+    // mostra portugues seria mentir no seletor.
+    'supported_locales' => [
+        'pt_BR' => 'Português',
+        'es' => 'Español',
+    ],
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 

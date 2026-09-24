@@ -1,53 +1,54 @@
 <!doctype html>
-<html lang="pt-BR" class="h-full">
+<html lang="{{ \App\Support\InterfaceLocale::htmlLang() }}" class="h-full">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="{{ asset('img/favicon.ico') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name', 'MicroHelium') }} - @yield('title', 'Dashboard')</title>
-    <meta name="keywords" content="hackathon, programação, maratona, contest">
-    <meta name="description" content="MicroHelium - Sistema de Gerenciamento de Maratonas de Programação">
+    <title>{{ config('app.name', 'MicroHelium') }} - @yield('title', __('Dashboard'))</title>
+    <meta name="keywords" content="{{ __('hackathon, programação, maratona, contest') }}">
+    <meta name="description" content="{{ __('MicroHelium - Sistema de Gerenciamento de Maratonas de Programação') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @include('partials.theme-init')
+    @include('partials.i18n-catalog')
 </head>
 <body class="h-full bg-background text-foreground antialiased">
-    <a href="#main-content" class="skip-link">Pular para o conteúdo</a>
+    <a href="#main-content" class="skip-link">{{ __('Pular para o conteúdo') }}</a>
     <div id="app" class="min-h-full">
         <div class="flex min-h-screen">
             <!-- Sidebar -->
-            <aside id="sidebar" aria-label="Menu principal" class="app-sidebar fixed inset-y-0 left-0 z-50 w-64 transform -translate-x-full transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 bg-card border-r border-border">
+            <aside id="sidebar" aria-label="{{ __('Menu principal') }}" class="app-sidebar fixed inset-y-0 left-0 z-50 w-64 transform -translate-x-full transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 bg-card border-r border-border">
                 <div class="flex flex-col h-full">
-                    <div class="sidebar-brand">@include('partials.brand')<button type="button" class="icon-button lg:hidden" data-sidebar-close aria-label="Fechar menu">✕</button></div>
-                    <div class="sidebar-contest"><span class="eyebrow">RELÓGIO DA COMPETIÇÃO</span><contest-timer></contest-timer></div>
+                    <div class="sidebar-brand">@include('partials.brand')<button type="button" class="icon-button lg:hidden" data-sidebar-close aria-label="{{ __('Fechar menu') }}">✕</button></div>
+                    <div class="sidebar-contest"><span class="eyebrow">{{ __('RELÓGIO DA COMPETIÇÃO') }}</span><contest-timer></contest-timer></div>
 
                     <!-- Navigation -->
-                    <nav aria-label="Navegação principal" class="flex-1 overflow-y-auto py-4">
-                        <p class="eyebrow px-6 mb-3">COMPETIÇÃO</p>
+                    <nav aria-label="{{ __('Navegação principal') }}" class="flex-1 overflow-y-auto py-4">
+                        <p class="eyebrow px-6 mb-3">{{ __('COMPETIÇÃO') }}</p>
                         <div class="px-3 space-y-1">
                             <a href="{{ Auth::check() ? '/home' : '/' }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('home') || Request::is('/') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                 </svg>
-                                Início
+                                {{ __('Início') }}
                             </a>
                             <a href="/exercises" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('exercises*', 'exercise/*', 'submit/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
-                                Problemas
+                                {{ __('Problemas') }}
                             </a>
                             <a href="/scoreboard" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('scoreboard') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
-                                Placar
+                                {{ __('Placar') }}
                             </a>
                             <a href="/clarifications" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('clarifications*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                                 </svg>
-                                Clarificações
+                                {{ __('Clarificações') }}
                             </a>
                             @if(Auth::check() && Auth::user()->isParticipant())
                             {{-- Issue #139: the S.O.S. is the team's channel to the
@@ -71,23 +72,23 @@
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                                 </svg>
-                                Impressão
+                                {{ __('Impressão') }}
                             </a>
                             @endif
                             <a href="/submissions" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('submissions*', 'submission/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                Submissões
+                                {{ __('Submissões') }}
                             </a>
                             <a href="/practice" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('practice*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
-                                <svg aria-hidden="true" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5-7 7 7 7m6-14 7 7-7 7" /></svg>Treino Livre
+                                <svg aria-hidden="true" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5-7 7 7 7m6-14 7 7-7 7" /></svg>{{ __('Treino Livre') }}
                             </a>
                             <a href="/ajuda" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('ajuda') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                 <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                Ajuda
+                                {{ __('Ajuda') }}
                             </a>
                         </div>
 
@@ -95,14 +96,14 @@
                         <!-- Judge Section -->
                         <div class="mt-6 px-3">
                             <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                Julgamento
+                                {{ __('Julgamento') }}
                             </h3>
                             <div class="mt-2 space-y-1">
                                 <a href="/judge/runs" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('judge/runs*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                                     </svg>
-                                    Julgar Submissões
+                                    {{ __('Julgar Submissões') }}
                                 </a>
                                 {{-- Issue #144: BOCA's judge/history.php. What each
                                      judge judged -- the screen you open when a
@@ -111,7 +112,7 @@
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    Histórico de Julgamento
+                                    {{ __('Histórico de Julgamento') }}
                                 </a>
                             </div>
                         </div>
@@ -121,14 +122,14 @@
                         <!-- Staff Section -->
                         <div class="mt-6 px-3">
                             <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                Staff
+                                {{ __('Staff') }}
                             </h3>
                             <div class="mt-2 space-y-1">
                                 <a href="/staff/tasks" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('staff/tasks*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                     </svg>
-                                    Tarefas
+                                    {{ __('Tarefas') }}
                                 </a>
                                 {{-- Issue #139: the other queue. Balloons and printouts
                                      are errands; this one is somebody in this room who
@@ -145,7 +146,7 @@
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                     </svg>
-                                    Relatório da Sede
+                                    {{ __('Relatório da Sede') }}
                                 </a>
                             </div>
                         </div>
@@ -155,32 +156,32 @@
                         <!-- Site Coordinator Section -->
                         <div class="mt-6 px-3">
                             <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                Meu Site
+                                {{ __('Meu Site') }}
                             </h3>
                             <div class="mt-2 space-y-1">
                                 <a href="/site/dashboard" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('site/dashboard*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                     </svg>
-                                    Painel do Site
+                                    {{ __('Painel do Site') }}
                                 </a>
                                 <a href="/site/tasks" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('site/tasks*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                     </svg>
-                                    Tarefas
+                                    {{ __('Tarefas') }}
                                 </a>
                                 <a href="/site/teams" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('site/teams*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                     </svg>
-                                    Times
+                                    {{ __('Times') }}
                                 </a>
                                 <a href="/site/clarifications" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('site/clarifications*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                     </svg>
-                                    Clarificações
+                                    {{ __('Clarificações') }}
                                 </a>
                                 {{-- Issue #139: at a real site the coordinator is part
                                      of the local organisation too. --}}
@@ -196,7 +197,7 @@
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                     </svg>
-                                    Relatório da Sede
+                                    {{ __('Relatório da Sede') }}
                                 </a>
                             </div>
                         </div>
@@ -206,61 +207,61 @@
                         <!-- Admin Section -->
                         <div class="mt-6 px-3">
                             <h3 class="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                Administração
+                                {{ __('Administração') }}
                             </h3>
                             <div class="mt-2 space-y-1">
                                 <a href="/backend/exercises" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/exercises*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                     </svg>
-                                    Gerenciar Problemas
+                                    {{ __('Gerenciar Problemas') }}
                                 </a>
                                 <a href="/backend/problem-bank" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/problem-bank*') || Request::is('backend/import-boca*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                                     </svg>
-                                    Banco de Problemas
+                                    {{ __('Banco de Problemas') }}
                                 </a>
                                 <a href="/backend/users" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/users*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                                     </svg>
-                                    Usuários
+                                    {{ __('Usuários') }}
                                 </a>
                                 <a href="/backend/sites" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/sites*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                     </svg>
-                                    Sites
+                                    {{ __('Sites') }}
                                 </a>
                                 <a href="/backend/languages" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/languages*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                                     </svg>
-                                    Linguagens
+                                    {{ __('Linguagens') }}
                                 </a>
                                 <a href="/backend/tools" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/tools', 'backend/similarity', 'backend/webcast', 'backend/bank-governance', 'backend/managed-accounts') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
-                                    <svg aria-hidden="true" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z" /></svg>Ferramentas
+                                    <svg aria-hidden="true" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z" /></svg>{{ __('Ferramentas') }}
                                 </a>
                                 <a href="/backend/configurations" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/configurations*', 'backend/contest/*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                     </svg>
-                                    Configurações
+                                    {{ __('Configurações') }}
                                 </a>
                                 <a href="/backend/clarifications" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/clarifications*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                     </svg>
-                                    Clarificações
+                                    {{ __('Clarificações') }}
                                 </a>
                                 <a href="/backend/submissions" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {{ Request::is('backend/submissions*') ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground' }}">
                                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                     </svg>
-                                    Submissões
+                                    {{ __('Submissões') }}
                                 </a>
                             </div>
                         </div>
@@ -280,7 +281,7 @@
                     <button
                         type="button"
                         class="lg:hidden inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                        aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false" id="sidebar-toggle"
+                        aria-label="{{ __('Abrir menu') }}" aria-controls="sidebar" aria-expanded="false" id="sidebar-toggle"
                     >
                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -288,12 +289,13 @@
                     </button>
 
                     <!-- Page title -->
-                    <div class="header-breadcrumb"><span class="hidden sm:inline">Área de trabalho <span aria-hidden="true">/</span></span> @yield('title', 'Visão geral')</div>
+                    <div class="header-breadcrumb"><span class="hidden sm:inline">{{ __('Área de trabalho') }} <span aria-hidden="true">/</span></span> @yield('title', __('Visão geral'))</div>
 
                     <div class="flex-1"></div>
 
                     <!-- Right side items -->
                     <div class="flex items-center gap-2">
+                        @include('partials.locale-switcher')
                         <!-- Theme toggle -->
                         <theme-toggle></theme-toggle>
 
@@ -301,7 +303,7 @@
                             <!-- User dropdown -->
                             <div class="relative">
                                 <button
-                                    id="user-menu-toggle" aria-label="Menu da conta" aria-controls="user-menu" aria-expanded="false"
+                                    id="user-menu-toggle" aria-label="{{ __('Menu da conta') }}" aria-controls="user-menu" aria-expanded="false"
                                     class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                                 >
                                     <span class="hidden sm:inline">{{ Auth::user()->fullname ?? Auth::user()->username }}</span>
@@ -315,15 +317,15 @@
                                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                         </svg>
-                                        Perfil
+                                        {{ __('Perfil') }}
                                     </a>
                                     <div class="my-1 h-px bg-border"></div>
-                                    <button type="submit" form="logout-form" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive-soft">Sair da conta</button>
+                                    <button type="submit" form="logout-form" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive-soft">{{ __('Sair da conta') }}</button>
                                 </div>
                             </div>
                         @else
                             <a href="/login" class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover transition-colors">
-                                Entrar
+                                {{ __('Entrar') }}
                             </a>
                         @endif
                     </div>
@@ -332,8 +334,8 @@
                 <!-- Main content area -->
                 <main id="main-content" tabindex="-1" class="page-content flex-1 p-4 sm:p-6">
                     <div class="page-heading">
-                        <div><p class="eyebrow">{{ Request::is('backend*', 'judge*', 'staff*') ? 'ORGANIZAÇÃO' : 'MICROHELIUM / ARENA' }}</p>
-                        <h1>@yield('title', 'Visão geral')</h1>
+                        <div><p class="eyebrow">{{ Request::is('backend*', 'judge*', 'staff*') ? __('ORGANIZAÇÃO') : __('MICROHELIUM / ARENA') }}</p>
+                        <h1>@yield('title', __('Visão geral'))</h1>
                         @hasSection('description')<p class="page-description">@yield('description')</p>@endif</div>
                         @hasSection('page-actions')<div class="page-actions">@yield('page-actions')</div>@endif
                     </div>
@@ -367,19 +369,19 @@
                 <footer class="border-t border-border py-4 px-4 sm:px-6">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
                         <nav class="flex flex-wrap justify-center gap-4">
-                            <a href="{{ Auth::check() ? '/home' : '/' }}" class="hover:text-foreground transition-colors">Início</a>
-                            <a href="/exercises" class="hover:text-foreground transition-colors">Problemas</a>
-                            <a href="/scoreboard" class="hover:text-foreground transition-colors">Placar</a>
-                            <a href="/ajuda" class="hover:text-foreground transition-colors">Ajuda</a>
+                            <a href="{{ Auth::check() ? '/home' : '/' }}" class="hover:text-foreground transition-colors">{{ __('Início') }}</a>
+                            <a href="/exercises" class="hover:text-foreground transition-colors">{{ __('Problemas') }}</a>
+                            <a href="/scoreboard" class="hover:text-foreground transition-colors">{{ __('Placar') }}</a>
+                            <a href="/ajuda" class="hover:text-foreground transition-colors">{{ __('Ajuda') }}</a>
                         </nav>
                         <p>
                             &copy; {{ date('Y') }} <a href="{{ config('app.source_url') }}" class="hover:text-foreground transition-colors">MicroHelium</a> -
-                            Sistema de Maratonas de Programação
+                            {{ __('Sistema de Maratonas de Programação') }}
                         </p>
                         {{-- AGPL-3.0 secao 13: a oferta de fonte para quem usa pela rede. --}}
                         <p>
-                            Software livre sob <a href="{{ config('app.source_url') }}/blob/master/LICENSE" class="hover:text-foreground transition-colors">AGPL-3.0-or-later</a> —
-                            <a href="{{ config('app.source_url') }}" class="hover:text-foreground transition-colors">código-fonte desta instalação</a>
+                            {{ __('Software livre sob') }} <a href="{{ config('app.source_url') }}/blob/master/LICENSE" class="hover:text-foreground transition-colors">AGPL-3.0-or-later</a> —
+                            <a href="{{ config('app.source_url') }}" class="hover:text-foreground transition-colors">{{ __('código-fonte desta instalação') }}</a>
                         </p>
                     </div>
                 </footer>

@@ -1,16 +1,18 @@
 <template>
     <div class="space-y-1">
-        <span v-if="loading" class="text-sm text-muted-foreground" role="status">Carregando competição…</span>
+        <span v-if="loading" class="text-sm text-muted-foreground" role="status">{{ t('Carregando competição…') }}</span>
         <template v-else-if="hasContest">
             <span class="block text-xs font-medium" :class="timerClass">{{ statusLabel }}</span>
             <span role="timer" :aria-label="statusLabel" class="block text-2xl font-mono font-semibold tracking-tight tabular-nums" :class="timerClass">{{ formattedTime }}</span>
-            <span v-if="frozen && !upcoming" class="text-xs text-warning">Placar congelado</span>
+            <span v-if="frozen && !upcoming" class="text-xs text-warning">{{ t('Placar congelado') }}</span>
         </template>
-        <span v-if="failed" class="text-sm text-muted-foreground">Estado indisponível. Confirme antes de agir. <button type="button" @click="fetchContestData" class="text-primary underline">Tentar novamente</button></span>
-        <span v-else-if="!loading && !hasContest" class="text-sm text-muted-foreground">Sem competição ativa</span>
+        <span v-if="failed" class="text-sm text-muted-foreground">{{ t('Estado indisponível. Confirme antes de agir.') }} <button type="button" @click="fetchContestData" class="text-primary underline">{{ t('Tentar novamente') }}</button></span>
+        <span v-else-if="!loading && !hasContest" class="text-sm text-muted-foreground">{{ t('Sem competição ativa') }}</span>
     </div>
 </template>
 <script>
+import { t } from '../i18n.js';
+
 export default {
     props: {
         startTime: { type: String, default: null },
@@ -32,7 +34,7 @@ export default {
             return this.freezeTime > 0 && this.elapsed >= (this.contestDuration - this.freezeTime) * 60;
         },
         remainingSeconds() { return this.ended ? 0 : this.upcoming ? -this.elapsed : Math.max(0, Math.ceil((this.end - this.now) / 1000)); },
-        statusLabel() { return this.contestData?.is_finalized ? 'Competição finalizada' : this.upcoming ? 'Começa em' : this.ended ? 'Competição encerrada' : 'Tempo restante'; },
+        statusLabel() { return this.contestData?.is_finalized ? t('Competição finalizada') : this.upcoming ? t('Começa em') : this.ended ? t('Competição encerrada') : t('Tempo restante'); },
         timerClass() { return this.ended || this.upcoming ? 'text-muted-foreground' : this.remainingSeconds <= 300 ? 'text-destructive' : this.remainingSeconds <= 900 ? 'text-warning' : 'text-primary'; },
         formattedTime() {
             const seconds = this.remainingSeconds;
@@ -46,6 +48,7 @@ export default {
     },
     beforeUnmount() { clearInterval(this.timer); clearInterval(this.refresh); this.request?.abort(); },
     methods: {
+        t,
         async fetchContestData() {
             this.request?.abort();
             const request = new AbortController();
@@ -53,7 +56,7 @@ export default {
             const timeout = setTimeout(() => request.abort(), 10000);
             try {
                 const response = await fetch('/api/contest/current', { signal: request.signal, headers: { Accept: 'application/json' } });
-                if (!response.ok) throw new Error('Contest unavailable');
+                if (!response.ok) throw new Error(String(response.status));
                 const data = await response.json();
                 if (request !== this.request) return;
                 this.contestData = data?.start_time ? data : null;

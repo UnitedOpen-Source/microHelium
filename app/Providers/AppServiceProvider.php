@@ -38,6 +38,11 @@ class AppServiceProvider extends ServiceProvider
         // `register|<ip>` e `<ip>` sao baldes diferentes.
         RateLimiter::for('register', fn (Request $request) => Limit::perMinute(5)->by((string) $request->ip()));
 
+        // Issue #397 -- os textos que o Vue usa ficam num JSON a parte, que e
+        // o unico enviado ao navegador; registra-lo aqui faz o Blade e o
+        // `__()` enxergarem os dois como um catalogo so.
+        $this->app->make('translator')->addJsonPath(lang_path('frontend'));
+
         // Issue #90 -- stamps an inline <script> with the per-request CSP
         // nonce SecurityHeaders generated, so the policy can refuse inline
         // script in general without refusing ours:  <script @cspNonce>

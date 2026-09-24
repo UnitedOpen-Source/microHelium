@@ -74,7 +74,7 @@ pluralização pesada, a troca é local: o `t(chave, substituições)` de
 ### Idioma escolhido [decisão]
 
 - Idiomas oferecidos: `config('app.supported_locales')` =
-  `pt_BR` (Português (Brasil)) e `es` (Español). **`en` não entra no seletor**
+  `pt_BR` (Português) e `es` (Español). **`en` não entra no seletor**
   enquanto não tiver tradução — oferecer um idioma que mostra português seria
   mentir no seletor.
 - `POST /locale` (`locale.update`) grava a escolha **na sessão** e volta à página.
@@ -95,9 +95,11 @@ pluralização pesada, a troca é local: o `t(chave, substituições)` de
 
 - Blade: texto entre tags, e os atributos `title`, `aria-label`, `placeholder`
   e `alt`, com letras fora de `{{ }}`; e literal PHP com cara de interface
-  (tem espaço, acento, ou começa com maiúscula seguida de minúsculas) que não
-  seja argumento de `__()` — pega `@section('title', 'Placar')` e o mapa de
-  vereditos do `partials/verdict`.
+  (tem letra acentuada, ou começa com uma palavra capitalizada) que não seja
+  argumento de `__()` — pega `@section('title', 'Placar')` e o mapa de
+  vereditos do `partials/verdict`. Um literal todo em minúsculas e sem acento
+  (`'problemas'`) escapa desta regra: é o preço de não reprovar classe CSS e
+  nome de rota. O `es.json` sem chave órfã e a revisão cobrem essa folga.
 - Vue/JS: o mesmo no `<template>`, e literal no `<script>` fora de `t()`.
 - Fica fora da varredura, por desenho: comentários, `<svg>`, `<style>`, e o
   conteúdo marcado com `translate="no"` (código de exemplo), que é o próprio
@@ -128,7 +130,8 @@ submissões → uma submissão → placar, e o que envolve essas telas.
 | `submissions.blade.php` | minhas submissões |
 | `submission-show.blade.php` | uma submissão |
 | `scoreboard.blade.php` | placar |
-| `partials/{brand,error-summary,table-filter,verdict,locale-switcher}` | peças dessas telas |
+| `partials/{brand,error-summary,table-filter,verdict,locale-switcher,i18n-catalog}` | peças dessas telas |
+| `errors/layout.blade.php` | casca das páginas de erro (o `lang` e os dois botões; o texto de cada erro fica para depois) |
 | `components/ContestTimer.vue` | relógio da prova |
 | `components/ThemeToggle.vue` | tema claro/escuro |
 | `app.js` | aviso de falha ao abrir uma página de funcionalidade |
@@ -150,16 +153,33 @@ Mesmas receitas da issue, no `master` (`1c6ac84`) e neste PR:
 |---|---:|---:|
 | Componentes `.vue` em `resources/js` | 51 | 51 |
 | ...que usam o `t()` de tradução | 0 | **2** (os 2 da área do competidor) |
-| Templates `.blade.php` em `resources/views` | 101 | 102 (+ `partials/locale-switcher`) |
-| ...migrados (sem texto literal, conferido por teste) | 0 | **15** |
-| Chamadas `__()`, `@lang()` ou `trans()` em `resources/views` + `app` + `routes` | 8 | ver `## Medição final` abaixo |
-| Chaves em `es` | 0 | ver abaixo |
-| `resources/lang/pt_BR/*.php` em português | 0 de 4 | **4 de 4** |
+| Templates `.blade.php` em `resources/views` | 101 | 103 (+ `partials/locale-switcher`, `partials/i18n-catalog`) |
+| ...migrados e guardados pelo teste | 0 | **17** (15 existentes + os 2 novos) |
+| Textos literais que o detector acha nos arquivos da área (Blade + Vue + `app.js`) | **290** | **0** |
+| Chamadas `__()`, `@lang()` ou `trans()` em `resources/views` + `app` | 8 | **292** (+3 em `routes/web.php`) |
+| Chaves traduzidas em `es` | 0 | **244** (230 em `es.json` + 14 em `frontend/es.json`) |
+| `resources/lang/{pt_BR,es}/*.php` completos no idioma certo | 0 de 8 | **8 de 8** |
 | `<html lang>` fixo | 3 layouts | **0** |
 
-### Medição final
+Receitas:
 
-(preenchida ao fim da implementação, com os comandos usados)
+```
+find resources/js -name '*.vue' | wc -l
+find resources/js -name '*.vue' | xargs grep -l "i18n.js" | wc -l
+find resources/views -name '*.blade.php' | wc -l
+grep -rEo "__\(|@lang\(|trans\(" resources/views app | wc -l
+```
+
+A linha dos 290 é o **próprio detector** do `InterfaceStringsTest` rodado,
+por reflexão, sobre a versão de `master` de cada arquivo da lista: 53 no
+`layouts/app`, 33 em `submissions`, 27 em `home` e em `scoreboard`, 23 no
+envio, 22 no problema, 20 no `layouts/auth`, 19 na submissão, 13 no login e na
+lista de problemas, 11 no `partials/verdict`, 10 no `ContestTimer`, e o resto
+nas peças menores.
+
+**Peso no navegador.** Medido no build: o `app.js` foi de 92 700 para 93 201 bytes (+501, com o `t()` e as chamadas); o
+catálogo do espanhol que vai em cada página tem 14 entradas (~1 KB). Em
+`pt_BR` o catálogo é `{}`.
 
 ## 6. O que falta (a issue continua aberta)
 
@@ -168,7 +188,7 @@ Na ordem da própria issue e da #394:
 1. **Participante, o resto:** `clarifications.blade.php`, `sos.blade.php`,
    `print.blade.php`, `more-info.blade.php` (ajuda), `wizard.blade.php`,
    `profile/`, `auth/register`, `auth/activate`, `auth/passwords/email`,
-   páginas de erro (`errors/*`).
+   o texto de cada página de erro (`errors/403` a `errors/500`).
 2. **Treino livre:** `features/practice*.blade.php` e `features/Practice.vue`
    (e `features/api.js`, que formata datas com `'pt-BR'` fixo — deve passar a
    ler `document.documentElement.lang`).

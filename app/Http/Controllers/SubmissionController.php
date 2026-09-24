@@ -61,7 +61,7 @@ class SubmissionController extends Controller
         $user = auth()->user();
 
         if (! $user->isAdmin() && ! $user->isJudge() && $run->user_id !== $user->user_id) {
-            abort(403, 'Voce nao pode ver esta submissao.');
+            abort(403, __('Voce nao pode ver esta submissao.'));
         }
 
         $run->load(['problem', 'language', 'answer', 'contest']);
@@ -110,13 +110,13 @@ class SubmissionController extends Controller
         $user = auth()->user();
 
         if (! $user->isAdmin() && ! $user->isJudge() && $run->user_id !== $user->user_id) {
-            abort(403, 'Voce nao pode ver esta submissao.');
+            abort(403, __('Voce nao pode ver esta submissao.'));
         }
 
         $path = $run->getSourcePath();
 
         if (! file_exists($path)) {
-            abort(404, 'Arquivo de codigo-fonte nao encontrado.');
+            abort(404, __('Arquivo de codigo-fonte nao encontrado.'));
         }
 
         // `octet-stream` sempre, mesmo para fonte de texto: o navegador nao

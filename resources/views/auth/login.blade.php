@@ -1,8 +1,8 @@
 @extends('layouts.auth')
 
-@section('title', 'Entrar')
-@section('auth-title', 'Bem-vindo de volta!')
-@section('auth-subtitle', 'Entre com suas credenciais para acessar o sistema')
+@section('title', __('Entrar'))
+@section('auth-title', __('Bem-vindo de volta!'))
+@section('auth-subtitle', __('Entre com suas credenciais para acessar o sistema'))
 
 @section('content')
 <form method="POST" action="{{ route('login') }}" class="space-y-5">
@@ -10,7 +10,7 @@
 
     <div class="space-y-2">
         <label for="email" class="block text-sm font-medium text-foreground">
-            E-mail
+            {{ __('E-mail') }}
         </label>
         <input
             id="email"
@@ -19,7 +19,7 @@
             value="{{ old('email') }}"
             required
             autocomplete="email"
-            placeholder="seu@email.com"
+            placeholder="{{ __('seu@email.com') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('email') border-destructive focus-visible:ring-destructive @enderror"
             autocapitalize="none" spellcheck="false"
         >
@@ -27,7 +27,7 @@
 
     <div class="space-y-2">
         <label for="password" class="block text-sm font-medium text-foreground">
-            Senha
+            {{ __('Senha') }}
         </label>
         <input
             id="password"
@@ -35,7 +35,7 @@
             name="password"
             required
             autocomplete="current-password"
-            placeholder="Sua senha"
+            placeholder="{{ __('Sua senha') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('password') border-destructive focus-visible:ring-destructive @enderror"
         >
     </div>
@@ -49,7 +49,7 @@
             class="h-4 w-4 rounded border-input text-primary focus:ring-primary focus:ring-offset-background"
         >
         <label for="remember" class="text-sm text-muted-foreground">
-            Lembrar-me
+            {{ __('Lembrar-me') }}
         </label>
     </div>
 
@@ -57,17 +57,17 @@
         type="submit"
         class="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
     >
-        Entrar
+        {{ __('Entrar') }}
     </button>
 
     <div class="flex items-center justify-between text-sm">
         @if (Route::has('password.request'))
             <a href="{{ route('password.request') }}" class="text-muted-foreground hover:text-foreground transition-colors">
-                Esqueceu a senha?
+                {{ __('Esqueceu a senha?') }}
             </a>
         @endif
         <a href="/" class="text-muted-foreground hover:text-foreground transition-colors">
-            Voltar ao início
+            {{ __('Voltar ao início') }}
         </a>
     </div>
 </form>
@@ -78,8 +78,8 @@
          auto-cadastro, a rota responde 404, e um link para 404 na tela de
          entrada e pior que nenhum link. --}}
     @if(config('registration.open', true))
-    Não tem uma conta? <a href="{{ route('register') }}" class="font-semibold text-primary hover:text-primary/80 transition-colors">Cadastre-se</a>
+    {{ __('Não tem uma conta?') }} <a href="{{ route('register') }}" class="font-semibold text-primary hover:text-primary/80 transition-colors">{{ __('Cadastre-se') }}</a>
     @else
-    Contas são criadas pela organização do evento.
+    {{ __('Contas são criadas pela organização do evento.') }}
     @endif
 @endsection
