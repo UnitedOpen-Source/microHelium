@@ -50,7 +50,7 @@ class PrintRequestController extends Controller
         // Same rule the submit path applies, for the same reason: nothing
         // queues before the contest starts or after it ends.
         if (! $contest || ! $contest->isRunning()) {
-            return back()->withErrors(['file' => 'A competicao nao esta em andamento no momento.']);
+            return back()->withErrors(['file' => __('A competição não está em andamento no momento.')]);
         }
 
         $maxKb = (int) config('printing.max_file_size_kb', 512);
@@ -60,15 +60,15 @@ class PrintRequestController extends Controller
             'file' => ['required', 'file', 'max:'.$maxKb, 'mimes:'.implode(',', $extensions)],
             'description' => ['nullable', 'string', 'max:120'],
         ], [
-            'file.max' => 'O arquivo ultrapassa o limite de '.$maxKb.' KB.',
-            'file.mimes' => 'Envie um arquivo de texto, codigo-fonte ou PDF.',
+            'file.max' => __('O arquivo ultrapassa o limite de :max KB.', ['max' => $maxKb]),
+            'file.mimes' => __('Envie um arquivo de texto, código-fonte ou PDF.'),
         ]);
 
         $user = $request->user();
         $siteId = $user->site_id ?? $contest->sites()->value('id');
 
         if (! $siteId) {
-            return back()->withErrors(['file' => 'Sua conta nao esta associada a nenhuma sede.']);
+            return back()->withErrors(['file' => __('Sua conta não está associada a nenhuma sede.')]);
         }
 
         $uploaded = $request->file('file');
@@ -108,7 +108,7 @@ class PrintRequestController extends Controller
         ]);
 
         return redirect()->route('print.create')
-            ->with('success', "Pedido de impressao #{$task->task_number} enviado para a equipe de apoio.");
+            ->with('success', __('Pedido de impressão #:number enviado para a equipe de apoio.', ['number' => $task->task_number]));
     }
 
     private function description(?string $note, string $filename): string

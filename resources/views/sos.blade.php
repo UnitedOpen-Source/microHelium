@@ -2,7 +2,7 @@
 
 @section('title', 'S.O.S.')
 
-@section('description', 'Chame a organização da sua sede.')
+@section('description', __('Chame a organização da sua sede.'))
 
 @section('content')
 <div class="space-y-6 max-w-3xl">
@@ -10,14 +10,15 @@
         <div class="p-6 border-b border-border">
             <h2 class="text-xl font-semibold text-foreground">S.O.S.</h2>
             <p class="text-sm text-muted-foreground mt-1">
-                Para quando o problema é com a <strong>equipe</strong>, não com a questão: máquina travada,
-                teclado quebrado, falta de energia na baia, alguém passando mal. O chamado vai para a
-                organização da sua sede, que vem até a sua mesa.
+                {!! __('Para quando o problema é com a <strong>equipe</strong>, não com a questão: máquina travada, teclado quebrado, falta de energia na baia, alguém passando mal. O chamado vai para a organização da sua sede, que vem até a sua mesa.') !!}
             </p>
             <p class="text-sm text-muted-foreground mt-2">
-                Dúvida sobre o enunciado de um problema não é S.O.S. — use as
-                <a href="{{ route('clarifications') }}" class="text-primary hover:underline">Clarificações</a>,
-                que vão para a banca.
+                {{-- O link entra por placeholder, e nao partindo a frase: a posicao
+                     dele na frase muda de lingua para lingua. Tudo que vai dentro
+                     do placeholder passa por e(), porque {!! !!} nao escapa nada. --}}
+                {!! __('Dúvida sobre o enunciado de um problema não é S.O.S. — use as :link, que vão para a banca.', [
+                    'link' => '<a href="'.e(route('clarifications')).'" class="text-primary hover:underline">'.e(__('Clarificações')).'</a>',
+                ]) !!}
             </p>
         </div>
 
@@ -35,22 +36,24 @@
 
         @if(!$contest)
             <div class="p-6">
-                <p class="text-sm text-muted-foreground">Sua conta não está associada a nenhuma competição.</p>
+                <p class="text-sm text-muted-foreground">{{ __('Sua conta não está associada a nenhuma competição.') }}</p>
             </div>
         @elseif($openCall)
             {{-- The dedupe rule, said out loud. A team that can see its own
                  open call has no reason to press the button again, which is
                  most of why the queue stays short. --}}
             <div class="p-6">
-                <p class="text-sm text-foreground font-medium">Você já tem um chamado aberto.</p>
+                <p class="text-sm text-foreground font-medium">{{ __('Você já tem um chamado aberto.') }}</p>
                 <p class="text-sm text-muted-foreground mt-1">
-                    A organização da sua sede já foi avisada
+                    {{-- Duas frases inteiras, e nao uma frase partida por @if: um
+                         fragmento concatenado nao se traduz, porque a ordem das
+                         palavras muda de lingua para lingua. --}}
                     @if($openCall->isAcknowledged())
-                        e alguém está a caminho.
+                        {{ __('A organização da sua sede já foi avisada e alguém está a caminho.') }}
                     @else
-                        e o chamado está na fila.
+                        {{ __('A organização da sua sede já foi avisada e o chamado está na fila.') }}
                     @endif
-                    Aberto às {{ $openCall->created_at?->format('H:i') }}.
+                    {{ __('Aberto às :time.', ['time' => $openCall->created_at?->format('H:i')]) }}
                 </p>
             </div>
         @else
@@ -59,12 +62,12 @@
 
             <div>
                 <label for="note" class="block text-sm font-medium text-foreground mb-1">
-                    O que está acontecendo? <span class="text-muted-foreground">(opcional)</span>
+                    {{ __('O que está acontecendo?') }} <span class="text-muted-foreground">{{ __('(opcional)') }}</span>
                 </label>
                 <input id="note" type="text" name="note" value="{{ old('note') }}" maxlength="{{ $noteMax }}"
-                       placeholder="ex.: máquina não liga, baia 14"
+                       placeholder="{{ __('ex.: máquina não liga, baia 14') }}"
                        class="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground">
-                <p class="text-xs text-muted-foreground mt-1">Até {{ $noteMax }} caracteres. Se não escrever nada, alguém vem descobrir na sua mesa.</p>
+                <p class="text-xs text-muted-foreground mt-1">{{ __('Até :max caracteres. Se não escrever nada, alguém vem descobrir na sua mesa.', ['max' => $noteMax]) }}</p>
                 @error('note')<p class="text-sm text-destructive mt-1">{{ $message }}</p>@enderror
             </div>
 
@@ -77,24 +80,23 @@
                  misbehaved is a feature. --}}
             <details class="rounded-lg border border-destructive/50 bg-destructive-soft p-4">
                 <summary class="cursor-pointer text-sm font-semibold text-destructive">
-                    Chamar a organização (S.O.S.)
+                    {{ __('Chamar a organização (S.O.S.)') }}
                 </summary>
 
                 <div class="mt-4 space-y-4">
                     <p class="text-sm text-muted-foreground">
-                        Isso vai tirar alguém da equipe de apoio do lugar para vir até você. Use quando precisar
-                        mesmo — e confirme abaixo.
+                        {{ __('Isso vai tirar alguém da equipe de apoio do lugar para vir até você. Use quando precisar mesmo — e confirme abaixo.') }}
                     </p>
 
                     <label class="flex items-start gap-2 text-sm text-foreground">
                         <input type="checkbox" name="confirmation" value="confirm" required
                                class="mt-0.5 rounded border-border">
-                        <span>Confirmo que preciso da organização na minha mesa agora.</span>
+                        <span>{{ __('Confirmo que preciso da organização na minha mesa agora.') }}</span>
                     </label>
 
                     <button type="submit"
                             class="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg hover:opacity-90 transition-opacity font-semibold">
-                        Enviar S.O.S.
+                        {{ __('Enviar S.O.S.') }}
                     </button>
                 </div>
             </details>
@@ -104,7 +106,7 @@
 
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <h2 class="text-lg font-semibold text-foreground">Seus chamados</h2>
+            <h2 class="text-lg font-semibold text-foreground">{{ __('Seus chamados') }}</h2>
         </div>
         <div class="divide-y divide-border">
             @forelse($calls as $call)
@@ -113,19 +115,19 @@
                         {{-- The team's own text, escaped: it is untrusted
                              display data even when the team is reading it
                              back to itself. --}}
-                        <p class="text-sm text-foreground break-words">{{ $call->note ?: 'Sem observação' }}</p>
+                        <p class="text-sm text-foreground break-words">{{ $call->note ?: __('Sem observação') }}</p>
                         <p class="text-xs text-muted-foreground">{{ $call->created_at?->format('d/m H:i') }}</p>
                     </div>
                     @if($call->isResolved())
-                        <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-success-soft text-success">Resolvido</span>
+                        <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-success-soft text-success">{{ __('Resolvido') }}</span>
                     @elseif($call->isAcknowledged())
-                        <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-warning-soft text-warning">A caminho</span>
+                        <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-warning-soft text-warning">{{ __('A caminho') }}</span>
                     @else
-                        <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-destructive-soft text-destructive">Aberto</span>
+                        <span class="shrink-0 px-2 py-1 text-xs font-medium rounded bg-destructive-soft text-destructive">{{ __('Aberto') }}</span>
                     @endif
                 </div>
             @empty
-                <div class="px-6 py-8 text-center text-sm text-muted-foreground">Você ainda não chamou a organização.</div>
+                <div class="px-6 py-8 text-center text-sm text-muted-foreground">{{ __('Você ainda não chamou a organização.') }}</div>
             @endforelse
         </div>
     </div>

@@ -1,15 +1,15 @@
 @extends('layouts.app')
 
-@section('title', 'Perfil')
+@section('title', __('Perfil'))
 
-@section('description', 'Atualize seus dados de acesso e mantenha sua conta protegida.')
+@section('description', __('Atualize seus dados de acesso e mantenha sua conta protegida.'))
 
 @section('content')
 <div class="max-w-xl mx-auto space-y-6">
     <div class="bg-card rounded-lg border border-border shadow-sm">
         <div class="p-6 border-b border-border">
-            <h2 class="text-xl font-semibold text-foreground">Meu Perfil</h2>
-            <p class="text-sm text-muted-foreground">{{ $user->username }} &mdash; {{ ['admin' => 'Administrador', 'judge' => 'Juiz', 'staff' => 'Organização', 'team' => 'Competidor'][$user->user_type] ?? $user->user_type }}</p>
+            <h2 class="text-xl font-semibold text-foreground">{{ __('Meu Perfil') }}</h2>
+            <p class="text-sm text-muted-foreground">{{ $user->username }} &mdash; {{ ['admin' => __('Administrador'), 'judge' => __('Juiz'), 'staff' => __('Organização'), 'team' => __('Competidor')][$user->user_type] ?? $user->user_type }}</p>
         </div>
 
         <form method="POST" action="{{ route('profile.update') }}" class="p-6 space-y-5">
@@ -17,7 +17,7 @@
             @method('PUT')
 
             <div class="space-y-2">
-                <label for="fullname" class="block text-sm font-medium text-foreground">Nome completo</label>
+                <label for="fullname" class="block text-sm font-medium text-foreground">{{ __('Nome completo') }}</label>
                 <input
                     id="fullname"
                     type="text"
@@ -29,7 +29,7 @@
             </div>
 
             <div class="space-y-2">
-                <label for="email" class="block text-sm font-medium text-foreground">E-mail</label>
+                <label for="email" class="block text-sm font-medium text-foreground">{{ __('E-mail') }}</label>
                 <input
                     id="email"
                     type="email"
@@ -42,10 +42,10 @@
 
             <div class="my-1 h-px bg-border"></div>
 
-            <p id="profile-password-hint" class="text-sm text-muted-foreground">Para trocar a senha, informe a atual e crie uma nova com pelo menos 8 caracteres. Deixe os três campos em branco para manter a senha atual.</p>
+            <p id="profile-password-hint" class="text-sm text-muted-foreground">{{ __('Para trocar a senha, informe a atual e crie uma nova com pelo menos 8 caracteres. Deixe os três campos em branco para manter a senha atual.') }}</p>
 
             <div class="space-y-2">
-                <label for="password" class="block text-sm font-medium text-foreground">Nova senha</label>
+                <label for="password" class="block text-sm font-medium text-foreground">{{ __('Nova senha') }}</label>
                 <input
                     id="password"
                     type="password"
@@ -56,7 +56,7 @@
             </div>
 
             <div class="space-y-2">
-                <label for="password_confirmation" class="block text-sm font-medium text-foreground">Confirmar nova senha</label>
+                <label for="password_confirmation" class="block text-sm font-medium text-foreground">{{ __('Confirmar nova senha') }}</label>
                 <input
                     id="password_confirmation"
                     type="password"
@@ -67,13 +67,13 @@
             </div>
 
             <div class="space-y-2">
-                <label for="current_password" class="block text-sm font-medium text-foreground">Senha atual</label>
+                <label for="current_password" class="block text-sm font-medium text-foreground">{{ __('Senha atual') }}</label>
                 <input
                     id="current_password"
                     type="password"
                     name="current_password"
                     autocomplete="current-password" aria-describedby="profile-password-hint"
-                    placeholder="Necessária apenas ao alterar a senha"
+                    placeholder="{{ __('Necessária apenas ao alterar a senha') }}"
                     class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 @error('current_password') border-destructive focus-visible:ring-destructive @enderror"
                 >
             </div>
@@ -82,17 +82,17 @@
                 type="submit"
                 class="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
             >
-                Salvar alterações
+                {{ __('Salvar alterações') }}
             </button>
         </form>
     </div>
 
     {{-- Issue #395: o titular baixa o que o sistema guarda sobre ele. --}}
     <div class="bg-card rounded-lg border border-border shadow-sm p-6 space-y-3">
-        <h2 class="text-lg font-semibold text-foreground">Meus dados</h2>
-        <p class="text-sm text-muted-foreground">Baixe, em JSON, os dados da sua conta, as suas submissões com o código-fonte, os seus esclarecimentos, pedidos de impressão e chamados.</p>
+        <h2 class="text-lg font-semibold text-foreground">{{ __('Meus dados') }}</h2>
+        <p class="text-sm text-muted-foreground">{{ __('Baixe, em JSON, os dados da sua conta, as suas submissões com o código-fonte, os seus esclarecimentos, pedidos de impressão e chamados.') }}</p>
         <a href="{{ route('profile.export') }}" class="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors">
-            Baixar meus dados
+            {{ __('Baixar meus dados') }}
         </a>
     </div>
 </div>

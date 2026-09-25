@@ -185,10 +185,7 @@ catálogo do espanhol que vai em cada página tem 14 entradas (~1 KB). Em
 
 Na ordem da própria issue e da #394:
 
-1. **Participante, o resto:** `clarifications.blade.php`, `sos.blade.php`,
-   `print.blade.php`, `more-info.blade.php` (ajuda), `wizard.blade.php`,
-   `profile/`, `auth/register`, `auth/activate`, `auth/passwords/email`,
-   o texto de cada página de erro (`errors/403` a `errors/500`).
+1. ~~**Participante, o resto**~~ — **feito** (segundo passo, seção 7).
 2. **Treino livre:** `features/practice*.blade.php` e `features/Practice.vue`
    (e `features/api.js`, que formata datas com `'pt-BR'` fixo — deve passar a
    ler `document.documentElement.lang`).
@@ -198,7 +195,8 @@ Na ordem da própria issue e da #394:
    demais telas de `features/`. `ui/wizard.js` também fixa `'pt-BR'`.
 5. **Modelos e controladores fora da área:** `ProblemBank::getDifficultyLabelAttribute()`
    (`'Facil'`/`'Medio'`/`'Dificil'`), `PracticeController` e os demais
-   `withErrors`/`with('success')` que não chegam às telas migradas.
+   `withErrors`/`with('success')` que não chegam às telas migradas. Os que
+   **chegam** às telas do participante já foram (seção 7).
 6. **`en`** como terceiro idioma — só entra no seletor com a área migrada
    completa em inglês.
 7. **Idioma por usuário** (coluna em `users`), com o da sessão e o padrão da
@@ -207,3 +205,57 @@ Na ordem da própria issue e da #394:
    invocadores) — pergunta 2 da issue, sem resposta do mantenedor.
 9. **Revisão nativa do `es`** — pergunta 3 da issue. A tradução deste PR foi
    feita com cuidado, mas não por falante nativo; está marcada assim no PR.
+
+## 7. Segundo passo: o resto do participante
+
+**[fato]** Migradas, em `pt_BR` e `es`: `clarifications`, `sos`, `print`,
+`more-info` (ajuda), `wizard`, `profile/edit`, `auth/register`,
+`auth/activate`, `auth/passwords/email` e as cinco páginas de erro
+(`errors/403`, `404`, `419`, `429`, `500`). Com isso o competidor não
+encontra mais tela só em português.
+
+**[decisão] Os controladores que respondem a essas telas vieram junto.**
+`PrintRequestController`, `SosController`, `ClarificationController` e
+`ProfileController` devolvem mensagens (`withErrors`, `with('success')`) que
+aparecem **nas telas migradas**. Migrar só a view deixaria quem escolheu
+espanhol lendo o erro em português — o defeito que a issue descreve, uma
+camada abaixo. Os quatro entraram em `PHP_KEYS_ONLY`, e o teste passa a
+conferir as chaves deles também.
+
+A fronteira é *devolvido ao próprio usuário na hora* contra *gravado no
+banco*. `'Impressao: '.$filename` (a descrição da tarefa que a equipe de apoio
+lê) **não** foi traduzido: traduzir ali gravaria no idioma de quem enviou, e
+quem lê é outra pessoa.
+
+**[decisão] Frase partida vira frase inteira.** Três construções do original
+não se traduzem como estavam:
+
+- `com a <strong>equipe</strong>, não com a questão…` → uma chave só, em
+  `{!! __() !!}` (a marcação vem do repositório);
+- `use as <a …>Clarificações</a>, que vão para a banca` → o link entra por
+  placeholder (`:link`), porque a posição dele na frase muda de língua para
+  língua. O que vai no placeholder passa por `e()`: `{!! !!}` não escapa nada;
+- `já foi avisada @if(…) e alguém está a caminho @else e o chamado está na
+  fila @endif` → **duas frases completas**, uma em cada ramo. Fragmento
+  concatenado não se traduz, porque a ordem das palavras muda.
+
+**[decisão] Textos em português corrigidos no caminho.** Como a chave é o
+texto em `pt_BR`, os que estavam sem acento ganharam acento (`ativacao`,
+`competicao nao esta`, `Voce ja tem`…). E `"O concurso ativo nao possui um
+site configurado."` virou `"A competição ativa não tem uma sede
+configurada."`: a interface não diz "concurso" nem "site" em lugar nenhum. O
+`ClarificationControllerTest` afirmava o texto antigo e foi atualizado.
+
+**[decisão] "chamado" é "llamado", e não "llamada".** O catálogo já tinha
+`Resolvido` → `Resuelto`. Traduzir o chamado do S.O.S. como *llamada*
+(feminino) pediria `Resuelta` na mesma chave. *Llamado* é masculino como
+*chamado*, e é a forma corrente na Argentina, que é o público que a issue cita.
+
+**[fato] Uma guarda nova.** `test_every_translation_keeps_the_placeholders_and_markup_of_its_key`:
+uma tradução que perde `:max` não quebra nada — o número some da tela em
+espanhol, sem erro. Conferido por mutação: tirar `:max` de uma tradução e
+tirar o `<strong>` de outra reprovam, uma de cada vez.
+
+**[fato] Renderizado em espanhol**, com a sessão em `es`, cada página migrada
+responde com o texto esperado e sem nenhum dos títulos em português. A 404
+também: a página de erro respeita o idioma da sessão.

@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', 'Clarificações')
+@section('title', __('Clarificações'))
 
-@section('description', 'Tire dúvidas sobre os problemas e acompanhe as respostas da organização.')
+@section('description', __('Tire dúvidas sobre os problemas e acompanhe as respostas da organização.'))
 
 @section('content')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -14,9 +14,9 @@
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
-                    Clarificações
+                    {{ __('Clarificações') }}
                 </h2>
-                <p class="text-sm text-muted-foreground">Perguntas e respostas sobre os problemas da competição</p>
+                <p class="text-sm text-muted-foreground">{{ __('Perguntas e respostas sobre os problemas da competição') }}</p>
             </div>
             <div class="divide-y divide-border">
                 @forelse ($clarifications ?? [] as $clarification)
@@ -39,18 +39,18 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex flex-wrap items-center gap-2 mb-2">
-                                <span class="font-semibold">{{ $clarification->team_name ?? 'Time' }}</span>
+                                <span class="font-semibold">{{ $clarification->team_name ?? __('Time') }}</span>
                                 <span class="text-muted-foreground">-</span>
-                                <span class="text-muted-foreground">Problema {{ $clarification->problem ?? 'Geral' }}</span>
+                                <span class="text-muted-foreground">{{ __('Problema :name', ['name' => $clarification->problem ?? __('Geral')]) }}</span>
                                 <span class="ml-auto text-xs text-muted-foreground">{{ $clarification->created_at }}</span>
                             </div>
                             <div class="rounded-lg bg-muted/50 p-3 mb-2">
-                                <p class="text-sm font-medium text-muted-foreground mb-1">Pergunta:</p>
+                                <p class="text-sm font-medium text-muted-foreground mb-1">{{ __('Pergunta:') }}</p>
                                 <p class="text-sm break-words whitespace-pre-wrap">{{ $clarification->question }}</p>
                             </div>
                             @if($clarification->answer)
                             <div class="rounded-lg bg-success-soft border border-success/20 p-3">
-                                <p class="text-sm font-medium text-success mb-1">Resposta do Júri:</p>
+                                <p class="text-sm font-medium text-success mb-1">{{ __('Resposta do Júri:') }}</p>
                                 <p class="text-sm break-words whitespace-pre-wrap">{{ $clarification->answer }}</p>
                             </div>
                             @endif
@@ -62,7 +62,7 @@
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
-                    <p class="text-muted-foreground">Nenhuma clarificação ainda</p>
+                    <p class="text-muted-foreground">{{ __('Nenhuma clarificação ainda') }}</p>
                 </div>
                 @endforelse
             </div>
@@ -78,7 +78,7 @@
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
-                    Nova Pergunta
+                    {{ __('Nova Pergunta') }}
                 </h2>
             </div>
             <div class="p-6">
@@ -88,9 +88,9 @@
                 <form action="/clarifications" method="POST" class="space-y-4">
                     @csrf
                     <div class="space-y-2">
-                        <label for="problem_id" class="block text-sm font-medium text-foreground">Problema</label>
+                        <label for="problem_id" class="block text-sm font-medium text-foreground">{{ __('Problema') }}</label>
                         <select name="problem_id" id="problem_id" class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                            <option value="">Geral</option>
+                            <option value="">{{ __('Geral') }}</option>
                             {{-- Issue #106: os problemas da competição, não a
                                  tabela legada de 2017 que nunca tem linhas. --}}
                             @foreach($problems ?? [] as $problem)
@@ -101,14 +101,14 @@
                         </select>
                     </div>
                     <div class="space-y-2">
-                        <label for="question" class="block text-sm font-medium text-foreground">Sua Pergunta</label>
+                        <label for="question" class="block text-sm font-medium text-foreground">{{ __('Sua Pergunta') }}</label>
                         <textarea
                             name="question"
                             id="question"
                             data-draft-field
                             rows="4"
                             required
-                            placeholder="Descreva sua dúvida de forma clara e objetiva..."
+                            placeholder="{{ __('Descreva sua dúvida de forma clara e objetiva...') }}"
                             maxlength="2000" class="flex min-h-[80px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >{{ old('question') }}</textarea>
                     </div>
@@ -116,11 +116,11 @@
                         <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                         </svg>
-                        Enviar Pergunta
+                        {{ __('Enviar Pergunta') }}
                     </button>
                 </form>
                 @else
-                <p class="text-sm text-muted-foreground mb-4">Entre na sua conta para enviar uma pergunta à organização.</p><a class="button-primary w-full" href="/login">Entrar para perguntar</a>
+                <p class="text-sm text-muted-foreground mb-4">{{ __('Entre na sua conta para enviar uma pergunta à organização.') }}</p><a class="button-primary w-full" href="/login">{{ __('Entrar para perguntar') }}</a>
                 @endauth
             </div>
         </div>
@@ -132,30 +132,30 @@
                     <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Instruções
+                    {{ __('Instruções') }}
                 </h2>
             </div>
             <div class="p-6">
                 <ul class="space-y-2 text-sm text-muted-foreground">
                     <li class="flex items-start gap-2">
                         <span class="text-primary mt-0.5">•</span>
-                        <span>Perguntas devem ser claras e objetivas</span>
+                        <span>{{ __('Perguntas devem ser claras e objetivas') }}</span>
                     </li>
                     <li class="flex items-start gap-2">
                         <span class="text-primary mt-0.5">•</span>
-                        <span>Não inclua código fonte nas perguntas</span>
+                        <span>{{ __('Não inclua código fonte nas perguntas') }}</span>
                     </li>
                     <li class="flex items-start gap-2">
                         <span class="text-primary mt-0.5">•</span>
-                        <span>Use para dúvidas sobre enunciado ou ambiente</span>
+                        <span>{{ __('Use para dúvidas sobre enunciado ou ambiente') }}</span>
                     </li>
                     <li class="flex items-start gap-2">
                         <span class="text-primary mt-0.5">•</span>
-                        <span>Respostas importantes são publicadas para todos</span>
+                        <span>{{ __('Respostas importantes são publicadas para todos') }}</span>
                     </li>
                     <li class="flex items-start gap-2">
                         <span class="text-primary mt-0.5">•</span>
-                        <span>O júri pode responder "Sem comentários" para perguntas inválidas</span>
+                        <span>{{ __('O júri pode responder "Sem comentários" para perguntas inválidas') }}</span>
                     </li>
                 </ul>
             </div>
@@ -170,7 +170,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
                     </span>
-                    <span class="text-sm">Pergunta respondida</span>
+                    <span class="text-sm">{{ __('Pergunta respondida') }}</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-warning-soft text-warning">
@@ -178,7 +178,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </span>
-                    <span class="text-sm">Aguardando resposta</span>
+                    <span class="text-sm">{{ __('Aguardando resposta') }}</span>
                 </div>
             </div>
         </div>

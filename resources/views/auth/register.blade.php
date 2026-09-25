@@ -1,8 +1,8 @@
 @extends('layouts.auth')
 
-@section('title', 'Cadastro')
-@section('auth-title', 'Criar Conta')
-@section('auth-subtitle', 'Preencha os dados para participar da maratona')
+@section('title', __('Cadastro'))
+@section('auth-title', __('Criar Conta'))
+@section('auth-subtitle', __('Preencha os dados para participar da maratona'))
 
 @section('content')
 <form method="POST" action="{{ route('register') }}" class="space-y-5">
@@ -10,7 +10,7 @@
 
     <div class="space-y-2">
         <label for="fullname" class="block text-sm font-medium text-foreground">
-            Nome Completo
+            {{ __('Nome Completo') }}
         </label>
         <input
             id="fullname"
@@ -18,7 +18,7 @@
             name="fullname"
             value="{{ old('fullname') }}"
             required
-            placeholder="Seu nome completo"
+            placeholder="{{ __('Seu nome completo') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('fullname') border-destructive focus-visible:ring-destructive @enderror"
             autocomplete="name"
         >
@@ -26,7 +26,7 @@
 
     <div class="space-y-2">
         <label for="username" class="block text-sm font-medium text-foreground">
-            Usuário
+            {{ __('Usuário') }}
         </label>
         <input
             id="username"
@@ -34,7 +34,7 @@
             name="username"
             value="{{ old('username') }}"
             required
-            placeholder="Escolha um nome de usuário"
+            placeholder="{{ __('Escolha um nome de usuário') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('username') border-destructive focus-visible:ring-destructive @enderror"
             autocomplete="username" autocapitalize="none" spellcheck="false"
         >
@@ -42,7 +42,7 @@
 
     <div class="space-y-2">
         <label for="email" class="block text-sm font-medium text-foreground">
-            E-mail
+            {{ __('E-mail') }}
         </label>
         <input
             id="email"
@@ -50,7 +50,7 @@
             name="email"
             value="{{ old('email') }}"
             required
-            placeholder="seu@email.com"
+            placeholder="{{ __('seu@email.com') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('email') border-destructive focus-visible:ring-destructive @enderror"
             autocomplete="email" autocapitalize="none" spellcheck="false"
         >
@@ -58,31 +58,31 @@
 
     <div class="space-y-2">
         <label for="password" class="block text-sm font-medium text-foreground">
-            Senha
+            {{ __('Senha') }}
         </label>
         <input
             id="password"
             type="password"
             name="password"
             required
-            aria-describedby="password-hint" placeholder="Crie uma senha"
+            aria-describedby="password-hint" placeholder="{{ __('Crie uma senha') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 @error('password') border-destructive focus-visible:ring-destructive @enderror"
             autocomplete="new-password" minlength="8"
         >
     </div>
 
-    <p id="password-hint" class="text-sm text-muted-foreground">Use pelo menos 8 caracteres. Você pode colar uma senha do seu gerenciador.</p>
+    <p id="password-hint" class="text-sm text-muted-foreground">{{ __('Use pelo menos 8 caracteres. Você pode colar uma senha do seu gerenciador.') }}</p>
 
     <div class="space-y-2">
         <label for="password_confirmation" class="block text-sm font-medium text-foreground">
-            Confirmar Senha
+            {{ __('Confirmar Senha') }}
         </label>
         <input
             id="password_confirmation"
             type="password"
             name="password_confirmation"
             required
-            placeholder="Repita a senha"
+            placeholder="{{ __('Repita a senha') }}"
             class="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             autocomplete="new-password" minlength="8"
         >
@@ -92,17 +92,17 @@
         type="submit"
         class="inline-flex w-full items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
     >
-        Cadastrar
+        {{ __('Cadastrar') }}
     </button>
 
     <div class="text-center">
         <a href="/" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Voltar ao início
+            {{ __('Voltar ao início') }}
         </a>
     </div>
 </form>
 @endsection
 
 @section('footer')
-    Já tem uma conta? <a href="{{ route('login') }}" class="font-semibold text-primary hover:text-primary/80 transition-colors">Entrar</a>
+    {{ __('Já tem uma conta?') }} <a href="{{ route('login') }}" class="font-semibold text-primary hover:text-primary/80 transition-colors">{{ __('Entrar') }}</a>
 @endsection
