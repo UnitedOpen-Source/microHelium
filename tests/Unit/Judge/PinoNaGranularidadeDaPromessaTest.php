@@ -160,7 +160,7 @@ class PinoNaGranularidadeDaPromessaTest extends TestCase
     }
 
     /**
-     * @return array<string, array<string, string>>  pacote => [extensao => prefixo]
+     * @return array<string, array<string, string>> pacote => [extensao => prefixo]
      */
     private static function promessasBrutas(DockerfileToolchain $imagem): array
     {
