@@ -138,7 +138,8 @@ class ToolchainProfileTest extends TestCase
 
         $unpinned = array_values(array_filter(
             $profile->apkPackages(self::image()),
-            fn (string $package): bool => ! str_contains($package, '='),
+            // Issue #408: fixado e ter operador de versao, `=` ou `~`.
+            fn (string $package): bool => preg_match('/^[^=~]+[=~].+$/', $package) !== 1,
         ));
 
         self::assertSame(
@@ -214,7 +215,7 @@ class ToolchainProfileTest extends TestCase
         self::assertNotNull($maratona);
 
         $packages = array_map(
-            fn (string $package): string => explode('=', $package, 2)[0],
+            fn (string $package): string => preg_split('/[=~]/', $package, 2)[0],
             $maratona->apkPackages(self::image()),
         );
 

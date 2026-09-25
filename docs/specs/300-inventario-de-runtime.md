@@ -139,7 +139,7 @@ por conta própria é o agrupamento por origem externa:
 
 | Origem | Endereço | O que vem de lá | Fixação |
 |---|---|---|---|
-| Pacote do Alpine | repositórios `main`/`community` | 37 pacotes (tabela abaixo) | `pacote=versão-rN` |
+| Pacote do Alpine | repositórios `main`/`community` | 37 pacotes (tabela abaixo) | `pacote~versão`, na granularidade que o rótulo promete (#408) |
 | Release do GitHub | `github.com/JetBrains/kotlin`, `github.com/scala/scala3` | Kotlin, Scala | versão + SHA-256 |
 | Arquivo do Apache | `archive.apache.org/dist/groovy` | Groovy | versão + SHA-256 |
 | CDN do Google | `storage.googleapis.com/dart-archive` | Dart SDK | versão + SHA-256 **por arquitetura** |
@@ -160,80 +160,100 @@ derivável sem construir a imagem, e por isso carrega a data.
 
 | Entrada | De onde vem (`ToolchainManifest`) | Runtime medido na imagem |
 |---|---|---|
-| `c_gcc13` | apk `gcc=15.2.0-r5` | gcc 15.2.0 |
-| `c_clang17` | apk `clang22=22.1.3-r2` | clang 22.1.3 |
-| `c99_gcc` | apk `gcc=15.2.0-r5` | gcc 15.2.0 |
-| `cpp_gpp13` | apk `g++=15.2.0-r5` | g++ 15.2.0 |
-| `cpp14_gpp` | apk `g++=15.2.0-r5` | g++ 15.2.0 |
-| `cpp17_gpp` | apk `g++=15.2.0-r5` | g++ 15.2.0 |
-| `cpp_clang` | apk `clang22=22.1.3-r2` | clang 22.1.3 |
-| `java25` | apk `openjdk25-jdk=25.0.4_p7-r0` | javac/java 25.0.4 |
-| `java21` | apk `openjdk21-jdk=21.0.12_p8-r0` | javac/java 21.0.12 |
-| `java17` | apk `openjdk17-jdk=17.0.20_p8-r0` | javac/java 17.0.20 |
-| `py3` | apk `python3=3.14.7-r1`, repo `resources/judge-runtime/python/sitecustomize.py` | CPython 3.14.7 |
-| `js_node24` | apk `nodejs=24.18.1-r0`, apk `bash=5.3.9-r1`, repo `resources/judge-runtime/node/run.sh` | Node v24.18.1 |
-| `ts` | apk `npm=11.12.1-r0`, npm `typescript@7.0.2`, apk `bash=5.3.9-r1`, repo `resources/judge-runtime/node/run.sh`, apk `nodejs=24.18.1-r0` | tsc 7.0.2 sobre Node 24 |
-| `scratch` | estágio `scratch-run-builder`, invocador `scratch-run`, apk `nodejs=24.18.1-r0` | scratch-run 0.1.7 (bundle webpack, 645.450 bytes) |
-| `gportugol` | apk `bash=5.3.9-r1`, repo `resources/judge-runtime/gportugol/compile.sh`, estágio `gportugol-builder`, invocador `gpt`, apk `gcc=15.2.0-r5` | o `gpt` é construído do fonte no estágio próprio; o `compile.sh` traduz para C com `gpt -t` e o gcc da imagem compila a segunda etapa |
-| `portugol_studio` | estágio `portugol-studio-builder`, repo `docker/judge/portugol/VerificaPortugol.java`, invocador `portugol-studio-check`, apk `openjdk21-jdk=21.0.12_p8-r0`, repo `docker/judge/portugol/ExecutaPortugol.java`, invocador `portugol-studio` | `portugol-console-2.7.5.jar` + 27 jars em `lib/`; nenhuma das duas etapas usa o Console |
-| `kt` | baixado `KOTLIN_VERSION`, invocador `kotlinc`, apk `openjdk21-jdk=21.0.12_p8-r0` | kotlinc-jvm 2.4.20 (JRE 25.0.4+7) |
+| `c_gcc13` | apk `gcc~15` | gcc 15.2.0 |
+| `c_clang17` | apk `clang22~22` | clang 22.1.3 |
+| `c99_gcc` | apk `gcc~15` | gcc 15.2.0 |
+| `cpp_gpp13` | apk `g++~15` | g++ 15.2.0 |
+| `cpp14_gpp` | apk `g++~15` | g++ 15.2.0 |
+| `cpp17_gpp` | apk `g++~15` | g++ 15.2.0 |
+| `cpp_clang` | apk `clang22~22` | clang 22.1.3 |
+| `java25` | apk `openjdk25-jdk~25` | javac/java 25.0.4 |
+| `java21` | apk `openjdk21-jdk~21` | javac/java 21.0.12 |
+| `java17` | apk `openjdk17-jdk~17` | javac/java 17.0.20 |
+| `py3` | apk `python3~3.14`, repo `resources/judge-runtime/python/sitecustomize.py` | CPython 3.14.7 |
+| `js_node24` | apk `nodejs~24`, apk `bash~5.3`, repo `resources/judge-runtime/node/run.sh` | Node v24.18.1 |
+| `ts` | apk `npm~11.12`, npm `typescript@7.0.2`, apk `bash~5.3`, repo `resources/judge-runtime/node/run.sh`, apk `nodejs~24` | tsc 7.0.2 sobre Node 24 |
+| `scratch` | estágio `scratch-run-builder`, invocador `scratch-run`, apk `nodejs~24` | scratch-run 0.1.7 (bundle webpack, 645.450 bytes) |
+| `gportugol` | apk `bash~5.3`, repo `resources/judge-runtime/gportugol/compile.sh`, estágio `gportugol-builder`, invocador `gpt`, apk `gcc~15` | o `gpt` é construído do fonte no estágio próprio; o `compile.sh` traduz para C com `gpt -t` e o gcc da imagem compila a segunda etapa |
+| `portugol_studio` | estágio `portugol-studio-builder`, repo `docker/judge/portugol/VerificaPortugol.java`, invocador `portugol-studio-check`, apk `openjdk21-jdk~21`, repo `docker/judge/portugol/ExecutaPortugol.java`, invocador `portugol-studio` | `portugol-console-2.7.5.jar` + 27 jars em `lib/`; nenhuma das duas etapas usa o Console |
+| `kt` | baixado `KOTLIN_VERSION`, invocador `kotlinc`, apk `openjdk21-jdk~21` | kotlinc-jvm 2.4.20 (JRE 25.0.4+7) |
 | `scala` | baixado `SCALA_VERSION`, invocador `scalac`, invocador `scala` | scalac 3.3.8 (LTS) |
 | `groovy` | baixado `GROOVY_VERSION`, invocador `groovyc`, invocador `groovy` | Groovy 4.0.33 (JVM 21.0.12) |
-| `clj` | repo `docker/judge/bin/clojure-check`, invocador `clojure-check`, apk `clojure=1.12.5-r0`, apk `openjdk21-jdk=21.0.12_p8-r0`, repo `docker/judge/bin/clojure-run`, invocador `clojure-run` | Clojure 1.12.5 (`/usr/share/clojure/clojure.jar`, 4.985.093 bytes) |
-| `cs_dotnet10` | repo `docker/judge/bin/csharp-net10`, invocador `csharp-net10`, apk `dotnet10-sdk=10.0.303-r0`, repo `resources/judge-runtime/csharp/compile.sh`, repo `resources/judge-runtime/csharp/proj.csproj.template`, apk `dotnet8-sdk=8.0.131-r0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 10.0.303 |
-| `cs_dotnet` | repo `docker/judge/bin/csharp-net8`, invocador `csharp-net8`, apk `dotnet8-sdk=8.0.131-r0`, repo `resources/judge-runtime/csharp/compile.sh`, repo `resources/judge-runtime/csharp/proj.csproj.template`, apk `dotnet10-sdk=10.0.303-r0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 8.0.131 |
-| `rs` | apk `rust=1.96.1-r0` | rustc 1.96.1 |
-| `go` | apk `go=1.26.8-r0` | go 1.26.8 |
-| `d_ldc` | apk `ldc=1.42.0-r0` | LDC 1.42.0 (DMD v2.112.1, LLVM 21.1.8) |
-| `nim` | apk `nim=2.2.0-r0` | Nim 2.2.0 |
-| `zig` | apk `zig=0.16.0-r1` | Zig 0.16.0 |
+| `clj` | repo `docker/judge/bin/clojure-check`, invocador `clojure-check`, apk `clojure~1.12`, apk `openjdk21-jdk~21`, repo `docker/judge/bin/clojure-run`, invocador `clojure-run` | Clojure 1.12.5 (`/usr/share/clojure/clojure.jar`, 4.985.093 bytes) |
+| `cs_dotnet10` | repo `docker/judge/bin/csharp-net10`, invocador `csharp-net10`, apk `dotnet10-sdk~10.0`, repo `resources/judge-runtime/csharp/compile.sh`, repo `resources/judge-runtime/csharp/proj.csproj.template`, apk `dotnet8-sdk~8.0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 10.0.303 |
+| `cs_dotnet` | repo `docker/judge/bin/csharp-net8`, invocador `csharp-net8`, apk `dotnet8-sdk~8.0`, repo `resources/judge-runtime/csharp/compile.sh`, repo `resources/judge-runtime/csharp/proj.csproj.template`, apk `dotnet10-sdk~10.0`, repo `resources/judge-runtime/csharp/run.sh` | `dotnet --version` 8.0.131 |
+| `rs` | apk `rust~1.96` | rustc 1.96.1 |
+| `go` | apk `go~1.26` | go 1.26.8 |
+| `d_ldc` | apk `ldc~1.42` | LDC 1.42.0 (DMD v2.112.1, LLVM 21.1.8) |
+| `nim` | apk `nim~2.2` | Nim 2.2.0 |
+| `zig` | apk `zig~0.16` | Zig 0.16.0 |
 | `php` | base `php:8.3-` | PHP 8.3.33 |
-| `rb` | apk `ruby=3.4.9-r0` | Ruby 3.4.9 |
-| `perl` | apk `perl=5.42.2-r1` | Perl v5.42.2 |
-| `lua` | apk `lua5.4=5.4.8-r0` | Lua 5.4.8 |
-| `sh` | apk `bash=5.3.9-r1` | GNU bash 5.3.9 |
-| `awk` | apk `gawk=5.3.2-r2` | GNU Awk 5.3.2 |
+| `rb` | apk `ruby~3.4` | Ruby 3.4.9 |
+| `perl` | apk `perl~5` | Perl v5.42.2 |
+| `lua` | apk `lua5.4~5.4` | Lua 5.4.8 |
+| `sh` | apk `bash~5.3` | GNU bash 5.3.9 |
+| `awk` | apk `gawk~5.3` | GNU Awk 5.3.2 |
 | `sed` | base `php:8.3-` | BusyBox 1.37.0 (`/bin/sed` → `/bin/busybox`) |
-| `hs` | apk `ghc=9.10.3-r2` | GHC 9.10.3 |
-| `ml` | apk `ocaml=4.14.4-r0` | ocamlopt 4.14.4 (medido em 24/09/2026, depois de o Alpine tirar o 4.14.3 do repositório) |
-| `r` | apk `R=4.6.0-r0` | R/Rscript 4.6.0 |
-| `lisp_sbcl` | apk `sbcl=2.6.5-r0` | SBCL 2.6.5-85913ede1 |
-| `lisp_clisp` | apk `clisp=2.49.95_git250727-r1` | GNU CLISP 2.49.95+ |
-| `scm` | apk `guile=3.0.9-r2` | Guile 3.0.9 |
-| `rkt` | repo `docker/judge/bin/racket-check`, invocador `racket-check`, apk `racket=9.2-r0` | Racket v9.2 [cs] |
+| `hs` | apk `ghc~9.10` | GHC 9.10.3 |
+| `ml` | apk `ocaml~4.14` | ocamlopt 4.14.4 (medido em 24/09/2026, depois de o Alpine tirar o 4.14.3 do repositório) |
+| `r` | apk `R~4.6` | R/Rscript 4.6.0 |
+| `lisp_sbcl` | apk `sbcl~2.6` | SBCL 2.6.5-85913ede1 |
+| `lisp_clisp` | apk `clisp~2.49` | GNU CLISP 2.49.95+ |
+| `scm` | apk `guile~3.0` | Guile 3.0.9 |
+| `rkt` | repo `docker/judge/bin/racket-check`, invocador `racket-check`, apk `racket~9.2` | Racket v9.2 [cs] |
 | `pas_fpc` | baixado `FPC_VERSION`, invocador `fpc` | FPC 3.2.2 |
-| `f90` | apk `gfortran=15.2.0-r5` | GNU Fortran 15.2.0 |
-| `f77` | apk `gfortran=15.2.0-r5` | GNU Fortran 15.2.0 |
-| `dart` | baixado `DART_VERSION`, invocador `dart`, apk `gcompat=1.1.0-r4` | Dart SDK 3.13.4 (stable) |
-| `cr` | apk `crystal=1.20.3-r0` | Crystal 1.20.3 |
-| `prolog_swi` | estágio `swipl-builder`, invocador `swipl`, apk `gmp=6.3.0-r4`, apk `ncurses-libs=6.6_p20260516-r0`, apk `zlib=1.3.2-r0` | SWI-Prolog 10.0.2 |
+| `f90` | apk `gfortran~15` | GNU Fortran 15.2.0 |
+| `f77` | apk `gfortran~15` | GNU Fortran 15.2.0 |
+| `dart` | baixado `DART_VERSION`, invocador `dart`, apk `gcompat~1.1` | Dart SDK 3.13.4 (stable) |
+| `cr` | apk `crystal~1.20` | Crystal 1.20.3 |
+| `prolog_swi` | estágio `swipl-builder`, invocador `swipl`, apk `gmp~6.3`, apk `ncurses-libs~6.6`, apk `zlib~1.3` | SWI-Prolog 10.0.2 |
 | `prolog_gnu` | estágio `gprolog-builder`, invocador `gplc`, repo `resources/judge-runtime/gprolog/envolucro.pro` | GNU Prolog 1.5.0 |
-| `adb` | apk `gcc-gnat=15.2.0-r5` | GNATMAKE 15.2.0 |
-| `cob` | apk `gnucobol=3.2-r0` | cobc (GnuCOBOL) 3.2.0 |
-| `tcl` | repo `docker/judge/bin/tcl-check`, invocador `tcl-check`, apk `tcl=8.6.17-r1` | tclsh 8.6.17 |
+| `adb` | apk `gcc-gnat~15` | GNATMAKE 15.2.0 |
+| `cob` | apk `gnucobol~3.2` | cobc (GnuCOBOL) 3.2.0 |
+| `tcl` | repo `docker/judge/bin/tcl-check`, invocador `tcl-check`, apk `tcl~8.6` | tclsh 8.6.17 |
 
 ### Fixado por versão: os 38 pacotes `apk` de linguagem ativa
 
 <!-- Guardado por InventarioDeRuntimeTest: cada pino aqui tem de existir no
      Dockerfile.judge, e cada apk que o manifesto exige tem de estar aqui. -->
 
-`R=4.6.0-r0`, `bash=5.3.9-r1`, `clang22=22.1.3-r2`,
-`clisp=2.49.95_git250727-r1`, `clojure=1.12.5-r0`, `crystal=1.20.3-r0`,
-`dotnet8-sdk=8.0.131-r0`, `dotnet10-sdk=10.0.303-r0`, `g++=15.2.0-r5`,
-`gawk=5.3.2-r2`, `gcc=15.2.0-r5`,
-`gcc-gnat=15.2.0-r5`, `gcompat=1.1.0-r4`, `gfortran=15.2.0-r5`,
-`ghc=9.10.3-r2`, `gmp=6.3.0-r4`, `gnucobol=3.2-r0`, `go=1.26.8-r0`,
-`guile=3.0.9-r2`, `ldc=1.42.0-r0`, `lua5.4=5.4.8-r0`,
-`ncurses-libs=6.6_p20260516-r0`, `nim=2.2.0-r0`, `nodejs=24.18.1-r0`,
-`npm=11.12.1-r0`, `ocaml=4.14.4-r0`, `openjdk17-jdk=17.0.20_p8-r0`,
-`openjdk21-jdk=21.0.12_p8-r0`,
-`openjdk25-jdk=25.0.4_p7-r0`, `perl=5.42.2-r1`, `python3=3.14.7-r1`,
-`racket=9.2-r0`, `ruby=3.4.9-r0`, `rust=1.96.1-r0`, `sbcl=2.6.5-r0`,
-`tcl=8.6.17-r1`, `zig=0.16.0-r1`, `zlib=1.3.2-r0`.
+> **Desde a #408 o pino é `~`, e não `=…-rN`.** O Alpine não guarda revisões
+> antigas: quando publica a próxima, a fixada some e o build sem cache para
+> em `unable to select packages`. Foram três em menos de um dia: `erlang27`
+> na 27.3.4.17-r0, `perl` na 5.42.2-r0 e `ocaml` na 4.14.3-r0.
+>
+> O `~` do `apk` casa **por componente**: `gcc~15` aceita 15.2.0-r5 e
+> 15.3.1-r0, e recusa 1.5 e 150 (medido: o `~1.9` do `rust` não casa com 1.96.1).
+> A regra, guardada por `PinoNaGranularidadeDaPromessaTest`:
+>
+> - o pacote que **é** o executável que a sonda de versão de uma linguagem
+>   mede fica na granularidade do rótulo — "Python 3.14" → `python3~3.14`,
+>   "Node 24 LTS" → `nodejs~24`;
+> - o resto (bibliotecas, `bash`, `bubblewrap`, `npm`) fica em
+>   `~MAJOR.MINOR`: revisão e patch entram, minor não.
+>
+> O que a #303 chamava de reprodutível era "(commit, perfil) → toolchains
+> idênticos". Passa a ser "(commit, perfil) → a versão que o rótulo
+> promete", e o patch exato de cada veredito fica gravado no julgamento
+> (#402).
+
+`R~4.6`, `bash~5.3`, `clang22~22`,
+`clisp~2.49`, `clojure~1.12`, `crystal~1.20`,
+`dotnet8-sdk~8.0`, `dotnet10-sdk~10.0`, `g++~15`,
+`gawk~5.3`, `gcc~15`,
+`gcc-gnat~15`, `gcompat~1.1`, `gfortran~15`,
+`ghc~9.10`, `gmp~6.3`, `gnucobol~3.2`, `go~1.26`,
+`guile~3.0`, `ldc~1.42`, `lua5.4~5.4`,
+`ncurses-libs~6.6`, `nim~2.2`, `nodejs~24`,
+`npm~11.12`, `ocaml~4.14`, `openjdk17-jdk~17`,
+`openjdk21-jdk~21`,
+`openjdk25-jdk~25`, `perl~5`, `python3~3.14`,
+`racket~9.2`, `ruby~3.4`, `rust~1.96`, `sbcl~2.6`,
+`tcl~8.6`, `zig~0.16`, `zlib~1.3`.
 
 Mais três de infraestrutura, que estão no caminho de **toda** execução
-julgada: `bubblewrap=0.12.0-r0` (o confinamento — sem ele o
-`AutoJudgeService` se recusa a rodar código submetido), `libstdc++=15.2.0-r5`
+julgada: `bubblewrap~0.12` (o confinamento — sem ele o
+`AutoJudgeService` se recusa a rodar código submetido), `libstdc++~15.2`
 (biblioteca de execução em C++ dos toolchains construídos em C++ — LDC e
 Crystal arrastam LLVM) e `bash`, que também é de linguagem mas entrou aqui na
 #306: o `AutoJudgeService` embrulha todo comando em `bash -c`, e uma imagem por
@@ -440,9 +460,9 @@ organizador atualizado junto.
   compilar `ExecutaPortugol.java` e a escrever o mesmo invocador do juiz.
   Medido hoje pelos md5 idênticos, acima. A #352 está fechada.
 - *"`libstdc++` está fixado no `Dockerfile` e no `Dockerfile.dev` e NÃO no
-  `Dockerfile.judge`."* Fechado: `libstdc++=15.2.0-r5` está nos três. O
+  `Dockerfile.judge`."* Fechado: `libstdc++~15.2` está nos três. O
   `Dockerfile.judge` teve **duas** mudanças de pino entre 20 e 21/09, e as
-  duas são acréscimos: esta linha (pelo #353) e o `dotnet10-sdk=10.0.303-r0`
+  duas são acréscimos: esta linha (pelo #353) e o `dotnet10-sdk~10.0`
   (pelo #358). **Nenhuma versão já existente se moveu** — conferido por diff
   dos pinos, e é o que sustenta a coluna "Runtime medido" da tabela acima.
 

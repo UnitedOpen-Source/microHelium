@@ -156,8 +156,12 @@ class ImagemPorPerfilTest extends TestCase
         $imagem = DockerfileToolchain::fromFile(self::raiz().'/Dockerfile.judge', self::raiz());
         $argumentos = ['--no-cache'];
 
-        foreach ($imagem->apkPackages() as $nome => $pino) {
-            $argumentos[] = $pino === null ? $nome : "{$nome}={$pino}";
+        // Issue #408: os tokens EXATOS da linha (`perl~5`, e nao `perl=5`).
+        // Montar `nome=pino` a mao fazia este teste alimentar o `perfil` com
+        // o formato que ele ja sabia partir -- e nao pegaria o script que
+        // corta so no `=` deixando passar `perl~5` num perfil que corta perl.
+        foreach ($imagem->apkSpecs() as $token) {
+            $argumentos[] = $token;
         }
 
         foreach (array_keys(ToolchainProfile::all()) as $nome) {
@@ -167,7 +171,7 @@ class ImagemPorPerfilTest extends TestCase
             $saida = preg_split('/\s+/', trim($processo->getOutput()), -1, PREG_SPLIT_NO_EMPTY) ?: [];
             $cortados = array_map(fn (string $c): string => substr($c, 4), array_filter(self::versionado($nome), fn (string $c): bool => str_starts_with($c, 'apk:')));
 
-            $esperado = array_values(array_filter($argumentos, fn (string $a): bool => ! in_array(explode('=', $a, 2)[0], $cortados, true)));
+            $esperado = array_values(array_filter($argumentos, fn (string $a): bool => ! in_array(preg_split('/[=~]/', $a, 2)[0], $cortados, true)));
 
             $this->assertSame($esperado, $saida, "o `perfil filtra` do perfil {$nome} nao entrega ao apk o que o gerador manda");
         }

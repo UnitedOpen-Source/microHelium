@@ -71,11 +71,10 @@ jobs:
             pacotes=$(php -r '
               require "vendor/autoload.php";
               $imagem = App\Support\Judge\DockerfileToolchain::fromFile($argv[1], getcwd());
-              $linha = [];
-              foreach ($imagem->apkPackages() as $nome => $pino) {
-                  $linha[] = $pino === null ? $nome : "{$nome}={$pino}";
-              }
-              echo implode(" ", $linha);
+              // Issue #408: o token EXATO de cada pacote, com o operador
+              // (`perl~5`). Remontar `nome=pino` trocaria `~` por `=`, e o
+              // apk leria `perl=5` como "exatamente a versao 5".
+              echo implode(" ", $imagem->apkSpecs());
             ' "$f")
             echo "::group::$f ($(echo "$pacotes" | wc -w) pacotes)"
             if docker run --rm php:8.3-cli-alpine apk add --simulate --no-cache $pacotes; then

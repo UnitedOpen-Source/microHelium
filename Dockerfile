@@ -242,7 +242,7 @@ RUN apk add --no-cache \
     # que e o que a extensao carrega em tempo de execucao.
     libpq \
     linux-headers \
-    bubblewrap=0.12.0-r0 \
+    bubblewrap~0.12 \
     # Issue #142: `backup:create` shells out to mysqldump, and this image had
     # no MySQL client at all -- the backup button would have failed on the
     # one host where it matters. Alpine's client is MariaDB's;
@@ -258,33 +258,33 @@ RUN apk add --no-cache \
     # Language::getDefaultLanguages() marks is_active by default, or admins
     # can select a language in the Contest Wizard that the judge then can't
     # actually compile/run.
-    gcc=15.2.0-r5 \
-    clang22=22.1.3-r2 \
-    g++=15.2.0-r5 \
+    gcc~15 \
+    clang22~22 \
+    g++~15 \
     make \
-    python3=3.14.7-r1 \
-    openjdk17-jdk=17.0.20_p8-r0 \
-    openjdk21-jdk=21.0.12_p8-r0 \
-    openjdk25-jdk=25.0.4_p7-r0 \
-    nodejs=24.18.1-r0 \
-    npm=11.12.1-r0 \
-    dotnet8-sdk=8.0.131-r0 \
-    dotnet10-sdk=10.0.303-r0 \
-    go=1.26.8-r0 \
-    rust=1.96.1-r0 \
-    ruby=3.4.9-r0 \
-    perl=5.42.2-r1 \
+    python3~3.14 \
+    openjdk17-jdk~17 \
+    openjdk21-jdk~21 \
+    openjdk25-jdk~25 \
+    nodejs~24 \
+    npm~11.12 \
+    dotnet8-sdk~8.0 \
+    dotnet10-sdk~10.0 \
+    go~1.26 \
+    rust~1.96 \
+    ruby~3.4 \
+    perl~5 \
     # Issue #305, Lote C -- o mesmo conjunto do Dockerfile.judge, onde
     # cada um destes foi compilado e executado num `a+b` dentro do
     # sandbox antes de ser ligado no catalogo. A lista das duas imagens
     # tem de andar junta: esta serve o caminho de julgamento pela fila, e
     # uma linguagem ativa que so existisse numa das duas falharia
     # dependendo de qual worker pegasse a submissao (#302).
-    lua5.4=5.4.8-r0 \
-    gawk=5.3.2-r2 \
-    tcl=8.6.17-r1 \
-    clojure=1.12.5-r0 \
-    R=4.6.0-r0 \
+    lua5.4~5.4 \
+    gawk~5.3 \
+    tcl~8.6 \
+    clojure~1.12 \
+    R~4.6 \
     # BEAM (Erlang/Elixir): FORA das imagens desde 24/09/2026. `erl` e `ex`
     # estao desligadas desde a #339, e o pino `erlang27=27.3.4.17-r0` sumiu
     # do repositorio do Alpine com a OTP-27.3.4.18 -- nesse dia todo build
@@ -293,32 +293,32 @@ RUN apk add --no-cache \
     # Reativar exige uma OTP >= 29.1 (ReativarABeamExigeOtpCorrigidaTest), o
     # que ja e um pino novo; ate la, os ~86 MiB e o risco de pino morto nao
     # compram nada.
-    gfortran=15.2.0-r5 \
-    gcc-gnat=15.2.0-r5 \
-    sbcl=2.6.5-r0 \
-    clisp=2.49.95_git250727-r1 \
-    guile=3.0.9-r2 \
-    racket=9.2-r0 \
-    zig=0.16.0-r1 \
-    nim=2.2.0-r0 \
-    crystal=1.20.3-r0 \
-    ldc=1.42.0-r0 \
-    ocaml=4.14.4-r0 \
-    ghc=9.10.3-r2 \
+    gfortran~15 \
+    gcc-gnat~15 \
+    sbcl~2.6 \
+    clisp~2.49 \
+    guile~3.0 \
+    racket~9.2 \
+    zig~0.16 \
+    nim~2.2 \
+    crystal~1.20 \
+    ldc~1.42 \
+    ocaml~4.14 \
+    ghc~9.10 \
     # Issue #305, Lote D -- COBOL vem do proprio Alpine (`apk search -x
     # gnucobol`), ao contrario do que a issue supunha.
-    gnucobol=3.2-r0 \
+    gnucobol~3.2 \
     # Bibliotecas de execucao do SWI-Prolog construido nos estagios acima
     # (medido com `ldd`), e o shim de glibc de que o Dart precisa. Ver
     # Dockerfile.judge para a medicao completa.
-    gmp=6.3.0-r4 \
-    ncurses-libs=6.6_p20260516-r0 \
-    zlib=1.3.2-r0 \
-    gcompat=1.1.0-r4 \
-    libstdc++=15.2.0-r5 \
+    gmp~6.3 \
+    ncurses-libs~6.6 \
+    zlib~1.3 \
+    gcompat~1.1 \
+    libstdc++~15.2 \
     # AutoJudgeService::runCustomScript()/runCompareScript() invoke problem
     # compile/run/compare scripts via `bash`, which Alpine doesn't ship by default
-    bash=5.3.9-r1 \
+    bash~5.3 \
     # setpriv, for docker/php/entrypoint.sh's privilege drop (issue #136).
     # Busybox ships a /bin/setpriv that only implements --inh-caps and
     # --no-new-privs; --reuid/--regid are util-linux's. Dockerfile.judge

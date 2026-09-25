@@ -153,9 +153,7 @@ class JudgeToolchainProfileCommand extends Command
 
     private function pinned(ToolchainRequirement $requirement, DockerfileToolchain $image): string
     {
-        $pin = $image->pinFor($requirement);
-
-        return $pin === null ? $requirement->target : $requirement->target.'='.$pin;
+        return $image->specFor($requirement);
     }
 
     /**
