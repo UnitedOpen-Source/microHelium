@@ -233,7 +233,14 @@ RUN apk add --no-cache \
     icu-dev \
     oniguruma-dev \
     libxml2-dev \
-    postgresql-dev \
+    # Issue #391 -- so a biblioteca de RUNTIME do PostgreSQL fica na imagem.
+    #
+    # O `postgresql-dev` que estava aqui so serve para COMPILAR o
+    # `pdo_pgsql`, e arrasta o Clang/LLVM 22 junto (o PostgreSQL 18 traz
+    # suporte a JIT). Ele passou a ser dependencia virtual do passo das
+    # extensoes, instalada e removida na mesma camada; aqui fica o `libpq`,
+    # que e o que a extensao carrega em tempo de execucao.
+    libpq \
     linux-headers \
     bubblewrap=0.12.0-r0 \
     # Issue #142: `backup:create` shells out to mysqldump, and this image had
@@ -663,7 +670,25 @@ ENV SIMILARITY_JPLAG_VERSION=${JPLAG_VERSION} \
     SIMILARITY_JPLAG_JAR_PATH=/opt/jplag/jplag-${JPLAG_VERSION}-jar-with-dependencies.jar
 
 # Configure and install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+# Issue #391 -- o `postgresql-dev` entra so para compilar e sai na mesma
+# camada. Remover numa camada posterior nao economizaria nada: a camada que o
+# instalou continuaria na imagem.
+#
+# Medido sobre a base `php:8.3-cli-alpine` (Alpine 3.24.2):
+#
+#     perfil sem clang, como era:   +446 MiB, clang22 e llvm22 presentes
+#     perfil sem clang, proposto:   +0 MiB,   so o libpq fica
+#     perfil completo, como era:    +446 MiB
+#     perfil completo, proposto:    +306 MiB  (o clang22 FICA, porque o
+#                                              catalogo o oferece; sai o llvm22)
+#
+# `apk del` so remove o que nada mais exige: no perfil que oferece Clang o
+# `clang22` esta em /etc/apk/world e sobrevive. Conferido que os comandos
+# EXATOS de `c_clang17` e `cpp_clang` (`-static`, `-std=c17`/`c++20`, `-lm`)
+# compilam e rodam sem o `llvm22`, e que os `pecl install` seguintes ainda
+# constroem depois da remocao.
+RUN apk add --no-cache --virtual .pgsql-build postgresql-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         pdo \
         pdo_mysql \
@@ -679,7 +704,8 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         intl \
         opcache \
         xml \
-        sockets
+        sockets \
+    && apk del .pgsql-build
 
 # Install Redis extension
 RUN pecl install redis && docker-php-ext-enable redis

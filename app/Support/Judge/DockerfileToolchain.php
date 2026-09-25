@@ -55,54 +55,127 @@ final class DockerfileToolchain
     }
 
     /**
-     * Os pacotes que o estagio final manda instalar: nome => pino (ou null
-     * quando a linha nao fixa versao).
+     * Opcoes do `apk add` que consomem o token seguinte como argumento.
+     */
+    private const APK_OPTIONS_WITH_ARGUMENT = ['--virtual', '-t', '--repository', '-X', '--root', '-p', '--arch'];
+
+    /**
+     * Os pacotes que o estagio final manda instalar e que FICAM na imagem:
+     * nome => pino (ou null quando a linha nao fixa versao).
+     *
+     * Issue #391 -- tres regras que a lista ingenua (todo token depois de
+     * `apk add`, ate o fim da instrucao) nao respeitava, e que so nao faziam
+     * diferenca porque nenhuma linha de `apk` do repositorio tinha `&&` nem
+     * `--virtual`:
+     *
+     * 1. o comando `apk add` termina no primeiro separador de shell (`&&`,
+     *    `||`, `;`, `|`). O que vem depois e OUTRO comando -- lido como
+     *    lista, `docker-php-ext-install` e `pdo_pgsql` viravam "pacotes", e o
+     *    workflow `pinos-alpine.yml`, que simula esta lista, reprovava;
+     * 2. `--virtual NOME` (e as outras opcoes com argumento) consome o token
+     *    seguinte: o nome do grupo nao e pacote;
+     * 3. um grupo `--virtual` removido com `apk del` no MESMO `RUN` e
+     *    dependencia de construcao -- nao chega a imagem final, entao nao e
+     *    pacote DELA. E exatamente o que a #391 faz com o `postgresql-dev`.
      *
      * @return array<string, string|null>
      */
     public function apkPackages(): array
     {
         $packages = [];
-        $inside = false;
+
+        foreach ($this->runInstructions() as $run) {
+            if (preg_match(self::APK_ADD, $run) !== 1) {
+                continue;
+            }
+
+            $tokens = preg_split('/\s+/', trim((string) preg_replace(self::APK_ADD, '', $run)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $found = [];
+            $virtual = null;
+
+            for ($i = 0; $i < count($tokens); $i++) {
+                $token = $tokens[$i];
+
+                if (in_array($token, ['&&', '||', ';', '|'], true)) {
+                    break;
+                }
+
+                // `pacote;` fecha o comando com o proprio token.
+                $ends = str_ends_with($token, ';');
+                $token = rtrim($token, ';');
+
+                if (in_array($token, self::APK_OPTIONS_WITH_ARGUMENT, true)) {
+                    $argument = $tokens[++$i] ?? null;
+
+                    if (in_array($token, ['--virtual', '-t'], true)) {
+                        $virtual = $argument;
+                    }
+
+                    continue;
+                }
+
+                // Opcoes sem argumento (`--no-cache`) e variaveis de build
+                // ($PHPIZE_DEPS, que e uma lista inteira resolvida pela
+                // imagem base).
+                if ($token !== '' && ! str_starts_with($token, '-') && ! str_starts_with($token, '$')) {
+                    [$name, $pin] = array_pad(explode('=', $token, 2), 2, null);
+                    $found[$name] = $pin;
+                }
+
+                if ($ends) {
+                    break;
+                }
+            }
+
+            if ($virtual !== null && preg_match('/\bapk\s+del\b[^&;|]*\s'.preg_quote($virtual, '/').'(?=\s|$|&|;|\|)/', $run) === 1) {
+                continue;
+            }
+
+            $packages = array_merge($packages, $found);
+        }
+
+        return $packages;
+    }
+
+    /**
+     * As instrucoes RUN do estagio final, uma por string, com as
+     * continuacoes de linha juntadas e as linhas de comentario descartadas --
+     * o que o proprio Docker faz antes de executar.
+     *
+     * @return list<string>
+     */
+    private function runInstructions(): array
+    {
+        $runs = [];
+        $current = null;
 
         foreach (explode("\n", $this->finalStage) as $line) {
             $line = trim($line);
 
-            if (! $inside) {
-                if (preg_match(self::APK_ADD, $line) !== 1) {
-                    continue;
-                }
-
-                $inside = true;
-                $line = (string) preg_replace(self::APK_ADD, '', $line);
-            }
-
             // Um comentario no meio da lista nao interrompe a continuacao de
-            // linha; ele so nao contribui pacote nenhum.
+            // linha; ele so nao contribui nada.
             if (str_starts_with($line, '#')) {
                 continue;
             }
 
-            $continues = str_ends_with($line, '\\');
-            $line = trim(rtrim($line, '\\'));
-
-            foreach (preg_split('/\s+/', $line, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $token) {
-                // Opcoes (`--no-cache`) e variaveis de build ($PHPIZE_DEPS,
-                // que e uma lista inteira resolvida pela imagem base).
-                if (str_starts_with($token, '-') || str_starts_with($token, '$')) {
+            if ($current === null) {
+                if (! str_starts_with($line, 'RUN ') && $line !== 'RUN') {
                     continue;
                 }
 
-                [$name, $pin] = array_pad(explode('=', $token, 2), 2, null);
-                $packages[$name] = $pin;
+                $current = '';
             }
 
+            $continues = str_ends_with($line, '\\');
+            $current .= ' '.trim(rtrim($line, '\\'));
+
             if (! $continues) {
-                $inside = false;
+                $runs[] = trim((string) preg_replace('/\s+/', ' ', $current));
+                $current = null;
             }
         }
 
-        return $packages;
+        return $runs;
     }
 
     /**

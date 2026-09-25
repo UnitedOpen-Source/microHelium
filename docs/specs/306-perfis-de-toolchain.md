@@ -351,3 +351,13 @@ Os 2137,4 MiB do `maratona` incluem isso. Tirá-los é mexer na infraestrutura
 da imagem (compilar o `pdo_pgsql` num estágio, ou remover o `-dev` depois de
 compilar), e não no recorte por perfil — por isso fica registrado aqui e vai
 para a #391, em vez de entrar calado neste PR.
+
+> **Resolvido pela #391.** O `postgresql-dev` virou dependência virtual do
+> passo que compila as extensões do PHP, instalada e removida no **mesmo**
+> `RUN`, e a lista de infraestrutura passou a instalar só o `libpq` de
+> runtime. Medido sobre a base `php:8.3-cli-alpine`: num perfil que corta o
+> Clang, o `clang22` e o `llvm22` deixam de existir na imagem (+446 MiB → +0);
+> no `completo`, o `clang22` continua, porque o catálogo o oferece, e sai só o
+> `llvm22` (+446 → +306 MiB). Com isso `c_clang17` e `cpp_clang` saem da lista
+> de falsos positivos acima — a porta dos fundos fechou. A guarda é
+> `tests/Unit/Judge/PostgresqlDevSoNaCompilacaoTest.php`.
