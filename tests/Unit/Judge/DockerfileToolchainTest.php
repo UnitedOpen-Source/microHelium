@@ -91,6 +91,71 @@ class DockerfileToolchainTest extends TestCase
         $this->assertFalse($image->satisfies(ToolchainRequirement::apk('gcc')));
     }
 
+    public function test_a_lista_do_apk_termina_no_separador_de_shell(): void
+    {
+        // Issue #391. O que vem depois do `&&` e OUTRO comando. Lido como
+        // lista, `docker-php-ext-install` e `pdo_pgsql` viravam pacotes, e o
+        // `pinos-alpine.yml` -- que simula exatamente esta lista -- reprovava.
+        $image = $this->parse(<<<'DOCKER'
+        FROM php:8.3-cli-alpine
+        RUN apk add --no-cache libpq bash=5.3.9-r1 \
+            && docker-php-ext-install -j4 pdo pdo_pgsql \
+            && rm -rf /tmp/x
+        RUN apk add --no-cache git; echo pronto
+        DOCKER);
+
+        $this->assertSame(['libpq' => null, 'bash' => '5.3.9-r1', 'git' => null], $image->apkPackages());
+    }
+
+    public function test_o_argumento_de_uma_opcao_nao_e_pacote(): void
+    {
+        $image = $this->parse(<<<'DOCKER'
+        FROM php:8.3-cli-alpine
+        RUN apk add --no-cache --virtual .ferramentas make \
+            --repository https://dl-cdn.alpinelinux.org/alpine/edge/testing erlang29
+        DOCKER);
+
+        $packages = $image->apkPackages();
+
+        $this->assertArrayHasKey('make', $packages);
+        $this->assertArrayHasKey('erlang29', $packages);
+        $this->assertArrayNotHasKey('.ferramentas', $packages, 'o nome do grupo --virtual nao e pacote');
+        $this->assertArrayNotHasKey('https://dl-cdn.alpinelinux.org/alpine/edge/testing', $packages);
+    }
+
+    public function test_grupo_virtual_removido_no_mesmo_run_nao_fica_na_imagem(): void
+    {
+        // Issue #391: e assim que o `postgresql-dev` entra para compilar o
+        // `pdo_pgsql` e sai antes de a camada ser gravada. Nao e pacote da
+        // imagem final -- e contar com ele esconderia a economia que o
+        // conserto existe para garantir.
+        $image = $this->parse(<<<'DOCKER'
+        FROM php:8.3-cli-alpine
+        RUN apk add --no-cache libpq
+        RUN apk add --no-cache --virtual .pgsql-build postgresql-dev \
+            && docker-php-ext-install pdo_pgsql \
+            && apk del .pgsql-build
+        DOCKER);
+
+        $this->assertSame(['libpq' => null], $image->apkPackages());
+    }
+
+    public function test_grupo_virtual_que_nao_e_removido_continua_na_imagem(): void
+    {
+        // O contrario tem de valer tambem: `--virtual` sozinho so da nome ao
+        // grupo. Sem o `apk del`, os pacotes ficam -- e uma regra que os
+        // descartasse pelo simples `--virtual` esconderia o erro de esquecer
+        // a remocao, que e o erro que a #391 corrigiu.
+        $image = $this->parse(<<<'DOCKER'
+        FROM php:8.3-cli-alpine
+        RUN apk add --no-cache --virtual .pgsql-build postgresql-dev \
+            && docker-php-ext-install pdo_pgsql
+        RUN apk del .outro-grupo
+        DOCKER);
+
+        $this->assertSame(['postgresql-dev' => null], $image->apkPackages());
+    }
+
     public function test_um_chmod_nao_e_instalacao_mas_um_printf_e(): void
     {
         $image = $this->parse(<<<'DOCKER'
