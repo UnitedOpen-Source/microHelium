@@ -115,7 +115,7 @@ final class DockerfileToolchain
     public const PIN_OPERATORS = ['=', '~'];
 
     /**
-     * @return array<string, array{0: string, 1: string}|null>  nome => [operador, versao] ou null sem pino
+     * @return array<string, array{0: string, 1: string}|null> nome => [operador, versao] ou null sem pino
      */
     private function apkSpecTable(): array
     {
