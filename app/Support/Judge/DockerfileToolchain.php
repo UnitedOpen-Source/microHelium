@@ -82,6 +82,43 @@ final class DockerfileToolchain
      */
     public function apkPackages(): array
     {
+        return array_map(static fn (?array $spec): ?string => $spec[1] ?? null, $this->apkSpecTable());
+    }
+
+    /**
+     * O token EXATO que o `apk add` recebe para cada pacote que fica na
+     * imagem: `nome`, `nome=versao` ou `nome~versao`.
+     *
+     * Issue #408 -- o pino deixou de ser so `=`: `perl~5` aceita qualquer
+     * revisao e qualquer release de Perl 5 que o Alpine publicar, e e isso
+     * que o workflow `pinos-alpine.yml` tem de simular. Montar `nome=versao`
+     * a partir de `apkPackages()` transformaria `perl~5` em `perl=5`, que o
+     * `apk` le como "exatamente a versao 5" e recusa.
+     *
+     * @return array<string, string>
+     */
+    public function apkSpecs(): array
+    {
+        $specs = [];
+
+        foreach ($this->apkSpecTable() as $name => $spec) {
+            $specs[$name] = $spec === null ? $name : $name.$spec[0].$spec[1];
+        }
+
+        return $specs;
+    }
+
+    /**
+     * Operador de versao que o `apk` aceita num pino: `=` exato, `~` por
+     * componente (`gcc~15` casa com 15.2.0-r5 e nunca com 1.5 nem com 150).
+     */
+    public const PIN_OPERATORS = ['=', '~'];
+
+    /**
+     * @return array<string, array{0: string, 1: string}|null> nome => [operador, versao] ou null sem pino
+     */
+    private function apkSpecTable(): array
+    {
         $packages = [];
 
         foreach ($this->runInstructions() as $run) {
@@ -118,8 +155,12 @@ final class DockerfileToolchain
                 // ($PHPIZE_DEPS, que e uma lista inteira resolvida pela
                 // imagem base).
                 if ($token !== '' && ! str_starts_with($token, '-') && ! str_starts_with($token, '$')) {
-                    [$name, $pin] = array_pad(explode('=', $token, 2), 2, null);
-                    $found[$name] = $pin;
+                    $found[$token] = null;
+
+                    if (preg_match('/^([^=~]+)([=~])(.+)$/', $token, $m) === 1) {
+                        unset($found[$token]);
+                        $found[$m[1]] = [$m[2], $m[3]];
+                    }
                 }
 
                 if ($ends) {
@@ -335,6 +376,24 @@ final class DockerfileToolchain
             ToolchainRequirement::BASE_IMAGE => str_starts_with($this->baseImage(), $requirement->target),
             default => false,
         };
+    }
+
+    /**
+     * O token que o `apk add` recebe para esta exigencia: `nome`,
+     * `nome=versao` ou `nome~versao` -- com o operador que a linha usa.
+     *
+     * Issue #408: quem precisa MONTAR a linha de instalacao (o `.corta` dos
+     * perfis, o comando `judge:toolchain-profile`) usa isto, e nao
+     * `alvo.'='.pinFor()`, que trocaria `perl~5` por `perl=5` -- e o `apk`
+     * le `perl=5` como "exatamente a versao 5" e recusa.
+     */
+    public function specFor(ToolchainRequirement $requirement): string
+    {
+        if ($requirement->kind !== ToolchainRequirement::APK) {
+            return $requirement->target;
+        }
+
+        return $this->apkSpecs()[$requirement->target] ?? $requirement->target;
     }
 
     /**

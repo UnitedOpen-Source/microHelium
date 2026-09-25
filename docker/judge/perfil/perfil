@@ -37,7 +37,11 @@ filtra() {
         case "$arg" in
             -*) saida="$saida $arg" ;;
             *)
-                nome=${arg%%=*}
+                # Issue #408 -- o pino pode ser `=` ou `~` (`perl~5`). Cortar
+                # so no `=` deixaria `perl~5` inteiro como "nome", o corte
+                # `apk:perl` nao casaria, e o perfil enxuto instalaria em
+                # silencio o que devia deixar de fora.
+                nome=${arg%%[=~]*}
                 if cortado "apk:$nome"; then
                     continue
                 fi

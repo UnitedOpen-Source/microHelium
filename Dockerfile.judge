@@ -296,7 +296,7 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # que e o que a extensao carrega em tempo de execucao.
     libpq \
     linux-headers \
-    bubblewrap=0.12.0-r0 \
+    bubblewrap~0.12 \
     $PHPIZE_DEPS \
     # C/C++ compilers -- issue #303: versao FIXADA.
     #
@@ -306,15 +306,15 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # que a imagem foi construida. `bubblewrap` entra na lista fixada por
     # outro motivo -- e o confinamento, e uma troca silenciosa dele muda o
     # que o codigo submetido alcanca.
-    gcc=15.2.0-r5 \
-    g++=15.2.0-r5 \
+    gcc~15 \
+    g++~15 \
     # Clang, EXPLICITO e nao por tabela -- issue #305.
     #
     # Ele ja estava na imagem como dependencia transitiva do `rust`, e as
     # entradas `c_clang17`/`cpp_clang` passam a ser ativas nesta mudanca. Uma
     # linguagem oferecida a equipes nao pode depender de continuar sendo
     # efeito colateral da arvore de dependencia de outra.
-    clang22=22.1.3-r2 \
+    clang22~22 \
     make \
     musl-dev \
     libc-dev \
@@ -327,7 +327,7 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # uma imagem construida noutro dia passaria a rodar outra versao -- em
     # julgamento distribuido (#53), dois workers com respostas diferentes
     # para a mesma submissao.
-    libstdc++=15.2.0-r5 \
+    libstdc++~15.2 \
     # Java -- issue #305: as TRES LTS, lado a lado.
     #
     # Cada JDK do Alpine vive no seu proprio prefixo
@@ -361,16 +361,16 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # +259,0 MiB, quatro pacotes (`openjdk17-jre-headless`, `-jre`,
     # `-jmods`, `-jdk`). O numero de +326 MiB que a #305 registra e o do
     # JDK 25 numa base sem JVM nenhuma.
-    openjdk17-jdk=17.0.20_p8-r0 \
-    openjdk21-jdk=21.0.12_p8-r0 \
-    openjdk25-jdk=25.0.4_p7-r0 \
+    openjdk17-jdk~17 \
+    openjdk21-jdk~21 \
+    openjdk25-jdk~25 \
     # Python 3
-    python3=3.14.7-r1 \
+    python3~3.14 \
     py3-pip \
     # Node.js / TypeScript -- a single real runtime, not nvm: see
     # Dockerfile.dev's comment on why multiple Node majors aren't installed
-    nodejs=24.18.1-r0 \
-    npm=11.12.1-r0 \
+    nodejs~24 \
+    npm~11.12 \
     # .NET / C# -- issue #305: as DUAS LTS, lado a lado.
     #
     # Ao contrario do Java, aqui nao ha um prefixo por versao a invocar: os
@@ -394,30 +394,30 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # ou +602 MiB. E o item mais caro do catalogo depois do GHC, e a
     # alternativa seria trocar o .NET 8 pelo 10 -- que e exatamente o que a
     # #305 proibe, porque a versao do compilador e parte do edital.
-    dotnet8-sdk=8.0.131-r0 \
-    dotnet10-sdk=10.0.303-r0 \
+    dotnet8-sdk~8.0 \
+    dotnet10-sdk~10.0 \
     # Go
-    go=1.26.8-r0 \
+    go~1.26 \
     # Rust
-    rust=1.96.1-r0 \
+    rust~1.96 \
     # Ruby
-    ruby=3.4.9-r0 \
+    ruby~3.4 \
     # Perl -- issue #305, mesma razao do clang: ja estava presente como
     # dependencia do git, e a entrada `perl` passa a ser ativa.
-    perl=5.42.2-r1 \
+    perl~5 \
     # COBOL -- issue #305, Lote D, e a suposicao que nao se confirmou.
     #
     # Esta entrada estava no lote das linguagens "que nao existem no Alpine e
     # precisam vir de fora". Nao e o caso: `apk search -x gnucobol` devolve
     # `gnucobol-3.2-r0`. Custou um `apk add`, nao um download.
-    gnucobol=3.2-r0 \
+    gnucobol~3.2 \
     # Bibliotecas de EXECUCAO do SWI-Prolog construido no estagio acima --
     # medido com `ldd /opt/swipl/bin/swipl`: libgmp, libncursesw e libz. O
     # `gmp` entra na lista fixada porque e a aritmetica de precisao
     # arbitraria do Prolog: trocar de versao muda conta de competidor.
-    gmp=6.3.0-r4 \
-    ncurses-libs=6.6_p20260516-r0 \
-    zlib=1.3.2-r0 \
+    gmp~6.3 \
+    ncurses-libs~6.6 \
+    zlib~1.3 \
     # gcompat -- issue #305, Lote D: o shim de glibc de que o Dart precisa.
     #
     # Fica registrado que o comentario do scratch-run, mais abaixo, diz que
@@ -429,7 +429,7 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     #
     # Fixado pelo mesmo criterio do bubblewrap: ele nao compila nada, mas
     # esta no caminho de execucao do codigo submetido em Dart.
-    gcompat=1.1.0-r4 \
+    gcompat~1.1 \
     # Process management
     procps \
     # Time limiting
@@ -437,7 +437,7 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # Memory limiting
     util-linux \
     # Bash for scripts -- tambem a linguagem `sh` do catalogo (#305)
-    bash=5.3.9-r1 \
+    bash~5.3 \
     # -----------------------------------------------------------------
     # Issue #305, Lote C -- linguagens cujo toolchain o Alpine publica.
     #
@@ -455,15 +455,15 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # Interpretadores leves (+7 MiB). `lua5.4` instala `lua5.4`/
     # `luac5.4`, sem link sem sufixo -- e por isso que o catalogo mudou
     # de `lua` para `lua5.4`.
-    lua5.4=5.4.8-r0 \
-    gawk=5.3.2-r2 \
-    tcl=8.6.17-r1 \
+    lua5.4~5.4 \
+    gawk~5.3 \
+    tcl~8.6 \
     # Clojure (+19 MiB). O pacote traz um clojure.jar completo; a CLI
     # `clojure` nao serve porque resolve dependencia na rede a cada
     # partida (ver docker/judge/bin/clojure-run).
-    clojure=1.12.5-r0 \
+    clojure~1.12 \
     # R (+69 MiB)
-    R=4.6.0-r0 \
+    R~4.6 \
     # BEAM (Erlang/Elixir): FORA das imagens desde 24/09/2026. `erl` e `ex`
     # estao desligadas desde a #339, e o pino `erlang27=27.3.4.17-r0` sumiu
     # do repositorio do Alpine com a OTP-27.3.4.18 -- nesse dia todo build
@@ -474,27 +474,27 @@ RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     # compram nada.
     # Fortran e Ada (+201 MiB pelos dois; sao front-ends do mesmo GCC
     # 15.2.0 ja instalado acima, e a versao acompanha a dele)
-    gfortran=15.2.0-r5 \
-    gcc-gnat=15.2.0-r5 \
+    gfortran~15 \
+    gcc-gnat~15 \
     # Lisp e Scheme (+292 MiB pelos quatro)
-    sbcl=2.6.5-r0 \
-    clisp=2.49.95_git250727-r1 \
-    guile=3.0.9-r2 \
-    racket=9.2-r0 \
+    sbcl~2.6 \
+    clisp~2.49 \
+    guile~3.0 \
+    racket~9.2 \
     # Sistemas modernos (+562 MiB pelos quatro; o grosso e o LLVM que
     # ldc e crystal arrastam)
-    zig=0.16.0-r1 \
-    nim=2.2.0-r0 \
-    crystal=1.20.3-r0 \
-    ldc=1.42.0-r0 \
+    zig~0.16 \
+    nim~2.2 \
+    crystal~1.20 \
+    ldc~1.42 \
     # OCaml (+160 MiB)
-    ocaml=4.14.4-r0 \
+    ocaml~4.14 \
     # Haskell (+1442 MiB) -- e o item mais caro do lote, sozinho maior
     # que a imagem inteira antes dele, porque o GHC arrasta llvm16 e
     # clang16 proprios. Fica porque Haskell e linguagem de maratona de
     # verdade e a alternativa seria oferece-la sem poder julga-la; quem
     # precisar de imagem menor tira esta linha e a entrada `hs`.
-    ghc=9.10.3-r2
+    ghc~9.10
 
 
 # Issue #305 -- os invocadores das linguagens cujo comando de compilacao

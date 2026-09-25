@@ -574,10 +574,7 @@ final class ToolchainManifest
                 return;
             }
 
-            $pin = $image->pinFor($requirement);
-            $packages[$requirement->target] = $pin === null
-                ? $requirement->target
-                : $requirement->target.'='.$pin;
+            $packages[$requirement->target] = $image->specFor($requirement);
         };
 
         foreach (self::shared() as $requirement) {

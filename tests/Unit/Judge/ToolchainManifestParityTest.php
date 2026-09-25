@@ -367,14 +367,14 @@ class ToolchainManifestParityTest extends TestCase
         $packages = ToolchainManifest::resolvedPackagesFor($homologadas, self::image('Dockerfile.judge'));
 
         foreach ($packages as $package) {
-            $this->assertStringContainsString(
-                '=',
+            $this->assertMatchesRegularExpression(
+                '/^[^=~]+[=~].+$/',
                 $package,
                 "a resolucao devolveu `{$package}` sem pino, e uma imagem sob medida sem pino nao e reproduzivel (#303)"
             );
         }
 
-        $names = array_map(fn (string $package) => explode('=', $package)[0], $packages);
+        $names = array_map(fn (string $package) => preg_split('/[=~]/', $package, 2)[0], $packages);
 
         $this->assertContains('gcc', $names);
         $this->assertContains('openjdk21-jdk', $names);

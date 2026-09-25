@@ -170,11 +170,18 @@ class InventarioDeRuntimeTest extends TestCase
         $imagem = DockerfileToolchain::fromFile(self::raiz().'/Dockerfile.judge', self::raiz());
         $pacotes = $imagem->apkPackages();
 
-        preg_match_all('/`([A-Za-z0-9_+.-]+)=([0-9][A-Za-z0-9_.+~-]*-r[0-9]+)`/', self::texto(), $matches, PREG_SET_ORDER);
+        // Issue #408: o pino e `nome~versao` (granularidade da promessa) ou,
+        // onde ainda houver, `nome=versao-rN`. As duas formas sao citacao de
+        // pino; um `=...-rN` que o Dockerfile ja nao usa e pino INVENTADO --
+        // e exatamente o que sobraria no texto se ele nao acompanhasse a #408.
+        $specs = $imagem->apkSpecs();
+        preg_match_all('/`([A-Za-z0-9_+.-]+)(?:~([0-9][A-Za-z0-9_.+-]*)|=([0-9][A-Za-z0-9_.+~-]*-r[0-9]+))`/', self::texto(), $matches, PREG_SET_ORDER);
 
         self::assertNotEmpty($matches, 'O inventario deveria citar os pinos de `apk`; nenhum foi encontrado.');
 
-        foreach ($matches as [$citado, $pacote, $versao]) {
+        foreach ($matches as $m) {
+            [$citado, $pacote] = $m;
+
             self::assertArrayHasKey(
                 $pacote,
                 $pacotes,
@@ -182,9 +189,9 @@ class InventarioDeRuntimeTest extends TestCase
             );
 
             self::assertSame(
-                $versao,
-                $pacotes[$pacote],
-                "O inventario cita {$citado} e o Dockerfile.judge fixa `{$pacote}={$pacotes[$pacote]}`.",
+                trim($citado, '`'),
+                $specs[$pacote],
+                "O inventario cita {$citado} e o Dockerfile.judge instala `{$specs[$pacote]}`.",
             );
         }
     }
@@ -230,10 +237,12 @@ class InventarioDeRuntimeTest extends TestCase
                 "`{$pacote}` e exigido por linguagem ativa e o Dockerfile.judge nao o fixa.",
             );
 
+            $token = $imagem->apkSpecs()[$pacote];
+
             self::assertStringContainsString(
-                '`'.$pacote.'='.$pino.'`',
+                '`'.$token.'`',
                 $texto,
-                "O inventario nao cita `{$pacote}={$pino}`, que uma linguagem ativa exige.",
+                "O inventario nao cita `{$token}`, que uma linguagem ativa exige.",
             );
         }
     }
@@ -350,7 +359,6 @@ class InventarioDeRuntimeTest extends TestCase
      */
     private static function procedenciaDe(array $language, DockerfileToolchain $imagem): string
     {
-        $apk = $imagem->apkPackages();
         $npm = $imagem->npmPackages();
         $partes = [];
 
@@ -358,7 +366,7 @@ class InventarioDeRuntimeTest extends TestCase
             $alvo = $requirement->target;
 
             $partes[] = match ($requirement->kind) {
-                ToolchainRequirement::APK => 'apk `'.$alvo.(($apk[$alvo] ?? null) !== null ? '='.$apk[$alvo] : '').'`',
+                ToolchainRequirement::APK => 'apk `'.$imagem->specFor($requirement).'`',
                 ToolchainRequirement::NPM => 'npm `'.$alvo.'@'.($npm[$alvo] ?? '?').'`',
                 ToolchainRequirement::DOWNLOAD => 'baixado `'.$alvo.'_VERSION`',
                 ToolchainRequirement::STAGE => 'estágio `'.$alvo.'`',

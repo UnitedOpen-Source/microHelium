@@ -47,11 +47,13 @@ class JudgeToolchainProfileCommandTest extends TestCase
     {
         $line = ' '.trim($this->emit('maratona --apk')).' ';
 
-        self::assertStringContainsString(' gcc=', $line);
-        self::assertStringContainsString(' openjdk21-jdk=', $line);
-        self::assertStringNotContainsString(' ghc=', $line);
-        self::assertStringNotContainsString(' crystal=', $line);
-        self::assertStringNotContainsString(' rust=', $line);
+        // Issue #408: o operador do pino e `=` ou `~`; o que o teste afirma
+        // e o PACOTE fixado estar (ou nao) na linha.
+        self::assertMatchesRegularExpression('/ gcc[=~]/', $line);
+        self::assertMatchesRegularExpression('/ openjdk21-jdk[=~]/', $line);
+        self::assertDoesNotMatchRegularExpression('/ ghc[=~]/', $line);
+        self::assertDoesNotMatchRegularExpression('/ crystal[=~]/', $line);
+        self::assertDoesNotMatchRegularExpression('/ rust[=~]/', $line);
     }
 
     /**

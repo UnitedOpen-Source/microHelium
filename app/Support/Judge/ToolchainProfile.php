@@ -286,13 +286,13 @@ final class ToolchainProfile
         $mine = [];
 
         foreach ($this->apkPackages($image) as $package) {
-            $mine[explode('=', $package, 2)[0]] = true;
+            $mine[preg_split('/[=~]/', $package, 2)[0]] = true;
         }
 
         $out = [];
 
         foreach (ToolchainManifest::resolvedPackagesFor(ToolchainManifest::activeLanguages(), $image) as $package) {
-            if (! array_key_exists(explode('=', $package, 2)[0], $mine)) {
+            if (! array_key_exists(preg_split('/[=~]/', $package, 2)[0], $mine)) {
                 $out[] = $package;
             }
         }
