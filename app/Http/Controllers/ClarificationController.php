@@ -93,7 +93,7 @@ class ClarificationController extends Controller
         $activeContest = DB::table('contests')->where('is_active', true)->where('is_practice', false)->first();
 
         if (!$activeContest) {
-            return redirect()->route('clarifications')->with('error', 'Nenhuma competicao ativa no momento.');
+            return redirect()->route('clarifications')->with('error', __('Nenhuma competição ativa no momento.'));
         }
 
         // Use the asking user's own site when they have one -- falling back
@@ -114,7 +114,7 @@ class ClarificationController extends Controller
             : null;
         $site ??= DB::table('sites')->where('contest_id', $activeContest->id)->first();
         if (!$site) {
-            return redirect()->route('clarifications')->with('error', 'O concurso ativo nao possui um site configurado.');
+            return redirect()->route('clarifications')->with('error', __('A competição ativa não tem uma sede configurada.'));
         }
 
         $maxNumber = DB::table('clarifications')
@@ -137,6 +137,6 @@ class ClarificationController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        return redirect()->route('clarifications')->with('success', 'Pergunta enviada com sucesso!');
+        return redirect()->route('clarifications')->with('success', __('Pergunta enviada com sucesso!'));
     }
 }

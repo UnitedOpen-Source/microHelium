@@ -146,7 +146,7 @@ class ClarificationControllerTest extends TestCase
                          ->post('/clarifications', ['question' => 'This should also fail']);
         
         $response->assertRedirect(route('clarifications'));
-        $response->assertSessionHas('error', 'O concurso ativo nao possui um site configurado.');
+        $response->assertSessionHas('error', 'A competição ativa não tem uma sede configurada.');
         $this->assertDatabaseMissing('clarifications', ['question' => 'This should also fail']);
     }
 }

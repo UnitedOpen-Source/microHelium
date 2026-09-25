@@ -64,7 +64,7 @@ class SosController extends Controller
         // What it is gated on is having a contest and a site at all -- there
         // is no queue to land in otherwise.
         if (! $contest) {
-            return back()->withErrors(['confirmation' => 'Sua conta nao esta associada a nenhuma competicao.']);
+            return back()->withErrors(['confirmation' => __('Sua conta não está associada a nenhuma competição.')]);
         }
 
         $request->validate([
@@ -75,9 +75,9 @@ class SosController extends Controller
             'confirmation' => ['required', 'in:confirm'],
             'note' => ['nullable', 'string', 'max:'.$this->noteMax()],
         ], [
-            'confirmation.required' => 'Confirme o pedido antes de chamar a organizacao.',
-            'confirmation.in' => 'Confirme o pedido antes de chamar a organizacao.',
-            'note.max' => 'A observacao deve ter no maximo '.$this->noteMax().' caracteres.',
+            'confirmation.required' => __('Confirme o pedido antes de chamar a organização.'),
+            'confirmation.in' => __('Confirme o pedido antes de chamar a organização.'),
+            'note.max' => __('A observação deve ter no máximo :max caracteres.', ['max' => $this->noteMax()]),
         ]);
 
         $user = $request->user();
@@ -92,7 +92,7 @@ class SosController extends Controller
             ?? $contest->sites()->value('id');
 
         if (! $siteId) {
-            return back()->withErrors(['confirmation' => 'Sua conta nao esta associada a nenhuma sede.']);
+            return back()->withErrors(['confirmation' => __('Sua conta não está associada a nenhuma sede.')]);
         }
 
         $note = trim((string) $request->input('note'));
@@ -130,7 +130,7 @@ class SosController extends Controller
         // already one?" outside the transaction that decided it.
         if (! $call->wasRecentlyCreated) {
             return redirect()->route('sos.create')
-                ->with('info', 'Voce ja tem um chamado aberto. A organizacao da sua sede ja foi avisada.');
+                ->with('info', __('Você já tem um chamado aberto. A organização da sua sede já foi avisada.'));
         }
 
         // Issue #88's screen is where the organisation watches the event go
@@ -149,7 +149,7 @@ class SosController extends Controller
         );
 
         return redirect()->route('sos.create')
-            ->with('success', 'Chamado enviado. A organizacao da sua sede foi avisada.');
+            ->with('success', __('Chamado enviado. A organização da sua sede foi avisada.'));
     }
 
     private function noteMax(): int

@@ -40,6 +40,20 @@ class InterfaceStringsTest extends TestCase
         'resources/views/partials/verdict.blade.php',
         'resources/views/partials/locale-switcher.blade.php',
         'resources/views/partials/i18n-catalog.blade.php',
+        'resources/views/clarifications.blade.php',
+        'resources/views/sos.blade.php',
+        'resources/views/print.blade.php',
+        'resources/views/more-info.blade.php',
+        'resources/views/wizard.blade.php',
+        'resources/views/profile/edit.blade.php',
+        'resources/views/auth/register.blade.php',
+        'resources/views/auth/activate.blade.php',
+        'resources/views/auth/passwords/email.blade.php',
+        'resources/views/errors/403.blade.php',
+        'resources/views/errors/404.blade.php',
+        'resources/views/errors/419.blade.php',
+        'resources/views/errors/429.blade.php',
+        'resources/views/errors/500.blade.php',
     ];
 
     /** Vue e JS da area, ja migrados. */
@@ -58,6 +72,10 @@ class InterfaceStringsTest extends TestCase
         'routes/web.php',
         'app/Http/Controllers/SubmitController.php',
         'app/Http/Controllers/SubmissionController.php',
+        'app/Http/Controllers/PrintRequestController.php',
+        'app/Http/Controllers/SosController.php',
+        'app/Http/Controllers/ClarificationController.php',
+        'app/Http/Controllers/ProfileController.php',
     ];
 
     /**
@@ -378,6 +396,57 @@ class InterfaceStringsTest extends TestCase
             sort($have[1]);
             $this->assertSame($want[1], $have[1], "a traducao de '{$key}' perdeu ou inventou um marcador :nome");
         }
+    }
+
+    /**
+     * Uma traducao que perde um placeholder nao quebra nada: o `__()` so
+     * deixa de substituir, e o numero some da tela em espanhol sem erro,
+     * sem log e sem teste vermelho. Uma que perde uma tag solta um
+     * `<strong>` sem fechar dentro de um `{!! !!}`. As duas sao falhas que
+     * so aparecem para quem le a pagina no outro idioma -- que e justamente
+     * quem ninguem da equipe testa a mao.
+     */
+    public function test_every_translation_keeps_the_placeholders_and_markup_of_its_key(): void
+    {
+        $divergent = [];
+
+        foreach (['resources/lang/es.json', 'resources/lang/frontend/es.json'] as $path) {
+            foreach ($this->catalog($path) as $key => $translation) {
+                if ($this->placeholders($key) !== $this->placeholders($translation)) {
+                    $divergent[] = "{$path}: placeholders de ".json_encode($key, JSON_UNESCAPED_UNICODE).' viraram '.json_encode($translation, JSON_UNESCAPED_UNICODE);
+                }
+
+                if ($this->tags($key) !== $this->tags($translation)) {
+                    $divergent[] = "{$path}: marcacao de ".json_encode($key, JSON_UNESCAPED_UNICODE).' virou '.json_encode($translation, JSON_UNESCAPED_UNICODE);
+                }
+            }
+        }
+
+        $this->assertSame([], $divergent, 'uma traducao nao pode perder nem ganhar placeholder ou tag em relacao ao texto em portugues');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function placeholders(string $text): array
+    {
+        preg_match_all('/:([a-z_]+)/', $text, $m);
+        $names = array_values(array_unique($m[1]));
+        sort($names);
+
+        return $names;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function tags(string $text): array
+    {
+        preg_match_all('#</?[a-z][a-z0-9]*#i', $text, $m);
+        $tags = array_map('strtolower', $m[0]);
+        sort($tags);
+
+        return $tags;
     }
 
     public function test_supported_locales_are_the_ones_that_have_translations(): void
