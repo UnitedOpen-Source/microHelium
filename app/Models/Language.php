@@ -645,17 +645,20 @@ class Language extends Model
             // Issue #305, Lote D -- Julia fica INATIVA, e o motivo e uma
             // medicao e nao uma suspeita.
             //
-            // O indice oficial de binarios do projeto
-            // (https://julialang-s3.julialang.org/bin/versions.json) lista,
-            // para a ultima estavel, so `aarch64-linux-gnu` em ARM. Varrendo
-            // TODAS as versoes do indice, o unico triplet musl que existe e
-            // `x86_64-linux-musl`: nao ha, e nunca houve, binario
-            // musl/aarch64. Sobraria compilar o Julia do fonte, que arrasta
-            // LLVM -- fora de qualquer orcamento de imagem deste projeto.
+            // 1. Alpine nao empacota Julia (`apk search julia` nao tem compilador).
+            // 2. O indice oficial de binarios (versions.json) nunca teve
+            //    triplet `musl/aarch64`.
+            // 3. Em `x86_64`, o binario musl foi descontinuado apos 1.12.0-rc1
+            //    (ultimo estavel: 1.11.6; builder desativado no
+            //    JuliaCI/julia-buildkite#458 e tabela rebaixada na issue #2218).
+            // 4. Binario oficial glibc com `gcompat` (como o Dart usa) NAO
+            //    funciona: medido em contêiner, falha na relocacao dinamica:
+            //    `Error relocating libjulia-internal.so: jl_crc32c: symbol not found`.
+            // 5. Compilar do fonte arrasta LLVM -- fora de qualquer orcamento
+            //    de tempo e tamanho de imagem deste projeto.
             //
-            // Mesma regra do PyPy acima: inativo quer dizer toolchain
-            // ausente, e e mais honesto do que oferecer a linguagem e falhar
-            // toda submissao.
+            // Mesma regra do PyPy: inativo quer dizer toolchain ausente, e e
+            // mais honesto do que oferecer a linguagem e falhar toda submissao.
             ['name' => 'Julia', 'extension' => 'jl', 'file_ext' => 'jl', 'compile_command' => 'julia --compile=min {source} 2>&1', 'run_command' => 'julia {source}', 'is_active' => false, 'category' => 'interpreted'],
             ['name' => 'R 4.6', 'extension' => 'r', 'file_ext' => 'r', 'compile_command' => 'Rscript --vanilla -e "parse(\'{source}\')"', 'run_command' => 'Rscript --vanilla {source}', 'is_active' => true, 'category' => 'interpreted'],
 
