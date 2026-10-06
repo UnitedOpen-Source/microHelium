@@ -219,7 +219,10 @@ WORKDIR /var/www/html
 # imagem e construida tambem por parceiros.
 #
 # Esta lista tem de acompanhar a do Dockerfile.judge.
-RUN apk add --no-cache \
+ARG JUDGE_PROFILE=completo
+ENV JUDGE_PROFILE=${JUDGE_PROFILE}
+COPY --chmod=755 docker/judge/perfil/ /usr/local/share/juiz-perfil/
+RUN /usr/local/share/juiz-perfil/perfil apk-add --no-cache \
     git \
     curl \
     wget \
@@ -333,7 +336,8 @@ COPY --chmod=755 docker/judge/bin/ /usr/local/bin/
 
 # TypeScript (npx tsc, used by the "TypeScript (Node 24)" language)
 ARG TYPESCRIPT_VERSION=7.0.2
-RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
+RUN /usr/local/share/juiz-perfil/perfil inclui npm:typescript || exit 0; \
+    npm install -g "typescript@${TYPESCRIPT_VERSION}"
 
 # Kotlin has no Alpine package; JetBrains only ships it as a GitHub release
 # zip. This is the same install method used by every other Kotlin judge
@@ -355,7 +359,8 @@ RUN npm install -g "typescript@${TYPESCRIPT_VERSION}"
 # existia neste arquivo (o JPlag, mais abaixo); faltava aplicar aos vizinhos.
 ARG KOTLIN_VERSION=2.4.20
 ARG KOTLIN_SHA256=59e9ca74c7904ef2c122b12114937673ccce68de820a663f0ed66ccf8799e0b7
-RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -O /tmp/kotlin.zip \
+RUN /usr/local/share/juiz-perfil/perfil inclui download:KOTLIN || exit 0; \
+    wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VERSION}/kotlin-compiler-${KOTLIN_VERSION}.zip" -O /tmp/kotlin.zip \
     && echo "${KOTLIN_SHA256}  /tmp/kotlin.zip" | sha256sum -c - \
     && unzip -q /tmp/kotlin.zip -d /opt \
     && rm /tmp/kotlin.zip \
@@ -384,16 +389,17 @@ RUN wget -q "https://github.com/JetBrains/kotlin/releases/download/v${KOTLIN_VER
 ARG FPC_VERSION=3.2.2
 ARG FPC_SHA256_AARCH64=b39470f9b6b5b82f50fc8680a5da37d2834f2129c65c24c5628a80894d565451
 ARG FPC_SHA256_X86_64=5adac308a5534b6a76446d8311fc340747cbb7edeaacfe6b651493ff3fe31e83
-RUN set -eu; \
+RUN /usr/local/share/juiz-perfil/perfil inclui download:FPC || exit 0; \
+    set -eu; \
     arch="$(apk --print-arch)"; \
     case "$arch" in \
-        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64; fpc_sha256="${FPC_SHA256_X86_64}" ;; \
-        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64; fpc_sha256="${FPC_SHA256_AARCH64}" ;; \
+        x86_64) fpc_arch=x86_64-linux; fpc_bin=ppcx64; fpc_sha256="${FPC_SHA256_X86_64}"; fpc_mirror="https://distfiles.gentoo.org/distfiles/61/fpc-${FPC_VERSION}.x86_64-linux.tar" ;; \
+        aarch64) fpc_arch=aarch64-linux; fpc_bin=ppca64; fpc_sha256="${FPC_SHA256_AARCH64}"; fpc_mirror="https://distfiles.gentoo.org/distfiles/cd/fpc-${FPC_VERSION}.aarch64-linux.tar" ;; \
         *) echo "Unsupported arch for FPC: $arch" >&2; exit 1 ;; \
     esac; \
-    url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
+    sf_url="https://sourceforge.net/projects/freepascal/files/Linux/${FPC_VERSION}/fpc-${FPC_VERSION}.${fpc_arch}.tar/download"; \
     tries=0; \
-    until wget -q "$url" -O /tmp/fpc.tar \
+    until { wget -q "$fpc_mirror" -O /tmp/fpc.tar || wget -q "$sf_url" -O /tmp/fpc.tar; } \
         && echo "${fpc_sha256}  /tmp/fpc.tar" | sha256sum -c -; do \
         tries=$((tries + 1)); \
         [ "$tries" -ge 6 ] && { echo "FPC ${FPC_VERSION} (${fpc_arch}): $tries tentativas sem bater o SHA-256 fixado" >&2; exit 1; }; \
@@ -419,6 +425,7 @@ RUN set -eu; \
 ARG SCALA_VERSION=3.3.8
 ARG SCALA_SHA256=777423024bb2b4c2b33e18f9c28da7cea117b39478b9bb6811baf7b1a1cf22a7
 RUN set -eux; \
+    /usr/local/share/juiz-perfil/perfil inclui download:SCALA || exit 0; \
     wget -q "https://github.com/scala/scala3/releases/download/${SCALA_VERSION}/scala3-${SCALA_VERSION}.zip" -O /tmp/scala.zip; \
     echo "${SCALA_SHA256}  /tmp/scala.zip" | sha256sum -c -; \
     unzip -q /tmp/scala.zip -d /opt; \
@@ -438,6 +445,7 @@ RUN set -eux; \
 ARG GROOVY_VERSION=4.0.33
 ARG GROOVY_SHA256=395a69a81d5e9915d360d630663c1d98534c9dec134cb267798e49370855d93d
 RUN set -eux; \
+    /usr/local/share/juiz-perfil/perfil inclui download:GROOVY || exit 0; \
     wget -q "https://archive.apache.org/dist/groovy/${GROOVY_VERSION}/distribution/apache-groovy-binary-${GROOVY_VERSION}.zip" -O /tmp/groovy.zip; \
     echo "${GROOVY_SHA256}  /tmp/groovy.zip" | sha256sum -c -; \
     unzip -q /tmp/groovy.zip -d /opt; \
@@ -458,6 +466,7 @@ ARG DART_VERSION=3.13.4
 ARG DART_SHA256_AARCH64=1d545609bdf9da6fb5e68fbd96a599e2836e44ee64379991bd4493ee764d2fdb
 ARG DART_SHA256_X86_64=6487a10df5eab890d746d14a55f4c70bec3c1c0633f51804eb504cbc0fc395bb
 RUN set -eux; \
+    /usr/local/share/juiz-perfil/perfil inclui download:DART || exit 0; \
     arch="$(apk --print-arch)"; \
     case "$arch" in \
         aarch64) dart_arch=arm64; dart_sha256="${DART_SHA256_AARCH64}" ;; \
@@ -583,7 +592,7 @@ RUN set -eux; \
 COPY --from=scratch-run-builder /src/dist/index.js /opt/scratch-run/index.js
 RUN printf '#!/bin/sh\nexec node /opt/scratch-run/index.js "$@"\n' > /usr/local/bin/scratch-run \
     && chmod 755 /usr/local/bin/scratch-run \
-    && echo 'x' | scratch-run --version
+    && if /usr/local/share/juiz-perfil/perfil inclui apk:nodejs; then echo 'x' | scratch-run --version; fi
 
 # Portugol Studio (issue #269, parte A).
 #

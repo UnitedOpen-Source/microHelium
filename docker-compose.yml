@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE_APP:-Dockerfile}
+      args:
+        JUDGE_PROFILE: ${JUDGE_PROFILE:-completo}
     image: microhelium-app:${IMAGE_TAG:-latest}
     container_name: microhelium-app
     restart: unless-stopped
@@ -82,6 +84,8 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE_APP:-Dockerfile}
+      args:
+        JUDGE_PROFILE: ${JUDGE_PROFILE:-completo}
     image: microhelium-app:${IMAGE_TAG:-latest}
     # No container_name: docker-compose.prod.yml scales this service to
     # multiple replicas, which Compose rejects when a fixed name is set
@@ -113,6 +117,8 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE_APP:-Dockerfile}
+      args:
+        JUDGE_PROFILE: ${JUDGE_PROFILE:-completo}
     image: microhelium-app:${IMAGE_TAG:-latest}
     container_name: microhelium-scheduler
     restart: unless-stopped
@@ -136,6 +142,8 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE_JUDGE:-Dockerfile.judge}
+      args:
+        JUDGE_PROFILE: ${JUDGE_PROFILE:-completo}
     image: microhelium-judge:${IMAGE_TAG:-latest}
     container_name: microhelium-autojudge
     restart: unless-stopped
