@@ -1,15 +1,18 @@
 # MicroHelium Makefile
 # Docker commands for development and production
 
-.PHONY: help build up down restart logs shell migrate seed fresh test lint format deploy rollback smoke
+.PHONY: help build check-buildx up down restart logs shell migrate seed fresh test lint format deploy rollback smoke
+
+# Toolchain profile for compilers (maratona = ~2.1 GB, scripting = ~2.3 GB, funcional = ~4.5 GB, completo = ~9.4 GB)
+JUDGE_PROFILE ?= maratona
 
 # Default target
 help:
 	@echo "MicroHelium Docker Commands"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make setup       - Initial project setup"
-	@echo "  make build       - Build Docker images"
+	@echo "  make setup [JUDGE_PROFILE=...] - Initial project setup (default: maratona, ~2.1 GB vs ~9.4 GB do completo)"
+	@echo "  make build [JUDGE_PROFILE=...] - Build Docker images (profiles: maratona, scripting, funcional, completo)"
 	@echo "  make up          - Start all containers"
 	@echo "  make down        - Stop all containers"
 	@echo "  make restart     - Restart all containers"
@@ -66,8 +69,18 @@ setup: build
 	@echo ""
 	@echo "Setup complete! Access the application at http://localhost:8000"
 
-build:
-	@docker compose build
+check-buildx:
+	@docker buildx version >/dev/null 2>&1 || (echo "ERRO: docker-buildx nao encontrado. Instale com: sudo pacman -S docker-buildx (ou equivalente na sua distribuicao)." && exit 1)
+
+build: check-buildx
+	@if [ "$(JUDGE_PROFILE)" = "maratona" ] || [ "$(JUDGE_PROFILE)" = "minimal" ]; then \
+		echo "⚙️  Perfil leve detectado: Omitindo compiladores pesados (Portugol, Scratch, Prolog)..."; \
+		python3 docker/strip_builders.py; \
+		DOCKERFILE_APP=Dockerfile.slim DOCKERFILE_DEV=Dockerfile.dev.slim DOCKERFILE_JUDGE=Dockerfile.judge.slim JUDGE_PROFILE=$(JUDGE_PROFILE) docker compose build; \
+		rm -f Dockerfile.slim Dockerfile.dev.slim Dockerfile.judge.slim; \
+	else \
+		JUDGE_PROFILE=$(JUDGE_PROFILE) docker compose build; \
+	fi
 
 up:
 	@docker compose up -d
@@ -206,8 +219,8 @@ npm-build:
 IMAGE_TAG ?= prod
 PROD_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.prod.yml
 
-prod:
-	@IMAGE_TAG=$(IMAGE_TAG) $(PROD_COMPOSE) build
+prod: check-buildx
+	@IMAGE_TAG=$(IMAGE_TAG) JUDGE_PROFILE=$(JUDGE_PROFILE) $(PROD_COMPOSE) build
 
 prod-up:
 	@IMAGE_TAG=$(IMAGE_TAG) $(PROD_COMPOSE) up -d
@@ -229,9 +242,9 @@ prod-down:
 # re-running `git rev-parse` on every one of the several references below.
 DEPLOY_TAG := $(shell git rev-parse --short HEAD)
 
-deploy:
+deploy: check-buildx
 	@echo "Building images tagged $(DEPLOY_TAG)..."
-	@IMAGE_TAG=$(DEPLOY_TAG) $(PROD_COMPOSE) build app autojudge
+	@IMAGE_TAG=$(DEPLOY_TAG) JUDGE_PROFILE=$(JUDGE_PROFILE) $(PROD_COMPOSE) build app autojudge
 	@echo "Promoting $(DEPLOY_TAG) to :prod..."
 	@docker tag microhelium-app:$(DEPLOY_TAG) microhelium-app:prod
 	@docker tag microhelium-judge:$(DEPLOY_TAG) microhelium-judge:prod
