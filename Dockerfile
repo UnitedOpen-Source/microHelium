@@ -723,11 +723,13 @@ RUN pecl install redis && docker-php-ext-enable redis
 RUN pecl install pcov && docker-php-ext-enable pcov
 
 # Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
 # Create system user for running Composer and Artisan
-RUN addgroup -g 1000 -S www && \
-    adduser -u 1000 -S www -G www
+ARG WWW_UID=1000
+ARG WWW_GID=1000
+RUN addgroup -g ${WWW_GID} -S www && \
+    adduser -u ${WWW_UID} -S www -G www
 
 # Copy PHP configuration
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini

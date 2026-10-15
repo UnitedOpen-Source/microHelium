@@ -1,10 +1,13 @@
 # MicroHelium Makefile
 # Docker commands for development and production
 
-.PHONY: help build check-buildx up down restart logs shell migrate seed fresh test lint format deploy rollback smoke
+.PHONY: help setup build up down restart dev logs shell migrate seed fresh test lint format deploy rollback smoke composer npm artisan check-buildx dev-tools
 
 # Toolchain profile for compilers (maratona = ~2.1 GB, scripting = ~2.3 GB, funcional = ~4.5 GB, completo = ~9.4 GB)
 JUDGE_PROFILE ?= maratona
+
+# Execução padronizada do strip via container (Zero-Host)
+STRIP_BUILDERS_CMD = docker run --rm --user "$$(id -u):$$(id -g)" -v "$$(PWD):/app" -w /app python:3.12-alpine python3 docker/strip_builders.py
 
 # Default target
 help:
@@ -16,6 +19,11 @@ help:
 	@echo "  make up          - Start all containers"
 	@echo "  make down        - Stop all containers"
 	@echo "  make restart     - Restart all containers"
+	@echo ""
+	@echo "One-Off CLI (Zero-Host):"
+	@echo "  make composer CMD=\"...\"  - Run Composer commands"
+	@echo "  make npm CMD=\"...\"       - Run NPM commands"
+	@echo "  make artisan CMD=\"...\"   - Run Artisan commands"
 	@echo ""
 	@echo "Development:"
 	@echo "  make dev         - Start with development tools (Vite, Mailpit)"
@@ -52,32 +60,18 @@ help:
 # Setup
 # =============================================================================
 
-setup: build
-	@echo "Creating .env file..."
-	@cp -n .env.docker .env 2>/dev/null || true
-	@echo "Starting containers..."
-	@docker compose up -d db redis
-	@echo "Waiting for database..."
-	@sleep 10
-	@docker compose up -d
-	@echo "Generating application key..."
-	@docker compose exec app php artisan key:generate
-	@echo "Running migrations..."
-	@docker compose exec app php artisan migrate --force
-	@echo "Creating storage link..."
-	@docker compose exec app php artisan storage:link
-	@echo ""
-	@echo "Setup complete! Access the application at http://localhost:8000"
+setup:
+	@bash scripts/docker-setup.sh
 
 check-buildx:
 	@docker buildx version >/dev/null 2>&1 || (echo "ERRO: docker-buildx nao encontrado. Instale com: sudo pacman -S docker-buildx (ou equivalente na sua distribuicao)." && exit 1)
 
 build: check-buildx
 	@if [ "$(JUDGE_PROFILE)" = "maratona" ] || [ "$(JUDGE_PROFILE)" = "minimal" ]; then \
-		echo "⚙️  Perfil leve detectado: Omitindo compiladores pesados (Portugol, Scratch, Prolog)..."; \
-		python3 docker/strip_builders.py; \
+		echo "⚙️  Processando Dockerfiles slim via container Python..."; \
+		trap 'rm -f Dockerfile.slim Dockerfile.dev.slim Dockerfile.judge.slim' EXIT INT TERM; \
+		$(STRIP_BUILDERS_CMD); \
 		DOCKERFILE_APP=Dockerfile.slim DOCKERFILE_DEV=Dockerfile.dev.slim DOCKERFILE_JUDGE=Dockerfile.judge.slim JUDGE_PROFILE=$(JUDGE_PROFILE) docker compose build; \
-		rm -f Dockerfile.slim Dockerfile.dev.slim Dockerfile.judge.slim; \
 	else \
 		JUDGE_PROFILE=$(JUDGE_PROFILE) docker compose build; \
 	fi
@@ -191,6 +185,19 @@ lint:
 
 format:
 	@docker compose exec app ./vendor/bin/pint
+
+# =============================================================================
+# CLI Tools (Zero-Host)
+# =============================================================================
+
+composer:
+	@docker compose run --rm -T composer $(CMD)
+
+npm:
+	@docker compose run --rm -T node npm $(CMD)
+
+artisan:
+	@docker compose run --rm -T artisan $(CMD)
 
 # =============================================================================
 # Assets
