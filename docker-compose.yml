@@ -111,6 +111,9 @@ services:
       - app
       - db
       - redis
+    privileged: true
+    cap_add:
+      - SYS_PTRACE
 
   # Scheduler (Cron)
   scheduler:
@@ -136,6 +139,9 @@ services:
     depends_on:
       - app
       - db
+    privileged: true
+    cap_add:
+      - SYS_PTRACE
 
   # Auto-Judge Worker
   autojudge:

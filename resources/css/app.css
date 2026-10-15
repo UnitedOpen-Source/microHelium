@@ -192,7 +192,7 @@
     .auth-copyright { margin-top: 3rem; font-size: .7rem; color: var(--color-muted-foreground); }
 }
 @media (min-width: 1024px) { .app-sidebar { position: sticky; top: 0; } }
-@media (max-width: 1023px) { .app-sidebar:not(.is-open) { visibility: hidden; } .app-sidebar.is-open { transform: translateX(0); } }
+@media (max-width: 1023px) { .app-sidebar:not(.is-open) { visibility: hidden; } .app-sidebar.is-open { --tw-translate-x: 0px; translate: 0 0; transform: none; } }
 @media (max-width: 767px) {
     .auth-shell { display: block; }
     .auth-story { display: none; }
