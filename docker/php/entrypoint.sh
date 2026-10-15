@@ -49,8 +49,8 @@
 
 set -u
 
-APP_UID=1000
-APP_GID=1000
+APP_UID="${DOCKER_UID:-1000}"
+APP_GID="${DOCKER_GID:-1000}"
 
 log() {
     echo "app-entrypoint: $*" >&2

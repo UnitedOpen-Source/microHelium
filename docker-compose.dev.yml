@@ -3,7 +3,9 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: ${DOCKERFILE_DEV:-Dockerfile.dev}
+      args:
+        JUDGE_PROFILE: ${JUDGE_PROFILE:-maratona}
     container_name: microhelium-app
     restart: unless-stopped
     working_dir: /var/www/html
@@ -22,7 +24,9 @@ services:
   queue:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: ${DOCKERFILE_DEV:-Dockerfile.dev}
+      args:
+        JUDGE_PROFILE: ${JUDGE_PROFILE:-maratona}
     container_name: microhelium-queue
     restart: unless-stopped
     working_dir: /var/www/html

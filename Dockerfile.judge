@@ -960,7 +960,7 @@ RUN apk add --no-cache --virtual .pgsql-build postgresql-dev \
 RUN pecl install redis && docker-php-ext-enable redis
 
 # Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
 # Create judge user with limited privileges
 RUN addgroup -g 1000 -S judge && \
